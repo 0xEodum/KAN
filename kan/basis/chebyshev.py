@@ -48,7 +48,12 @@ class ChebyshevBasis(BasisFunction):
             name: Name of the buffer
             tensor: Tensor to register
         """
-        setattr(self, name, tensor)
+        if not hasattr(self, name):
+            setattr(self, name, tensor)
+        else:
+            # Update the existing buffer
+            existing_buffer = getattr(self, name)
+            existing_buffer.data = tensor.data
     
     @property
     def name(self) -> str:
@@ -130,8 +135,11 @@ class ChebyshevBasis(BasisFunction):
         # Compute arccos(x) and broadcast
         arccos_x = torch.acos(torch.clamp(x, -1.0, 1.0))
         
+        # Ensure arange is on the same device as the input
+        arange = self.arange.to(device=x.device)
+        
         # Multiply by arange [0, 1, ..., degree]
-        angles = arccos_x * self.arange
+        angles = arccos_x * arange
         
         # Compute cos(n * arccos(x)) for each n
         return torch.cos(angles)
@@ -196,11 +204,13 @@ class ChebyshevBasis(BasisFunction):
                 derivative_basis = ChebyshevBasis(self.degree - 1, 
                                                self.domain, 
                                                self.use_recurrence)
+                # Ensure it's on the same device as x
+                derivative_basis.arange = derivative_basis.arange.to(device=x.device)
                 # Compute the (order-1)th derivative of the first derivative
                 return derivative_basis.derivative(x, first_deriv_coeffs, order - 1)
             else:
                 # If degree is 0, all higher derivatives are 0
-                return torch.zeros_like(x[:, :self.output_dim])
+                return torch.zeros_like(x[:, :coefficients.shape[1]], device=x.device)
         
         # First order derivative
         derivative_coeffs = self._derivative_coefficients(coefficients)
@@ -210,10 +220,12 @@ class ChebyshevBasis(BasisFunction):
             derivative_basis = ChebyshevBasis(self.degree - 1, 
                                            self.domain, 
                                            self.use_recurrence)
+            # Ensure it's on the same device as x
+            derivative_basis.arange = derivative_basis.arange.to(device=x.device)
             return derivative_basis.forward(x, derivative_coeffs)
         else:
             # If degree is 0, derivative is 0
-            return torch.zeros_like(x[:, :self.output_dim])
+            return torch.zeros_like(x[:, :coefficients.shape[1]], device=x.device)
     
     def _derivative_coefficients(self, coefficients: torch.Tensor) -> torch.Tensor:
         """
@@ -226,15 +238,16 @@ class ChebyshevBasis(BasisFunction):
             Derivative coefficients of shape (input_dim, output_dim, degree)
         """
         input_dim, output_dim, _ = coefficients.shape
+        device = coefficients.device
         
         if self.degree == 0:
             # Derivative of constant is 0
             return torch.zeros(input_dim, output_dim, 0, 
-                             device=coefficients.device, dtype=coefficients.dtype)
+                             device=device, dtype=coefficients.dtype)
         
         # Initialize the derivative coefficients (one less degree)
         derivative_coeffs = torch.zeros(input_dim, output_dim, self.degree, 
-                                     device=coefficients.device, 
+                                     device=device, 
                                      dtype=coefficients.dtype)
         
         # Compute derivative coefficients using the formula:
