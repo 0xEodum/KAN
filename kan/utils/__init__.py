@@ -18,6 +18,10 @@ from .initializers import (
     init_chebyshev_orthogonal,
     init_chebyshev_zeros,
     init_chebyshev_identity,
+    init_jacobi_normal,
+    init_jacobi_uniform,
+    init_jacobi_orthogonal,
+    init_jacobi_identity,
     get_initializer
 )
 

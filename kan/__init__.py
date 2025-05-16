@@ -8,10 +8,12 @@ These networks provide greater interpretability and mathematical rigor
 compared to traditional neural networks.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .layers.chebykan import ChebyKANLayer
+from .layers.jacobikan import JacobiKANLayer
 from .basis.chebyshev import ChebyshevBasis
+from .basis.jacobi import JacobiBasis
 from .layers.base import KANLayer, KANSequential
 
 # Import utilities
