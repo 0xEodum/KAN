@@ -21,15 +21,6 @@ from .initializers import (
     get_initializer
 )
 
-# Import Jacobi initializers
-from .jacobi_initializers import (
-    init_jacobi_normal,
-    init_jacobi_uniform,
-    init_jacobi_orthogonal,
-    init_jacobi_zeros,
-    init_jacobi_identity
-)
-
 # Import symbolic utilities if sympy is available
 try:
     import sympy
