@@ -56,6 +56,23 @@ class JacobiBasis(BasisFunction):
         
         # Pre-compute constants used in recurrence relation
         self._precompute_recurrence_constants()
+        
+    def register_buffer(self, name: str, tensor: torch.Tensor):
+        """
+        Register a buffer for the basis function.
+        This is a utility method to mimic nn.Module's register_buffer
+        without inheriting from nn.Module.
+        
+        Args:
+            name: Name of the buffer
+            tensor: Tensor to register
+        """
+        if not hasattr(self, name):
+            setattr(self, name, tensor)
+        else:
+            # Update the existing buffer
+            existing_buffer = getattr(self, name)
+            existing_buffer.data = tensor.data
     
     def _detect_polynomial_type(self) -> str:
         """
