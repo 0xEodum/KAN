@@ -4,6 +4,15 @@ import numpy as np
 import math
 from typing import Optional, Tuple, Callable
 
+# Import Jacobi initializers
+from .jacobi_initializers import (
+    init_jacobi_normal,
+    init_jacobi_uniform,
+    init_jacobi_orthogonal,
+    init_jacobi_zeros,
+    init_jacobi_identity,
+)
+
 
 def init_chebyshev_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
     """
@@ -169,6 +178,24 @@ def init_chebyshev_identity(tensor: torch.Tensor,
     return tensor
 
 
+# Combined initializer registry
+INITIALIZERS = {
+    # Chebyshev initializers
+    'normal': init_chebyshev_normal,
+    'uniform': init_chebyshev_uniform,
+    'orthogonal': init_chebyshev_orthogonal,
+    'zeros': init_chebyshev_zeros,
+    'identity': init_chebyshev_identity,
+    
+    # Jacobi initializers
+    'jacobi_normal': init_jacobi_normal,
+    'jacobi_uniform': init_jacobi_uniform,
+    'jacobi_orthogonal': init_jacobi_orthogonal,
+    'jacobi_zeros': init_jacobi_zeros,
+    'jacobi_identity': init_jacobi_identity,
+}
+
+
 def get_initializer(name: str) -> Callable:
     """
     Get initializer function by name.
@@ -179,16 +206,8 @@ def get_initializer(name: str) -> Callable:
     Returns:
         Initializer function
     """
-    initializers = {
-        'normal': init_chebyshev_normal,
-        'uniform': init_chebyshev_uniform,
-        'orthogonal': init_chebyshev_orthogonal,
-        'zeros': init_chebyshev_zeros,
-        'identity': init_chebyshev_identity
-    }
-    
-    if name not in initializers:
+    if name not in INITIALIZERS:
         raise ValueError(f"Unknown initializer: {name}. Available initializers: "
-                       f"{', '.join(initializers.keys())}")
+                       f"{', '.join(INITIALIZERS.keys())}")
     
-    return initializers[name]
+    return INITIALIZERS[name]

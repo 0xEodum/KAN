@@ -8,10 +8,21 @@ of the Kolmogorov-Arnold decomposition.
 
 from .base import KANLayer, KANSequential
 from .chebykan import ChebyKANLayer
+from .jacobikan import JacobiKANLayer
 
 # Dictionary mapping layer names to their classes
 LAYER_REGISTRY = {
     'chebykan': ChebyKANLayer,
+    'jacobikan': JacobiKANLayer,
+    # Convenience aliases for specific polynomial configurations
+    'legendrekan': lambda input_dim, output_dim, degree, **kwargs: JacobiKANLayer(
+        input_dim=input_dim, output_dim=output_dim, degree=degree, 
+        alpha=0.0, beta=0.0, **kwargs
+    ),
+    'gegenbauerkan': lambda input_dim, output_dim, degree, lambda_param=1.0, **kwargs: JacobiKANLayer(
+        input_dim=input_dim, output_dim=output_dim, degree=degree,
+        alpha=lambda_param-0.5, beta=lambda_param-0.5, **kwargs
+    ),
 }
 
 

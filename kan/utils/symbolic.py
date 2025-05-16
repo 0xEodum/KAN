@@ -9,6 +9,7 @@ except ImportError:
 
 from ..layers.base import KANLayer
 from ..basis.chebyshev import ChebyshevBasis
+from ..basis.jacobi import JacobiBasis
 
 
 def require_sympy():
@@ -45,6 +46,43 @@ def get_chebyshev_symbolic(degree: int) -> List[sp.Expr]:
         cheby_polys[n] = 2 * x * cheby_polys[n-1] - cheby_polys[n-2]
     
     return cheby_polys
+
+
+def get_jacobi_symbolic(degree: int, alpha: float = 0.0, beta: float = 0.0) -> List[sp.Expr]:
+    """
+    Get symbolic expressions for Jacobi polynomials up to the given degree.
+    
+    Args:
+        degree: Maximum degree of polynomials
+        alpha: First Jacobi parameter (α > -1)
+        beta: Second Jacobi parameter (β > -1)
+        
+    Returns:
+        List of symbolic expressions for P_0^(α,β)(x) to P_degree^(α,β)(x)
+    """
+    require_sympy()
+    
+    x = sp.Symbol('x')
+    jacobi_polys = [None] * (degree + 1)
+    
+    # Initial values
+    jacobi_polys[0] = 1
+    if degree > 0:
+        # P_1^(α,β)(x) = (α + β + 2)x/2 + (α - β)/2
+        jacobi_polys[1] = (alpha + beta + 2) * x / 2 + (alpha - beta) / 2
+    
+    # Recurrence relation for n ≥ 1
+    for n in range(1, degree):
+        # Compute the term coefficients
+        two_n_ab = 2 * n + alpha + beta
+        a_n = (two_n_ab + 1) * (two_n_ab + 2) / (2 * (n + 1) * (n + alpha + beta + 1) * two_n_ab)
+        b_n = (two_n_ab + 1) * (alpha**2 - beta**2) / (2 * (n + 1) * (n + alpha + beta + 1) * two_n_ab)
+        c_n = -2 * (n + alpha) * (n + beta) * (two_n_ab + 2) / (2 * (n + 1) * (n + alpha + beta + 1) * two_n_ab)
+        
+        # P_{n+1} = a_n * x * P_n + b_n * P_n + c_n * P_{n-1}
+        jacobi_polys[n+1] = a_n * x * jacobi_polys[n] + b_n * jacobi_polys[n] + c_n * jacobi_polys[n-1]
+    
+    return jacobi_polys
 
 
 def get_layer_symbolic_expr(layer: KANLayer, input_var_names: Optional[List[str]] = None) -> Dict[int, Union[sp.Expr, str]]:
@@ -106,6 +144,35 @@ def get_layer_symbolic_expr(layer: KANLayer, input_var_names: Optional[List[str]
             
             # Store the expression for this output
             result[o] = expr
+    
+    elif isinstance(basis, JacobiBasis):
+        # Get symbolic Jacobi polynomials
+        jacobi_polys = get_jacobi_symbolic(basis.degree, basis.alpha, basis.beta)
+        
+        # For each output dimension
+        for o in range(output_dim):
+            # Initialize expression for this output
+            expr = 0
+            
+            # For each input dimension
+            for i in range(input_dim):
+                # Get the transformed input (applying tanh for normalization)
+                x_transformed = sp.tanh(input_vars[i])
+                
+                # Sum up the contribution from each basis function
+                input_expr = 0
+                for d in range(basis.degree + 1):
+                    # Substitute the transformed input into the Jacobi polynomial
+                    poly_expr = jacobi_polys[d].subs(sp.Symbol('x'), x_transformed)
+                    # Multiply by coefficient and add to the sum
+                    input_expr += coeffs[i, o, d] * poly_expr
+                
+                # Add this input's contribution to the output
+                expr += input_expr
+            
+            # Store the expression for this output
+            result[o] = expr
+    
     else:
         # For unsupported basis types
         for o in range(output_dim):

@@ -10,9 +10,15 @@ compared to traditional neural networks.
 
 __version__ = "0.1.0"
 
+# Import layer implementations
 from .layers.chebykan import ChebyKANLayer
-from .basis.chebyshev import ChebyshevBasis
+from .layers.jacobikan import JacobiKANLayer
 from .layers.base import KANLayer, KANSequential
+
+# Import basis implementations
+from .basis.chebyshev import ChebyshevBasis
+from .basis.jacobi import JacobiBasis
+from .basis.base import BasisFunction
 
 # Import utilities
 from .utils.visualization import (

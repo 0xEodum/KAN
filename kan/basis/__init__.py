@@ -7,10 +7,18 @@ for representing univariate functions according to the Kolmogorov-Arnold theorem
 
 from .base import BasisFunction
 from .chebyshev import ChebyshevBasis
+from .jacobi import JacobiBasis
 
 # Dictionary mapping basis names to their classes
 BASIS_REGISTRY = {
     'chebyshev': ChebyshevBasis,
+    'jacobi': JacobiBasis,
+    'legendre': lambda **kwargs: JacobiBasis(alpha=0.0, beta=0.0, **kwargs),
+    'chebyshev1': lambda **kwargs: JacobiBasis(alpha=-0.5, beta=-0.5, **kwargs),
+    'chebyshev2': lambda **kwargs: JacobiBasis(alpha=0.5, beta=0.5, **kwargs),
+    'gegenbauer': lambda lambda_param=1.0, **kwargs: JacobiBasis(
+        alpha=lambda_param-0.5, beta=lambda_param-0.5, **kwargs
+    ),
 }
 
 
