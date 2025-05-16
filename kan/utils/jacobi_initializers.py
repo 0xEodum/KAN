@@ -40,7 +40,8 @@ def init_jacobi_uniform(tensor: torch.Tensor, alpha: float = 0.0, beta: float = 
     if abs(alpha + 0.5) < 1e-10 and abs(beta + 0.5) < 1e-10:
         degree_factors = torch.linspace(1.0, 0.3, degree + 1)
     
-    tensor *= degree_factors.reshape(1, 1, -1)
+    # Используем .data для безопасной работы с тензорами требующими градиентов
+    tensor.data *= degree_factors.reshape(1, 1, -1)
     
     return tensor
 
@@ -82,7 +83,8 @@ def init_jacobi_normal(tensor: torch.Tensor,
     elif abs(alpha - 0.5) < 1e-10 and abs(beta - 0.5) < 1e-10:  # Chebyshev second kind
         degree_factors = torch.linspace(1.0, 0.2, degree + 1)
     
-    tensor *= degree_factors.reshape(1, 1, -1)
+    # Используем .data для безопасной работы с тензорами требующими градиентов
+    tensor.data *= degree_factors.reshape(1, 1, -1)
     
     return tensor
 
@@ -117,11 +119,11 @@ def init_jacobi_orthogonal(tensor: torch.Tensor,
     nn.init.orthogonal_(reshaped, gain=gain)
     
     # Reshape back
-    tensor.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
+    tensor.data.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
     
     # Apply degree-based scaling
     degree_factors = torch.linspace(1.0, 0.1, degree + 1)
-    tensor *= degree_factors.reshape(1, 1, -1)
+    tensor.data *= degree_factors.reshape(1, 1, -1)
     
     return tensor
 
@@ -160,7 +162,8 @@ def init_jacobi_zeros(tensor: torch.Tensor,
         # P_1^(α,β)(x) = (α + β + 2)x/2 + (α - β)/2
         # We want P_1(0) ≈ 0 and P_1(1) ≈ 1, so we scale appropriately
         scale = 2.0 / (alpha + beta + 2) if alpha + beta + 2 != 0 else 1.0
-        tensor[i, i, 1] = scale * (1.0 + torch.randn(1).item() * 0.01)
+        # Используем .data для безопасной работы с тензорами требующими градиентов
+        tensor.data[i, i, 1] = scale * (1.0 + torch.randn(1).item() * 0.01)
     
     return tensor
 
@@ -211,15 +214,16 @@ def init_jacobi_identity(tensor: torch.Tensor,
     min_dim = min(input_dim, output_dim)
     for i in range(min_dim):
         # Set coefficient for P_1 (linear term)
-        tensor[i, i, 1] = p1_scale
+        tensor.data[i, i, 1] = p1_scale
         # Set coefficient for P_0 (constant term) if needed to offset
         if abs(p0_offset) > 1e-10:
-            tensor[i, i, 0] = p0_offset
+            tensor.data[i, i, 0] = p0_offset
     
     # Add noise if not exact
     if not exact:
+        # Используем операции, не требующие in-place изменения
         noise = torch.randn_like(tensor) * noise_scale
-        tensor += noise
+        tensor.data.add_(noise)
     
     return tensor
 

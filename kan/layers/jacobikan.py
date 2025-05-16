@@ -95,7 +95,8 @@ class JacobiKANLayer(KANLayer):
             for i in range(min_dim):
                 # For Chebyshev, the linear term is at index 1
                 # For Legendre, the linear term is also at index 1
-                self.jacobi_coeffs[i, i, 1] = 1.0 + torch.randn(1).item() * 0.01
+                # Use .data для безопасного in-place операций с параметрами требующими градиентов
+                self.jacobi_coeffs.data[i, i, 1] = 1.0 + torch.randn(1).item() * 0.01
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
