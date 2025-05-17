@@ -8,12 +8,14 @@ These networks provide greater interpretability and mathematical rigor
 compared to traditional neural networks.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .layers.chebykan import ChebyKANLayer
 from .layers.jacobikan import JacobiKANLayer
+from .layers.hermitekan import HermiteKANLayer
 from .basis.chebyshev import ChebyshevBasis
 from .basis.jacobi import JacobiBasis
+from .basis.hermite import HermiteBasis
 from .layers.base import KANLayer, KANSequential
 
 # Import utilities
@@ -30,6 +32,14 @@ from .utils.initializers import (
     init_chebyshev_orthogonal,
     init_chebyshev_zeros,
     init_chebyshev_identity,
+    init_jacobi_normal,
+    init_jacobi_uniform,
+    init_jacobi_orthogonal,
+    init_jacobi_identity,
+    init_hermite_normal,
+    init_hermite_uniform,
+    init_hermite_orthogonal,
+    init_hermite_identity,
     get_initializer
 )
 

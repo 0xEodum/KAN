@@ -9,11 +9,13 @@ of the Kolmogorov-Arnold decomposition.
 from .base import KANLayer, KANSequential
 from .chebykan import ChebyKANLayer
 from .jacobikan import JacobiKANLayer
+from .hermitekan import HermiteKANLayer
 
 # Dictionary mapping layer names to their classes
 LAYER_REGISTRY = {
     'chebykan': ChebyKANLayer,
     'jacobikan': JacobiKANLayer,
+    'hermitekan': HermiteKANLayer,
 }
 
 

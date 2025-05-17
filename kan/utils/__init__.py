@@ -22,6 +22,10 @@ from .initializers import (
     init_jacobi_uniform,
     init_jacobi_orthogonal,
     init_jacobi_identity,
+    init_hermite_normal,
+    init_hermite_uniform,
+    init_hermite_orthogonal,
+    init_hermite_identity,
     get_initializer
 )
 

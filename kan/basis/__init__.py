@@ -8,11 +8,13 @@ for representing univariate functions according to the Kolmogorov-Arnold theorem
 from .base import BasisFunction
 from .chebyshev import ChebyshevBasis
 from .jacobi import JacobiBasis
+from .hermite import HermiteBasis
 
 # Dictionary mapping basis names to their classes
 BASIS_REGISTRY = {
     'chebyshev': ChebyshevBasis,
     'jacobi': JacobiBasis,
+    'hermite': HermiteBasis,
 }
 
 

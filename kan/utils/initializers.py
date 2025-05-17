@@ -314,6 +314,164 @@ def init_jacobi_identity(tensor: torch.Tensor,
     return tensor
 
 
+def init_hermite_uniform(tensor: torch.Tensor, 
+                        scaling: str = 'physicist',
+                        scale: float = 1.0) -> torch.Tensor:
+    """
+    Initialize Hermite coefficients with uniform distribution.
+    
+    Args:
+        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
+        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
+        scale: Scaling factor for initialization
+        
+    Returns:
+        Initialized tensor
+    """
+    input_dim, output_dim, degree_plus_one = tensor.shape
+    degree = degree_plus_one - 1
+    
+    # Initialize with uniform distribution scaled by degree
+    bound = scale / (input_dim * math.sqrt(degree + 1))
+    nn.init.uniform_(tensor, -bound, bound)
+    
+    # Apply degree-based scaling to favour lower degrees
+    # Hermite polynomials grow rapidly with degree, so we use stronger scaling
+    if scaling == 'physicist':
+        # For physicist's Hermite polynomials, the growth is faster
+        # H_n(x) ~ 2^(n/2) for large n
+        degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
+    else:  # scaling == 'probabilist'
+        # For probabilist's Hermite polynomials, the growth is a bit slower
+        # He_n(x) ~ 1 for large n
+        degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
+    
+    tensor *= degree_factors.reshape(1, 1, -1)
+    
+    return tensor
+
+
+def init_hermite_normal(tensor: torch.Tensor, 
+                       scaling: str = 'physicist',
+                       mean: float = 0.0, 
+                       std: Optional[float] = None) -> torch.Tensor:
+    """
+    Initialize Hermite coefficients with normal distribution.
+    
+    Args:
+        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
+        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
+        mean: Mean of the normal distribution
+        std: Standard deviation (if None, uses 1/sqrt(input_dim * (degree+1)))
+        
+    Returns:
+        Initialized tensor
+    """
+    input_dim, output_dim, degree_plus_one = tensor.shape
+    degree = degree_plus_one - 1
+    
+    # Set default std if not provided
+    if std is None:
+        std = 1.0 / math.sqrt(input_dim * (degree + 1))
+    
+    # Initialize with normal distribution
+    nn.init.normal_(tensor, mean=mean, std=std)
+    
+    # Apply degree-based scaling
+    if scaling == 'physicist':
+        degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
+    else:  # scaling == 'probabilist'
+        degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
+    
+    tensor *= degree_factors.reshape(1, 1, -1)
+    
+    return tensor
+
+
+def init_hermite_orthogonal(tensor: torch.Tensor, 
+                           scaling: str = 'physicist',
+                           gain: float = 1.0) -> torch.Tensor:
+    """
+    Initialize Hermite coefficients with orthogonal initialization.
+    
+    Args:
+        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
+        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
+        gain: Scaling factor
+        
+    Returns:
+        Initialized tensor
+    """
+    input_dim, output_dim, degree_plus_one = tensor.shape
+    degree = degree_plus_one - 1
+    
+    # Reshape for orthogonal initialization
+    flat_shape = (input_dim, output_dim * degree_plus_one)
+    reshaped = tensor.reshape(flat_shape)
+    
+    # Apply orthogonal initialization
+    nn.init.orthogonal_(reshaped, gain=gain)
+    
+    # Reshape back
+    tensor.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
+    
+    # Apply degree-based scaling
+    if scaling == 'physicist':
+        degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
+    else:  # scaling == 'probabilist'
+        degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
+    
+    tensor *= degree_factors.reshape(1, 1, -1)
+    
+    return tensor
+
+
+def init_hermite_identity(tensor: torch.Tensor, 
+                         scaling: str = 'physicist',
+                         exact: bool = False,
+                         noise_scale: float = 0.01) -> torch.Tensor:
+    """
+    Initialize Hermite coefficients to approximate the identity function.
+    
+    For the identity function f(x) = x, we need to determine the coefficients
+    in the Hermite expansion.
+    
+    Args:
+        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
+        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
+        exact: Whether to use exact identity or add noise
+        noise_scale: Scale of the noise to add if not exact
+        
+    Returns:
+        Initialized tensor
+    """
+    # Set all coefficients to zero
+    nn.init.zeros_(tensor)
+    
+    input_dim, output_dim, degree_plus_one = tensor.shape
+    
+    # Check if degree is at least 1 (we need at least H_1 for identity)
+    if degree_plus_one < 2:
+        raise ValueError("Degree must be at least 1 for identity initialization")
+    
+    # For identity f(x) = x:
+    # In physicist's scaling: H_1(x) = 2x, so coefficient should be 0.5
+    # In probabilist's scaling: He_1(x) = x, so coefficient should be 1.0
+    identity_coef = 0.5 if scaling == 'physicist' else 1.0
+    
+    # Identity mapping: set coefficient for H_1 or He_1
+    min_dim = min(input_dim, output_dim)
+    for i in range(min_dim):
+        tensor[i, i, 1] = identity_coef
+    
+    # Add noise if not exact
+    if not exact:
+        noise = torch.randn_like(tensor) * noise_scale
+        tensor += noise
+    
+    return tensor
+
+
 def get_initializer(name: str) -> Callable:
     """
     Get initializer function by name.
@@ -334,6 +492,10 @@ def get_initializer(name: str) -> Callable:
         'jacobi_uniform': init_jacobi_uniform,
         'jacobi_orthogonal': init_jacobi_orthogonal,
         'jacobi_identity': init_jacobi_identity,
+        'hermite_normal': init_hermite_normal,
+        'hermite_uniform': init_hermite_uniform,
+        'hermite_orthogonal': init_hermite_orthogonal,
+        'hermite_identity': init_hermite_identity,
         # For backward compatibility, keep the original names
         'normal': init_chebyshev_normal,
         'uniform': init_chebyshev_uniform,

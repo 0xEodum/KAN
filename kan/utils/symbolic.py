@@ -10,6 +10,7 @@ except ImportError:
 from ..layers.base import KANLayer
 from ..basis.chebyshev import ChebyshevBasis
 from ..basis.jacobi import JacobiBasis
+from ..basis.hermite import HermiteBasis
 
 
 def require_sympy():
@@ -92,6 +93,45 @@ def get_jacobi_symbolic(degree: int, alpha: float, beta: float) -> List[sp.Expr]
         jacobi_polys[n] = (coef1 * jacobi_polys[n-1] + coef2 * jacobi_polys[n-2]) / denom
     
     return jacobi_polys
+
+
+def get_hermite_symbolic(degree: int, scaling: str = 'physicist') -> List[sp.Expr]:
+    """
+    Get symbolic expressions for Hermite polynomials up to the given degree.
+    
+    Args:
+        degree: Maximum degree of polynomials
+        scaling: Type of Hermite polynomials:
+                 'physicist' (default) - H_n(x) with recurrence H_{n+1} = 2x·H_n - 2n·H_{n-1}
+                 'probabilist' - He_n(x) with recurrence He_{n+1} = x·He_n - n·He_{n-1}
+        
+    Returns:
+        List of symbolic expressions for H_0(x) to H_degree(x) or He_0(x) to He_degree(x)
+    """
+    require_sympy()
+    
+    x = sp.Symbol('x')
+    hermite_polys = [None] * (degree + 1)
+    
+    # Initial values
+    hermite_polys[0] = 1
+    
+    if degree > 0:
+        if scaling == 'physicist':
+            hermite_polys[1] = 2 * x
+        else:  # scaling == 'probabilist'
+            hermite_polys[1] = x
+    
+    # Recurrence relation
+    for n in range(2, degree + 1):
+        if scaling == 'physicist':
+            # H_{n}(x) = 2x·H_{n-1}(x) - 2(n-1)·H_{n-2}(x)
+            hermite_polys[n] = 2 * x * hermite_polys[n-1] - 2 * (n-1) * hermite_polys[n-2]
+        else:  # scaling == 'probabilist'
+            # He_{n}(x) = x·He_{n-1}(x) - (n-1)·He_{n-2}(x)
+            hermite_polys[n] = x * hermite_polys[n-1] - (n-1) * hermite_polys[n-2]
+    
+    return hermite_polys
 
 
 def get_layer_symbolic_expr(layer: KANLayer, input_var_names: Optional[List[str]] = None) -> Dict[int, Union[sp.Expr, str]]:
@@ -180,6 +220,37 @@ def get_layer_symbolic_expr(layer: KANLayer, input_var_names: Optional[List[str]
             
             # Store the expression for this output
             result[o] = expr
+    elif isinstance(basis, HermiteBasis):
+        # Get symbolic Hermite polynomials
+        hermite_polys = get_hermite_symbolic(basis.degree, basis.scaling)
+        
+        # For each output dimension
+        for o in range(output_dim):
+            # Initialize expression for this output
+            expr = 0
+            
+            # For each input dimension
+            for i in range(input_dim):
+                # Get the transformed input using the basis's normalization function
+                # For Hermite, we use a scaled tanh to handle the unbounded domain
+                if hasattr(basis, '_normalize_domain') and basis._normalize_domain:
+                    x_transformed = sp.tanh(input_vars[i]) * 3.0
+                else:
+                    x_transformed = input_vars[i]
+                
+                # Sum up the contribution from each basis function
+                input_expr = 0
+                for d in range(basis.degree + 1):
+                    # Substitute the transformed input into the Hermite polynomial
+                    poly_expr = hermite_polys[d].subs(sp.Symbol('x'), x_transformed)
+                    # Multiply by coefficient and add to the sum
+                    input_expr += coeffs[i, o, d] * poly_expr
+                
+                # Add this input's contribution to the output
+                expr += input_expr
+            
+            # Store the expression for this output
+            result[o] = expr
     else:
         # For unsupported basis types
         for o in range(output_dim):
@@ -205,7 +276,7 @@ def get_network_symbolic_expr(model, input_var_names: Optional[List[str]] = None
     if hasattr(model, 'children'):
         layers = [m for m in model.children() if isinstance(m, KANLayer)]
     else:
-        layers = [model] if isinstance(model, KANLayer) else []
+        layers = [model] if isinstance(m, KANLayer) else []
     
     if not layers:
         return {0: "No KAN layers found in the model"}
