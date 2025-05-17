@@ -1,36 +1,42 @@
 """
-Basis functions for Kolmogorov-Arnold Networks.
+Базисные функции для сетей Колмогорова-Арнольда (KAN).
 
-This module provides various basis functions that can be used in KAN layers
-for representing univariate functions according to the Kolmogorov-Arnold theorem.
+Этот модуль предоставляет различные базисные функции, которые могут использоваться в слоях KAN
+для представления одномерных функций в соответствии с теоремой Колмогорова-Арнольда.
 """
 
 from .base import BasisFunction
 from .chebyshev import ChebyshevBasis
 from .jacobi import JacobiBasis
 from .hermite import HermiteBasis
+from .bspline import BSplineBasis
+from .cubic_spline import CubicSplineBasis
+from .adaptive_spline import AdaptiveSplineBasis
 
-# Dictionary mapping basis names to their classes
+# Словарь, сопоставляющий имена базисных функций с их классами
 BASIS_REGISTRY = {
     'chebyshev': ChebyshevBasis,
     'jacobi': JacobiBasis,
     'hermite': HermiteBasis,
+    'bspline': BSplineBasis,
+    'cubic_spline': CubicSplineBasis,
+    'adaptive_spline': AdaptiveSplineBasis,
 }
 
 
 def get_basis(name: str, **kwargs):
     """
-    Get a basis function by name.
+    Получает базисную функцию по имени.
     
     Args:
-        name: Name of the basis function
-        **kwargs: Additional arguments to pass to the basis constructor
+        name: Имя базисной функции
+        **kwargs: Дополнительные аргументы для передачи конструктору базиса
         
     Returns:
-        Instance of the requested basis function
+        Экземпляр запрошенной базисной функции
     """
     if name not in BASIS_REGISTRY:
-        raise ValueError(f"Unknown basis function: {name}. Available options: "
+        raise ValueError(f"Неизвестная базисная функция: {name}. Доступные варианты: "
                        f"{', '.join(BASIS_REGISTRY.keys())}")
     
     return BASIS_REGISTRY[name](**kwargs)

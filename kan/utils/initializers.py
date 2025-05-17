@@ -5,29 +5,30 @@ import math
 from typing import Optional, Tuple, Callable
 
 
+# ====== Инициализаторы для полиномов Чебышева ======
+
 def init_chebyshev_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
     """
-    Initialize Chebyshev coefficients with uniform distribution.
+    Инициализирует коэффициенты Чебышева с равномерным распределением.
     
-    This initialization is based on the idea that the magnitude of
-    Chebyshev coefficients typically decreases with increasing degree
-    for smooth functions.
+    Эта инициализация основана на идее, что величина коэффициентов Чебышева
+    обычно уменьшается с возрастанием степени для гладких функций.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scale: Scaling factor for initialization
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scale: Масштабирующий фактор для инициализации
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Initialize with uniform distribution scaled by degree
+    # Инициализация с равномерным распределением масштабированным по степени
     bound = scale / (input_dim * math.sqrt(degree + 1))
     nn.init.uniform_(tensor, -bound, bound)
     
-    # Apply degree-based scaling to favour lower degrees
+    # Применяем масштабирование по степени для преобладания низких степеней
     degree_factors = torch.linspace(1.0, 0.1, degree + 1)
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -38,27 +39,27 @@ def init_chebyshev_normal(tensor: torch.Tensor,
                          mean: float = 0.0, 
                          std: Optional[float] = None) -> torch.Tensor:
     """
-    Initialize Chebyshev coefficients with normal distribution.
+    Инициализирует коэффициенты Чебышева с нормальным распределением.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        mean: Mean of the normal distribution
-        std: Standard deviation (if None, uses 1/sqrt(input_dim * (degree+1)))
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * (degree+1)))
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Set default std if not provided
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
     if std is None:
         std = 1.0 / math.sqrt(input_dim * (degree + 1))
     
-    # Initialize with normal distribution
+    # Инициализация с нормальным распределением
     nn.init.normal_(tensor, mean=mean, std=std)
     
-    # Apply degree-based scaling to favour lower degrees
+    # Применяем масштабирование по степени для преобладания низких степеней
     degree_factors = torch.linspace(1.0, 0.1, degree + 1)
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -67,32 +68,32 @@ def init_chebyshev_normal(tensor: torch.Tensor,
 
 def init_chebyshev_orthogonal(tensor: torch.Tensor, gain: float = 1.0) -> torch.Tensor:
     """
-    Initialize Chebyshev coefficients with orthogonal initialization.
+    Инициализирует коэффициенты Чебышева с ортогональной инициализацией.
     
-    This is adapted from nn.init.orthogonal_ but modified to work with
-    the 3D tensor structure of KAN coefficients.
+    Это адаптированная версия nn.init.orthogonal_, модифицированная для работы с
+    3D тензорной структурой коэффициентов KAN.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        gain: Scaling factor
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        gain: Масштабирующий фактор
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Reshape for orthogonal initialization
+    # Преобразование для ортогональной инициализации
     flat_shape = (input_dim, output_dim * degree_plus_one)
     reshaped = tensor.reshape(flat_shape)
     
-    # Apply orthogonal initialization
+    # Применяем ортогональную инициализацию
     nn.init.orthogonal_(reshaped, gain=gain)
     
-    # Reshape back
+    # Преобразуем обратно
     tensor.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
     
-    # Apply degree-based scaling
+    # Применяем масштабирование по степени
     degree_factors = torch.linspace(1.0, 0.1, degree + 1)
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -101,28 +102,28 @@ def init_chebyshev_orthogonal(tensor: torch.Tensor, gain: float = 1.0) -> torch.
 
 def init_chebyshev_zeros(tensor: torch.Tensor) -> torch.Tensor:
     """
-    Initialize Chebyshev coefficients with zeros except for the constant term.
+    Инициализирует коэффициенты Чебышева нулями, кроме постоянного члена.
     
-    This initialization sets all coefficients to zero except for the
-    constant term (degree 0), which is initialized to small random values.
-    This is useful for starting with an almost-identity function.
+    Эта инициализация устанавливает все коэффициенты в ноль, кроме постоянного
+    члена (степень 0), который инициализируется малыми случайными значениями.
+    Это полезно для начала с почти идентичной функции.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
-    # Set all coefficients to zero
+    # Устанавливаем все коэффициенты в ноль
     nn.init.zeros_(tensor)
     
-    # Initialize only the constant term (degree 0)
+    # Инициализируем только постоянный член (степень 0)
     input_dim, output_dim, _ = tensor.shape
     const_term = tensor[:, :, 0]
     nn.init.normal_(const_term, mean=0.0, std=0.01)
     
-    # For input dimension i, set the linear term (degree 1) for output i to near 1
-    # This helps create an approximately identity initial function
+    # Для входного измерения i, устанавливаем линейный член (степень 1) для выхода i близким к 1
+    # Это помогает создать приблизительно идентичную начальную функцию
     for i in range(min(input_dim, output_dim)):
         tensor[i, i, 1] = 1.0 + torch.randn(1).item() * 0.01
     
@@ -133,35 +134,36 @@ def init_chebyshev_identity(tensor: torch.Tensor,
                            exact: bool = False,
                            noise_scale: float = 0.01) -> torch.Tensor:
     """
-    Initialize Chebyshev coefficients to approximate the identity function.
+    Инициализирует коэффициенты Чебышева для аппроксимации функции идентичности.
     
-    For the identity function f(x) = x, the Chebyshev expansion has
-    T_1(x) = x as the only non-zero term. This initialization sets
-    coefficients to create an identity-like mapping with optional noise.
+    Для функции идентичности f(x) = x разложение Чебышева имеет
+    T_1(x) = x как единственный ненулевой член. Эта инициализация устанавливает
+    коэффициенты для создания отображения, близкого к идентичному,
+    с возможным добавлением шума.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        exact: Whether to use exact identity or add noise
-        noise_scale: Scale of the noise to add if not exact
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
-    # Set all coefficients to zero
+    # Устанавливаем все коэффициенты в ноль
     nn.init.zeros_(tensor)
     
     input_dim, output_dim, degree_plus_one = tensor.shape
     
-    # Check if degree is at least 1 (we need T_1(x) = x for identity)
+    # Проверка, что степень не менее 1 (нам нужен T_1(x) = x для идентичности)
     if degree_plus_one < 2:
-        raise ValueError("Degree must be at least 1 for identity initialization")
+        raise ValueError("Степень должна быть не менее 1 для инициализации идентичности")
     
-    # Identity mapping: set coefficient for T_1(x) = x
+    # Отображение идентичности: установка коэффициента для T_1(x) = x
     min_dim = min(input_dim, output_dim)
     for i in range(min_dim):
         tensor[i, i, 1] = 1.0
     
-    # Add noise if not exact
+    # Добавляем шум, если требуется
     if not exact:
         noise = torch.randn_like(tensor) * noise_scale
         tensor += noise
@@ -169,29 +171,31 @@ def init_chebyshev_identity(tensor: torch.Tensor,
     return tensor
 
 
+# ====== Инициализаторы для полиномов Якоби ======
+
 def init_jacobi_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
     """
-    Initialize Jacobi coefficients with uniform distribution.
+    Инициализирует коэффициенты Якоби с равномерным распределением.
     
-    This initialization is similar to the Chebyshev case but adapted for Jacobi polynomials.
+    Эта инициализация аналогична случаю Чебышева, но адаптирована для полиномов Якоби.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scale: Scaling factor for initialization
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scale: Масштабирующий фактор для инициализации
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Initialize with uniform distribution scaled by degree
+    # Инициализация с равномерным распределением масштабированным по степени
     bound = scale / (input_dim * math.sqrt(degree + 1))
     nn.init.uniform_(tensor, -bound, bound)
     
-    # Apply degree-based scaling to favour lower degrees
-    # For Jacobi polynomials, we decrease weights more rapidly with degree
-    # since higher degree polynomials can have larger magnitudes
+    # Применяем масштабирование по степени для преобладания низких степеней
+    # Для полиномов Якоби мы уменьшаем веса быстрее с степенью,
+    # поскольку полиномы высоких степеней могут иметь большие значения
     degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -202,27 +206,27 @@ def init_jacobi_normal(tensor: torch.Tensor,
                       mean: float = 0.0, 
                       std: Optional[float] = None) -> torch.Tensor:
     """
-    Initialize Jacobi coefficients with normal distribution.
+    Инициализирует коэффициенты Якоби с нормальным распределением.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        mean: Mean of the normal distribution
-        std: Standard deviation (if None, uses 1/sqrt(input_dim * (degree+1)))
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * (degree+1)))
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Set default std if not provided
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
     if std is None:
         std = 1.0 / math.sqrt(input_dim * (degree + 1))
     
-    # Initialize with normal distribution
+    # Инициализация с нормальным распределением
     nn.init.normal_(tensor, mean=mean, std=std)
     
-    # Apply degree-based scaling
+    # Применяем масштабирование по степени
     degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -231,29 +235,29 @@ def init_jacobi_normal(tensor: torch.Tensor,
 
 def init_jacobi_orthogonal(tensor: torch.Tensor, gain: float = 1.0) -> torch.Tensor:
     """
-    Initialize Jacobi coefficients with orthogonal initialization.
+    Инициализирует коэффициенты Якоби с ортогональной инициализацией.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        gain: Scaling factor
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        gain: Масштабирующий фактор
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Reshape for orthogonal initialization
+    # Преобразование для ортогональной инициализации
     flat_shape = (input_dim, output_dim * degree_plus_one)
     reshaped = tensor.reshape(flat_shape)
     
-    # Apply orthogonal initialization
+    # Применяем ортогональную инициализацию
     nn.init.orthogonal_(reshaped, gain=gain)
     
-    # Reshape back
+    # Преобразуем обратно
     tensor.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
     
-    # Apply degree-based scaling
+    # Применяем масштабирование по степени
     degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
     tensor *= degree_factors.reshape(1, 1, -1)
     
@@ -266,47 +270,47 @@ def init_jacobi_identity(tensor: torch.Tensor,
                         exact: bool = False,
                         noise_scale: float = 0.01) -> torch.Tensor:
     """
-    Initialize Jacobi coefficients to approximate the identity function.
+    Инициализирует коэффициенты Якоби для аппроксимации функции идентичности.
     
-    For the identity function f(x) = x, we need to determine the coefficients
-    in the Jacobi expansion. For α = β = 0 (Legendre), the coefficient of P_1 is 1,
-    while for other values of α, β, we need specific values.
+    Для функции идентичности f(x) = x, нам нужно определить коэффициенты
+    в разложении Якоби. Для α = β = 0 (Лежандр), коэффициент P_1 равен 1,
+    а для других значений α, β нужны специфические значения.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        alpha: α parameter of Jacobi polynomials
-        beta: β parameter of Jacobi polynomials
-        exact: Whether to use exact identity or add noise
-        noise_scale: Scale of the noise to add if not exact
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        alpha: Параметр α полиномов Якоби
+        beta: Параметр β полиномов Якоби
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
-    # Set all coefficients to zero
+    # Устанавливаем все коэффициенты в ноль
     nn.init.zeros_(tensor)
     
     input_dim, output_dim, degree_plus_one = tensor.shape
     
-    # Check if degree is at least 1 (we need at least P_1 for identity)
+    # Проверка, что степень не менее 1 (нам нужен как минимум P_1 для идентичности)
     if degree_plus_one < 2:
-        raise ValueError("Degree must be at least 1 for identity initialization")
+        raise ValueError("Степень должна быть не менее 1 для инициализации идентичности")
     
-    # For Jacobi polynomials P_1^(α,β)(x) = ((α + β + 2)x + (α - β))/2
-    # To represent identity f(x) = x, we need to adjust the coefficient
-    identity_coef = 2.0 / (alpha + beta + 2)  # To make the x coefficient = 1
+    # Для полиномов Якоби P_1^(α,β)(x) = ((α + β + 2)x + (α - β))/2
+    # Для представления идентичности f(x) = x, нам нужно скорректировать коэффициент
+    identity_coef = 2.0 / (alpha + beta + 2)  # Чтобы сделать коэффициент x = 1
     
-    # Identity mapping: set coefficient for P_1
+    # Отображение идентичности: установка коэффициента для P_1
     min_dim = min(input_dim, output_dim)
     for i in range(min_dim):
         tensor[i, i, 1] = identity_coef
     
-    # If α ≠ β, we need a constant term to cancel the (α - β) term in P_1
+    # Если α ≠ β, нам нужен постоянный член для компенсации (α - β) в P_1
     if alpha != beta and degree_plus_one > 0:
         const_coef = -(alpha - beta) * identity_coef / 2
         for i in range(min_dim):
             tensor[i, i, 0] = const_coef
     
-    # Add noise if not exact
+    # Добавляем шум, если требуется
     if not exact:
         noise = torch.randn_like(tensor) * noise_scale
         tensor += noise
@@ -314,36 +318,38 @@ def init_jacobi_identity(tensor: torch.Tensor,
     return tensor
 
 
+# ====== Инициализаторы для полиномов Эрмита ======
+
 def init_hermite_uniform(tensor: torch.Tensor, 
                         scaling: str = 'physicist',
                         scale: float = 1.0) -> torch.Tensor:
     """
-    Initialize Hermite coefficients with uniform distribution.
+    Инициализирует коэффициенты Эрмита с равномерным распределением.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
-        scale: Scaling factor for initialization
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scaling: Тип полиномов Эрмита ('physicist' или 'probabilist')
+        scale: Масштабирующий фактор для инициализации
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Initialize with uniform distribution scaled by degree
+    # Инициализация с равномерным распределением масштабированным по степени
     bound = scale / (input_dim * math.sqrt(degree + 1))
     nn.init.uniform_(tensor, -bound, bound)
     
-    # Apply degree-based scaling to favour lower degrees
-    # Hermite polynomials grow rapidly with degree, so we use stronger scaling
+    # Применяем масштабирование по степени для преобладания низких степеней
+    # Полиномы Эрмита быстро растут с степенью, поэтому используем более сильное масштабирование
     if scaling == 'physicist':
-        # For physicist's Hermite polynomials, the growth is faster
-        # H_n(x) ~ 2^(n/2) for large n
+        # Для физических полиномов Эрмита рост быстрее
+        # H_n(x) ~ 2^(n/2) для больших n
         degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
     else:  # scaling == 'probabilist'
-        # For probabilist's Hermite polynomials, the growth is a bit slower
-        # He_n(x) ~ 1 for large n
+        # Для вероятностных полиномов Эрмита рост немного медленнее
+        # He_n(x) ~ 1 для больших n
         degree_factors = torch.exp(-torch.linspace(0.0, 2.0, degree + 1))
     
     tensor *= degree_factors.reshape(1, 1, -1)
@@ -356,28 +362,28 @@ def init_hermite_normal(tensor: torch.Tensor,
                        mean: float = 0.0, 
                        std: Optional[float] = None) -> torch.Tensor:
     """
-    Initialize Hermite coefficients with normal distribution.
+    Инициализирует коэффициенты Эрмита с нормальным распределением.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
-        mean: Mean of the normal distribution
-        std: Standard deviation (if None, uses 1/sqrt(input_dim * (degree+1)))
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scaling: Тип полиномов Эрмита ('physicist' или 'probabilist')
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * (degree+1)))
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Set default std if not provided
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
     if std is None:
         std = 1.0 / math.sqrt(input_dim * (degree + 1))
     
-    # Initialize with normal distribution
+    # Инициализация с нормальным распределением
     nn.init.normal_(tensor, mean=mean, std=std)
     
-    # Apply degree-based scaling
+    # Применяем масштабирование по степени
     if scaling == 'physicist':
         degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
     else:  # scaling == 'probabilist'
@@ -392,30 +398,30 @@ def init_hermite_orthogonal(tensor: torch.Tensor,
                            scaling: str = 'physicist',
                            gain: float = 1.0) -> torch.Tensor:
     """
-    Initialize Hermite coefficients with orthogonal initialization.
+    Инициализирует коэффициенты Эрмита с ортогональной инициализацией.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
-        gain: Scaling factor
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scaling: Тип полиномов Эрмита ('physicist' или 'probabilist')
+        gain: Масштабирующий фактор
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
     input_dim, output_dim, degree_plus_one = tensor.shape
     degree = degree_plus_one - 1
     
-    # Reshape for orthogonal initialization
+    # Преобразование для ортогональной инициализации
     flat_shape = (input_dim, output_dim * degree_plus_one)
     reshaped = tensor.reshape(flat_shape)
     
-    # Apply orthogonal initialization
+    # Применяем ортогональную инициализацию
     nn.init.orthogonal_(reshaped, gain=gain)
     
-    # Reshape back
+    # Преобразуем обратно
     tensor.copy_(reshaped.reshape(input_dim, output_dim, degree_plus_one))
     
-    # Apply degree-based scaling
+    # Применяем масштабирование по степени
     if scaling == 'physicist':
         degree_factors = torch.exp(-torch.linspace(0.0, 3.0, degree + 1))
     else:  # scaling == 'probabilist'
@@ -431,40 +437,40 @@ def init_hermite_identity(tensor: torch.Tensor,
                          exact: bool = False,
                          noise_scale: float = 0.01) -> torch.Tensor:
     """
-    Initialize Hermite coefficients to approximate the identity function.
+    Инициализирует коэффициенты Эрмита для аппроксимации функции идентичности.
     
-    For the identity function f(x) = x, we need to determine the coefficients
-    in the Hermite expansion.
+    Для функции идентичности f(x) = x, нам нужно определить коэффициенты
+    в разложении Эрмита.
     
     Args:
-        tensor: Tensor to initialize (shape: input_dim, output_dim, degree+1)
-        scaling: Type of Hermite polynomials ('physicist' or 'probabilist')
-        exact: Whether to use exact identity or add noise
-        noise_scale: Scale of the noise to add if not exact
+        tensor: Тензор для инициализации формы (input_dim, output_dim, degree+1)
+        scaling: Тип полиномов Эрмита ('physicist' или 'probabilist')
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
         
     Returns:
-        Initialized tensor
+        Инициализированный тензор
     """
-    # Set all coefficients to zero
+    # Устанавливаем все коэффициенты в ноль
     nn.init.zeros_(tensor)
     
     input_dim, output_dim, degree_plus_one = tensor.shape
     
-    # Check if degree is at least 1 (we need at least H_1 for identity)
+    # Проверка, что степень не менее 1 (нам нужен как минимум H_1 для идентичности)
     if degree_plus_one < 2:
-        raise ValueError("Degree must be at least 1 for identity initialization")
+        raise ValueError("Степень должна быть не менее 1 для инициализации идентичности")
     
-    # For identity f(x) = x:
-    # In physicist's scaling: H_1(x) = 2x, so coefficient should be 0.5
-    # In probabilist's scaling: He_1(x) = x, so coefficient should be 1.0
+    # Для идентичности f(x) = x:
+    # В физическом масштабировании: H_1(x) = 2x, поэтому коэффициент должен быть 0.5
+    # В вероятностном масштабировании: He_1(x) = x, поэтому коэффициент должен быть 1.0
     identity_coef = 0.5 if scaling == 'physicist' else 1.0
     
-    # Identity mapping: set coefficient for H_1 or He_1
+    # Отображение идентичности: установка коэффициента для H_1 или He_1
     min_dim = min(input_dim, output_dim)
     for i in range(min_dim):
         tensor[i, i, 1] = identity_coef
     
-    # Add noise if not exact
+    # Добавляем шум, если требуется
     if not exact:
         noise = torch.randn_like(tensor) * noise_scale
         tensor += noise
@@ -472,31 +478,310 @@ def init_hermite_identity(tensor: torch.Tensor,
     return tensor
 
 
-def get_initializer(name: str) -> Callable:
+# ====== Инициализаторы для B-сплайнов ======
+
+def init_bspline_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
     """
-    Get initializer function by name.
+    Инициализирует коэффициенты B-сплайнов с равномерным распределением.
     
     Args:
-        name: Name of the initializer
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        scale: Масштабирующий фактор для инициализации
         
     Returns:
-        Initializer function
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Инициализация с равномерным распределением масштабированным по количеству базисных функций
+    bound = scale / (input_dim * math.sqrt(num_basis))
+    nn.init.uniform_(tensor, -bound, bound)
+    
+    # Применяем специфичное для B-сплайнов масштабирование
+    # B-сплайны формируют разбиение единицы (их сумма = 1), поэтому нам нужны малые коэффициенты
+    tensor *= 0.5
+    
+    return tensor
+
+
+def init_bspline_normal(tensor: torch.Tensor, 
+                        mean: float = 0.0, 
+                        std: Optional[float] = None) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты B-сплайнов с нормальным распределением.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * num_basis))
+        
+    Returns:
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
+    if std is None:
+        std = 1.0 / math.sqrt(input_dim * num_basis)
+    
+    # Инициализация с нормальным распределением
+    nn.init.normal_(tensor, mean=mean, std=std)
+    
+    return tensor
+
+
+def init_bspline_identity(tensor: torch.Tensor, 
+                         exact: bool = False,
+                         noise_scale: float = 0.01) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты B-сплайнов для аппроксимации функции идентичности.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
+        
+    Returns:
+        Инициализированный тензор
+    """
+    # Устанавливаем все коэффициенты в нуль
+    nn.init.zeros_(tensor)
+    
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Для аппроксимации идентичности с B-сплайнами, коэффициенты должны
+    # следовать линейному шаблону. В простейшем случае, это просто линейная функция.
+    min_dim = min(input_dim, output_dim)
+    
+    # Для каждого входного измерения i и соответствующего выходного измерения i
+    for i in range(min_dim):
+        # Линейный шаблон коэффициентов для функции идентичности
+        # Используем линейно возрастающие коэффициенты от -1 до 1
+        tensor[i, i, :] = torch.linspace(-0.5, 0.5, num_basis)
+    
+    # Добавляем шум, если требуется
+    if not exact:
+        noise = torch.randn_like(tensor) * noise_scale
+        tensor += noise
+    
+    return tensor
+
+
+# ====== Инициализаторы для кубических сплайнов ======
+
+def init_cubic_spline_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты кубических сплайнов с равномерным распределением.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_knots)
+        scale: Масштабирующий фактор для инициализации
+        
+    Returns:
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_knots = tensor.shape
+    
+    # Инициализация с равномерным распределением
+    bound = scale / (input_dim * math.sqrt(num_knots))
+    nn.init.uniform_(tensor, -bound, bound)
+    
+    return tensor
+
+
+def init_cubic_spline_normal(tensor: torch.Tensor, 
+                             mean: float = 0.0, 
+                             std: Optional[float] = None) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты кубических сплайнов с нормальным распределением.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_knots)
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * num_knots))
+        
+    Returns:
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_knots = tensor.shape
+    
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
+    if std is None:
+        std = 1.0 / math.sqrt(input_dim * num_knots)
+    
+    # Инициализация с нормальным распределением
+    nn.init.normal_(tensor, mean=mean, std=std)
+    
+    return tensor
+
+
+def init_cubic_spline_identity(tensor: torch.Tensor, 
+                               exact: bool = False,
+                               noise_scale: float = 0.01) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты кубических сплайнов для аппроксимации функции идентичности.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_knots)
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
+        
+    Returns:
+        Инициализированный тензор
+    """
+    # Устанавливаем все коэффициенты в нуль
+    nn.init.zeros_(tensor)
+    
+    input_dim, output_dim, num_knots = tensor.shape
+    
+    # Для кубических сплайнов идентичность можно аппроксимировать линейно возрастающими значениями
+    min_dim = min(input_dim, output_dim)
+    
+    # Для каждого входного измерения i и соответствующего выходного измерения i
+    for i in range(min_dim):
+        # Линейный шаблон коэффициентов для функции идентичности
+        # Для кубических сплайнов мы используем линейно возрастающие значения в узлах
+        tensor[i, i, :] = torch.linspace(-1.0, 1.0, num_knots)
+    
+    # Добавляем шум, если требуется
+    if not exact:
+        noise = torch.randn_like(tensor) * noise_scale
+        tensor += noise
+    
+    return tensor
+
+
+# ====== Инициализаторы для адаптивных сплайнов ======
+
+def init_adaptive_spline_uniform(tensor: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты адаптивных сплайнов с равномерным распределением.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        scale: Масштабирующий фактор для инициализации
+        
+    Returns:
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Инициализация с равномерным распределением, уменьшая масштаб
+    # для компенсации адаптивности узлов
+    bound = scale / (input_dim * math.sqrt(num_basis)) * 0.5
+    nn.init.uniform_(tensor, -bound, bound)
+    
+    return tensor
+
+
+def init_adaptive_spline_normal(tensor: torch.Tensor, 
+                              mean: float = 0.0, 
+                              std: Optional[float] = None) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты адаптивных сплайнов с нормальным распределением.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        mean: Среднее значение нормального распределения
+        std: Стандартное отклонение (если None, использует 1/sqrt(input_dim * num_basis))
+        
+    Returns:
+        Инициализированный тензор
+    """
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Установка стандартного отклонения по умолчанию, если не предоставлено
+    if std is None:
+        std = 1.0 / math.sqrt(input_dim * num_basis) * 0.5
+    
+    # Инициализация с нормальным распределением
+    nn.init.normal_(tensor, mean=mean, std=std)
+    
+    return tensor
+
+
+def init_adaptive_spline_identity(tensor: torch.Tensor, 
+                                 exact: bool = False,
+                                 noise_scale: float = 0.01) -> torch.Tensor:
+    """
+    Инициализирует коэффициенты адаптивных сплайнов для аппроксимации функции идентичности.
+    
+    Args:
+        tensor: Тензор для инициализации формы (input_dim, output_dim, num_basis)
+        exact: Использовать точную идентичность или добавить шум
+        noise_scale: Масштаб шума для добавления, если не exact
+        
+    Returns:
+        Инициализированный тензор
+    """
+    # Устанавливаем все коэффициенты в нуль
+    nn.init.zeros_(tensor)
+    
+    input_dim, output_dim, num_basis = tensor.shape
+    
+    # Для адаптивных сплайнов идентичность создается через шаблон коэффициентов
+    # аналогичный B-сплайнам, но с большей осторожностью из-за адаптивности узлов
+    min_dim = min(input_dim, output_dim)
+    
+    # Для каждого входного измерения i и соответствующего выходного измерения i
+    for i in range(min_dim):
+        # Создание шаблона с меньшей амплитудой
+        tensor[i, i, :] = torch.linspace(-0.25, 0.25, num_basis)
+    
+    # Добавляем шум, если требуется
+    if not exact:
+        noise = torch.randn_like(tensor) * noise_scale * 0.5
+        tensor += noise
+    
+    return tensor
+
+
+def get_initializer(name: str) -> Callable:
+    """
+    Получает функцию инициализации по имени.
+    
+    Args:
+        name: Имя инициализатора
+        
+    Returns:
+        Функция инициализации
     """
     initializers = {
+        # Инициализаторы для полиномов Чебышева
         'chebyshev_normal': init_chebyshev_normal,
         'chebyshev_uniform': init_chebyshev_uniform,
         'chebyshev_orthogonal': init_chebyshev_orthogonal,
         'chebyshev_zeros': init_chebyshev_zeros,
         'chebyshev_identity': init_chebyshev_identity,
+        
+        # Инициализаторы для полиномов Якоби
         'jacobi_normal': init_jacobi_normal,
         'jacobi_uniform': init_jacobi_uniform,
         'jacobi_orthogonal': init_jacobi_orthogonal,
         'jacobi_identity': init_jacobi_identity,
+        
+        # Инициализаторы для полиномов Эрмита
         'hermite_normal': init_hermite_normal,
         'hermite_uniform': init_hermite_uniform,
         'hermite_orthogonal': init_hermite_orthogonal,
         'hermite_identity': init_hermite_identity,
-        # For backward compatibility, keep the original names
+        
+        # Инициализаторы для B-сплайнов
+        'bspline_normal': init_bspline_normal,
+        'bspline_uniform': init_bspline_uniform,
+        'bspline_identity': init_bspline_identity,
+        
+        # Инициализаторы для кубических сплайнов
+        'cubic_spline_normal': init_cubic_spline_normal,
+        'cubic_spline_uniform': init_cubic_spline_uniform,
+        'cubic_spline_identity': init_cubic_spline_identity,
+        
+        # Инициализаторы для адаптивных сплайнов
+        'adaptive_spline_normal': init_adaptive_spline_normal,
+        'adaptive_spline_uniform': init_adaptive_spline_uniform,
+        'adaptive_spline_identity': init_adaptive_spline_identity,
+        
+        # Для обратной совместимости сохраняем оригинальные имена
         'normal': init_chebyshev_normal,
         'uniform': init_chebyshev_uniform,
         'orthogonal': init_chebyshev_orthogonal,
@@ -505,7 +790,7 @@ def get_initializer(name: str) -> Callable:
     }
     
     if name not in initializers:
-        raise ValueError(f"Unknown initializer: {name}. Available initializers: "
+        raise ValueError(f"Неизвестный инициализатор: {name}. Доступные инициализаторы: "
                        f"{', '.join(initializers.keys())}")
     
     return initializers[name]

@@ -1,24 +1,31 @@
 """
-KAN - Kolmogorov-Arnold Networks
+KAN - Сети Колмогорова-Арнольда
 
-A PyTorch-based library for neural networks using explicit mathematical forms
-based on the Kolmogorov-Arnold representation theorem.
+Библиотека на основе PyTorch для нейронных сетей, использующих явные математические формы,
+основанные на теореме представления Колмогорова-Арнольда.
 
-These networks provide greater interpretability and mathematical rigor
-compared to traditional neural networks.
+Эти сети обеспечивают большую интерпретируемость и математическую строгость
+по сравнению с традиционными нейронными сетями.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
+# Слои KAN
 from .layers.chebykan import ChebyKANLayer
 from .layers.jacobikan import JacobiKANLayer
 from .layers.hermitekan import HermiteKANLayer
+from .layers.splinekan import BSplineKANLayer, CubicSplineKANLayer, AdaptiveSplineKANLayer
+from .layers.base import KANLayer, KANSequential
+
+# Базисные функции
 from .basis.chebyshev import ChebyshevBasis
 from .basis.jacobi import JacobiBasis
 from .basis.hermite import HermiteBasis
-from .layers.base import KANLayer, KANSequential
+from .basis.bspline import BSplineBasis
+from .basis.cubic_spline import CubicSplineBasis
+from .basis.adaptive_spline import AdaptiveSplineBasis
 
-# Import utilities
+# Импорт утилит
 from .utils.visualization import (
     plot_basis_functions,
     plot_layer_functions,
@@ -27,23 +34,41 @@ from .utils.visualization import (
 )
 
 from .utils.initializers import (
+    # Инициализаторы для полиномов Чебышева
     init_chebyshev_normal,
     init_chebyshev_uniform,
     init_chebyshev_orthogonal,
     init_chebyshev_zeros,
     init_chebyshev_identity,
+    
+    # Инициализаторы для полиномов Якоби
     init_jacobi_normal,
     init_jacobi_uniform,
     init_jacobi_orthogonal,
     init_jacobi_identity,
+    
+    # Инициализаторы для полиномов Эрмита
     init_hermite_normal,
     init_hermite_uniform,
     init_hermite_orthogonal,
     init_hermite_identity,
+    
+    # Инициализаторы для сплайнов
+    init_bspline_normal,
+    init_bspline_uniform,
+    init_bspline_identity,
+    init_cubic_spline_normal,
+    init_cubic_spline_uniform,
+    init_cubic_spline_identity,
+    init_adaptive_spline_normal,
+    init_adaptive_spline_uniform,
+    init_adaptive_spline_identity,
+    
+    # Получение инициализатора по имени
     get_initializer
 )
 
-# Import symbolic utilities if sympy is available
+# Импорт символьных утилит, если доступен sympy
 try:
     import sympy
     from .utils.symbolic import (

@@ -1,37 +1,41 @@
 """
-KAN layers for building Kolmogorov-Arnold Networks.
+Слои KAN для построения сетей Колмогорова-Арнольда.
 
-This module provides various layer implementations for KAN architectures,
-each using different basis functions to represent univariate components
-of the Kolmogorov-Arnold decomposition.
+Этот модуль предоставляет различные реализации слоев для архитектур KAN,
+каждая из которых использует разные базисные функции для представления
+одномерных компонентов разложения Колмогорова-Арнольда.
 """
 
 from .base import KANLayer, KANSequential
 from .chebykan import ChebyKANLayer
 from .jacobikan import JacobiKANLayer
 from .hermitekan import HermiteKANLayer
+from .splinekan import BSplineKANLayer, CubicSplineKANLayer, AdaptiveSplineKANLayer
 
-# Dictionary mapping layer names to their classes
+# Словарь, сопоставляющий имена слоев с их классами
 LAYER_REGISTRY = {
     'chebykan': ChebyKANLayer,
     'jacobikan': JacobiKANLayer,
     'hermitekan': HermiteKANLayer,
+    'bsplinekan': BSplineKANLayer,
+    'cubic_splinekan': CubicSplineKANLayer,
+    'adaptive_splinekan': AdaptiveSplineKANLayer,
 }
 
 
 def get_layer(name: str, **kwargs):
     """
-    Get a KAN layer by name.
+    Получает слой KAN по имени.
     
     Args:
-        name: Name of the layer
-        **kwargs: Additional arguments to pass to the layer constructor
+        name: Имя слоя
+        **kwargs: Дополнительные аргументы для передачи конструктору слоя
         
     Returns:
-        Instance of the requested KAN layer
+        Экземпляр запрошенного слоя KAN
     """
     if name not in LAYER_REGISTRY:
-        raise ValueError(f"Unknown layer: {name}. Available options: "
+        raise ValueError(f"Неизвестный слой: {name}. Доступные варианты: "
                        f"{', '.join(LAYER_REGISTRY.keys())}")
     
     return LAYER_REGISTRY[name](**kwargs)
