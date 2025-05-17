@@ -171,20 +171,26 @@ class HermiteBasis(BasisFunction):
         # Ensure x has shape (batch_size, input_dim)
         batch_size, input_dim = x.shape
         
-        # Initialize the result tensor
-        result = torch.ones(batch_size, input_dim, self.degree + 1, 
-                          device=x.device, dtype=x.dtype)
+        # Создаем список для хранения базисных функций
+        basis_list = []
+        
+        # H_0(x) = 1
+        basis_0 = torch.ones(batch_size, input_dim, device=x.device, dtype=x.dtype)
+        basis_list.append(basis_0)
         
         if self.degree > 0:
             # H_1(x) = 2x
-            result[:, :, 1] = 2 * x
+            basis_1 = 2 * x
+            basis_list.append(basis_1)
             
             # Recurrence relation for n ≥ 2
             for n in range(2, self.degree + 1):
-                # H_{n}(x) = 2x·H_{n-1}(x) - 2(n-1)·H_{n-2}(x)
-                result[:, :, n] = 2 * x * result[:, :, n-1] - 2 * (n-1) * result[:, :, n-2]
+                # H_{n}(x) = 2x·H_n-1(x) - 2(n-1)·H_{n-2}(x)
+                basis_n = 2 * x * basis_list[n-1] - 2 * (n-1) * basis_list[n-2]
+                basis_list.append(basis_n)
         
-        return result
+        # Stack the basis functions along a new dimension
+        return torch.stack(basis_list, dim=2)
     
     def _basis_probabilist(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -205,20 +211,26 @@ class HermiteBasis(BasisFunction):
         # Ensure x has shape (batch_size, input_dim)
         batch_size, input_dim = x.shape
         
-        # Initialize the result tensor
-        result = torch.ones(batch_size, input_dim, self.degree + 1, 
-                          device=x.device, dtype=x.dtype)
+        # Создаем список для хранения базисных функций
+        basis_list = []
+        
+        # He_0(x) = 1
+        basis_0 = torch.ones(batch_size, input_dim, device=x.device, dtype=x.dtype)
+        basis_list.append(basis_0)
         
         if self.degree > 0:
             # He_1(x) = x
-            result[:, :, 1] = x
+            basis_1 = x.clone()  # Используем clone() для избежания in-place операций
+            basis_list.append(basis_1)
             
             # Recurrence relation for n ≥ 2
             for n in range(2, self.degree + 1):
                 # He_{n}(x) = x·He_{n-1}(x) - (n-1)·He_{n-2}(x)
-                result[:, :, n] = x * result[:, :, n-1] - (n-1) * result[:, :, n-2]
+                basis_n = x * basis_list[n-1] - (n-1) * basis_list[n-2]
+                basis_list.append(basis_n)
         
-        return result
+        # Stack the basis functions along a new dimension
+        return torch.stack(basis_list, dim=2)
     
     def derivative(self, x: torch.Tensor, coefficients: torch.Tensor, 
                   order: int = 1) -> torch.Tensor:
