@@ -149,10 +149,16 @@ class JacobiBasis(BasisFunction):
         
         if self.degree > 0:
             # P_1^(α,β)(x) = ((α + β + 2)x + (α - β))/2
-            result[:, :, 1] = ((alpha + beta + 2) * x + (alpha - beta)) / 2
+            # Avoid inplace operation - create a new tensor
+            p1 = ((alpha + beta + 2) * x + (alpha - beta)) / 2
+            result[:, :, 1] = p1
             
             # Recurrence relation for n ≥ 2
             for n in range(2, self.degree + 1):
+                # Get previous polynomials P_{n-1} and P_{n-2}
+                p_n_minus_1 = result[:, :, n-1].clone()  # Clone to prevent modification
+                p_n_minus_2 = result[:, :, n-2].clone()  # Clone to prevent modification
+                
                 # Temporary variables to make the formula more readable
                 n_float = float(n)
                 ab_sum = alpha + beta
@@ -161,8 +167,11 @@ class JacobiBasis(BasisFunction):
                 # Common term in numerator: (2n + α + β - 1)
                 common_term = 2 * n_float + ab_sum - 1
                 
+                # Term for multiplication with P_{n-1}
+                term1 = (2 * n_float + ab_sum) * (2 * n_float + ab_sum - 2) * x + ab_diff
+                
                 # Coefficient for P_{n-1}
-                coef1 = common_term * ((2 * n_float + ab_sum) * (2 * n_float + ab_sum - 2) * x + ab_diff)
+                coef1 = common_term * term1
                 
                 # Coefficient for P_{n-2}
                 coef2 = -2 * (n_float + alpha - 1) * (n_float + beta - 1) * (2 * n_float + ab_sum)
@@ -170,8 +179,11 @@ class JacobiBasis(BasisFunction):
                 # Denominator
                 denom = 2 * n_float * (n_float + ab_sum) * (2 * n_float + ab_sum - 2)
                 
-                # Compute P_n
-                result[:, :, n] = (coef1 * result[:, :, n-1] + coef2 * result[:, :, n-2]) / denom
+                # Compute P_n without inplace operations
+                p_n = (coef1 * p_n_minus_1 + coef2 * p_n_minus_2) / denom
+                
+                # Store the result
+                result[:, :, n] = p_n
         
         return result
     
@@ -206,7 +218,8 @@ class JacobiBasis(BasisFunction):
                                           domain=self.domain)
             
             # Ensure it's on the same device as x
-            derivative_basis.arange = derivative_basis.arange.to(device=x.device)
+            if hasattr(self, 'arange'):
+                derivative_basis.arange = self.arange.to(device=x.device)
             
             if order > 1:
                 # For higher order derivatives, apply recursively
@@ -216,7 +229,7 @@ class JacobiBasis(BasisFunction):
                 return derivative_basis.forward(x, derivative_coeffs)
         else:
             # If degree is 0, derivative is 0
-            return torch.zeros_like(x[:, :coefficients.shape[1]], device=x.device)
+            return torch.zeros(x.shape[0], coefficients.shape[1], device=x.device, dtype=x.dtype)
     
     def _derivative_coefficients(self, coefficients: torch.Tensor) -> torch.Tensor:
         """
