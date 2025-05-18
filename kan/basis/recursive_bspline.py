@@ -153,15 +153,30 @@ class RecursiveBSplineBasis(BasisFunction):
         batch_size, input_dim = x.shape
         device = x.device
         
-        # Подготавливаем x для вычислений
+        # Подготавливаем x для вычислений (batch_size, input_dim, 1)
         x_unsqueezed = x.unsqueeze(dim=2)
-        grid_unsqueezed = self.grid.unsqueeze(dim=0)
         
         # Рекурсивное вычисление B-сплайнов
         if self.degree == 0:
             # Базовый случай: B-сплайны степени 0 (индикаторные функции)
-            value = (x_unsqueezed >= grid_unsqueezed[:, :, :-1]) & (x_unsqueezed < grid_unsqueezed[:, :, 1:])
-            value = value.float()
+            grid = self.grid
+            
+            # Создаем тензор для хранения результатов
+            value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+            
+            # Вычисляем индикаторные функции для каждого интервала
+            for i in range(self.num_basis):
+                if i < grid.shape[0] - 1:  # Проверка, что у нас достаточно узлов
+                    left_bound = grid[i]
+                    right_bound = grid[i+1]
+                    # B-сплайн степени 0 равен 1, если x в интервале [t_i, t_{i+1})
+                    value[:, :, i] = ((x >= left_bound) & (x < right_bound)).float()
+                    
+                    # Обработка правой границы для последнего интервала
+                    if i == self.num_basis - 1:
+                        value[:, :, i] = value[:, :, i] | (x == right_bound).float()
+            
+            return value
         else:
             # Рекурсивный случай
             # Создаем временный базис меньшей степени
@@ -176,49 +191,43 @@ class RecursiveBSplineBasis(BasisFunction):
             # Вычисляем B-сплайны меньшей степени
             B_km1 = temp_basis._batch_bspline_values(x)
             
+            # Создаем тензор для хранения результатов
+            value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+            
             # Вычисляем B-сплайны степени k по рекурсивной формуле
             # B_{i,k}(x) = (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x) + 
             #               (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
             
-            # Пустой тензор для результата
-            value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+            for i in range(self.num_basis):
+                # Убедимся, что у нас есть нужные индексы узлов
+                if i + self.degree < len(self.grid) and i + 1 < len(self.grid):
+                    # Коэффициенты для первого слагаемого
+                    denom1 = self.grid[i + self.degree] - self.grid[i]
+                    
+                    # Коэффициенты для второго слагаемого
+                    denom2 = self.grid[i + self.degree + 1] - self.grid[i + 1]
+                    
+                    # Проверяем деление на ноль
+                    mask1 = (denom1 != 0)
+                    mask2 = (denom2 != 0)
+                    
+                    # Первое слагаемое: (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x)
+                    term1 = torch.zeros_like(x)
+                    if mask1 and i < B_km1.shape[2]:
+                        term1 = (x - self.grid[i]) / denom1 * B_km1[:, :, i]
+                    
+                    # Второе слагаемое: (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
+                    term2 = torch.zeros_like(x)
+                    if mask2 and i + 1 < B_km1.shape[2]:
+                        term2 = (self.grid[i + self.degree + 1] - x) / denom2 * B_km1[:, :, i+1]
+                    
+                    # Суммируем слагаемые
+                    value[:, :, i] = term1 + term2
             
-            for i in range(self.num_basis - 1):  # -1 потому что мы комбинируем (i) и (i+1)
-                # Коэффициенты для первого слагаемого
-                denom1 = self.grid[i + self.degree] - self.grid[i]
-                
-                # Коэффициенты для второго слагаемого
-                denom2 = self.grid[i + self.degree + 1] - self.grid[i + 1]
-                
-                # Применяем формулу с проверкой деления на ноль
-                mask1 = (denom1 != 0)
-                mask2 = (denom2 != 0)
-                
-                # Первое слагаемое: (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x)
-                if i < B_km1.shape[2]:  # Проверка индекса
-                    term1 = torch.zeros_like(x_unsqueezed)
-                    if mask1:
-                        term1 = (x_unsqueezed - self.grid[i]) / denom1 * B_km1[:, :, i:i+1]
-                
-                # Второе слагаемое: (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
-                if i + 1 < B_km1.shape[2]:  # Проверка индекса
-                    term2 = torch.zeros_like(x_unsqueezed)
-                    if mask2:
-                        term2 = (self.grid[i + self.degree + 1] - x_unsqueezed) / denom2 * B_km1[:, :, i+1:i+2]
-                
-                # Суммируем слагаемые
-                value[:, :, i] = (term1 + term2).squeeze(2)
-        
-        # Обработка значений на границе области
-        # На правой границе должно быть B(b) = 1 для последнего базиса
-        right_boundary = (x_unsqueezed == self.grid[-1])
-        if right_boundary.any():
-            value[:, :, -1] = value[:, :, -1] + right_boundary.float().squeeze(2)
-        
-        # Проверка на NaN и замена NaN на 0
-        value = torch.nan_to_num(value)
-        
-        return value
+            # Проверка на NaN и замена NaN на 0
+            value = torch.nan_to_num(value)
+            
+            return value
     
     def _extend_grid(self, grid: torch.Tensor, k_extend: int) -> torch.Tensor:
         """
