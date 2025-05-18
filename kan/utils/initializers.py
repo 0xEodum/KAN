@@ -4,6 +4,14 @@ import numpy as np
 import math
 from typing import Optional, Tuple, Callable
 
+from .recursive_initializers import (
+    init_recursive_bspline_normal,
+    init_recursive_bspline_uniform,
+    init_recursive_bspline_orthogonal,
+    init_recursive_bspline_identity,
+    init_recursive_bspline_grid_based
+)
+
 
 # ====== Инициализаторы для полиномов Чебышева ======
 
@@ -781,12 +789,17 @@ def get_initializer(name: str) -> Callable:
         'adaptive_spline_uniform': init_adaptive_spline_uniform,
         'adaptive_spline_identity': init_adaptive_spline_identity,
         
-        # Для обратной совместимости сохраняем оригинальные имена
         'normal': init_chebyshev_normal,
         'uniform': init_chebyshev_uniform,
         'orthogonal': init_chebyshev_orthogonal,
         'zeros': init_chebyshev_zeros,
         'identity': init_chebyshev_identity
+        
+        'recursive_bspline_normal': init_recursive_bspline_normal,
+        'recursive_bspline_uniform': init_recursive_bspline_uniform,
+        'recursive_bspline_orthogonal': init_recursive_bspline_orthogonal,
+        'recursive_bspline_identity': init_recursive_bspline_identity,
+        'recursive_bspline_grid_based': init_recursive_bspline_grid_based,
     }
     
     if name not in initializers:

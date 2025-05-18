@@ -12,6 +12,7 @@ from .hermite import HermiteBasis
 from .bspline import BSplineBasis
 from .cubic_spline import CubicSplineBasis
 from .adaptive_spline import AdaptiveSplineBasis
+from .recursive_bspline import RecursiveBSplineBasis
 
 # Словарь, сопоставляющий имена базисных функций с их классами
 BASIS_REGISTRY = {
@@ -21,6 +22,7 @@ BASIS_REGISTRY = {
     'bspline': BSplineBasis,
     'cubic_spline': CubicSplineBasis,
     'adaptive_spline': AdaptiveSplineBasis,
+    'recursive_bspline': RecursiveBSplineBasis,
 }
 
 

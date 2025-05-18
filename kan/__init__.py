@@ -15,6 +15,7 @@ from .layers.chebykan import ChebyKANLayer
 from .layers.jacobikan import JacobiKANLayer
 from .layers.hermitekan import HermiteKANLayer
 from .layers.splinekan import BSplineKANLayer, CubicSplineKANLayer, AdaptiveSplineKANLayer
+from .layers.recursive_splinekan import RecursiveSplineKANLayer
 from .layers.base import KANLayer, KANSequential
 
 # Базисные функции
@@ -24,6 +25,7 @@ from .basis.hermite import HermiteBasis
 from .basis.bspline import BSplineBasis
 from .basis.cubic_spline import CubicSplineBasis
 from .basis.adaptive_spline import AdaptiveSplineBasis
+from .basis.recursive_bspline import RecursiveBSplineBasis
 
 # Импорт утилит
 from .utils.visualization import (
@@ -33,6 +35,7 @@ from .utils.visualization import (
     plot_function_approximation
 )
 
+# Импорт всех инициализаторов
 from .utils.initializers import (
     # Инициализаторы для полиномов Чебышева
     init_chebyshev_normal,
@@ -64,8 +67,17 @@ from .utils.initializers import (
     init_adaptive_spline_uniform,
     init_adaptive_spline_identity,
     
-    # Получение инициализатора по имени
+    # Единая функция для получения инициализатора
     get_initializer
+)
+
+# Импорт рекурсивных инициализаторов - они будут доступны через get_initializer
+from .utils.recursive_initializers import (
+    init_recursive_bspline_normal,
+    init_recursive_bspline_uniform,
+    init_recursive_bspline_orthogonal,
+    init_recursive_bspline_identity,
+    init_recursive_bspline_grid_based
 )
 
 # Импорт символьных утилит, если доступен sympy
