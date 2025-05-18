@@ -13,6 +13,7 @@ from .bspline import BSplineBasis
 from .cubic_spline import CubicSplineBasis
 from .adaptive_spline import AdaptiveSplineBasis
 from .recursive_bspline import RecursiveBSplineBasis
+from .relu import ReLUBasis
 
 # Словарь, сопоставляющий имена базисных функций с их классами
 BASIS_REGISTRY = {
@@ -23,6 +24,7 @@ BASIS_REGISTRY = {
     'cubic_spline': CubicSplineBasis,
     'adaptive_spline': AdaptiveSplineBasis,
     'recursive_bspline': RecursiveBSplineBasis,
+    'relu': ReLUBasis,
 }
 
 

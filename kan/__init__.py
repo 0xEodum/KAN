@@ -17,6 +17,7 @@ from .layers.hermitekan import HermiteKANLayer
 from .layers.splinekan import BSplineKANLayer, CubicSplineKANLayer, AdaptiveSplineKANLayer
 from .layers.recursive_splinekan import RecursiveSplineKANLayer
 from .layers.base import KANLayer, KANSequential
+from .layers.relukan import ReLUKANLayer
 
 # Базисные функции
 from .basis.chebyshev import ChebyshevBasis
@@ -26,6 +27,7 @@ from .basis.bspline import BSplineBasis
 from .basis.cubic_spline import CubicSplineBasis
 from .basis.adaptive_spline import AdaptiveSplineBasis
 from .basis.recursive_bspline import RecursiveBSplineBasis
+from .basis.relu import ReLUBasis
 
 # Импорт утилит
 from .utils.visualization import (

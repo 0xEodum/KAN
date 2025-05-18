@@ -12,6 +12,7 @@ from .jacobikan import JacobiKANLayer
 from .hermitekan import HermiteKANLayer
 from .splinekan import BSplineKANLayer, CubicSplineKANLayer, AdaptiveSplineKANLayer
 from .recursive_splinekan import RecursiveSplineKANLayer
+from .relukan import ReLUKANLayer
 
 # Словарь, сопоставляющий имена слоев с их классами
 LAYER_REGISTRY = {
@@ -22,6 +23,7 @@ LAYER_REGISTRY = {
     'cubic_splinekan': CubicSplineKANLayer,
     'adaptive_splinekan': AdaptiveSplineKANLayer,
     'recursive_splinekan': RecursiveSplineKANLayer,
+    'relukan': ReLUKANLayer,
 }
 
 
