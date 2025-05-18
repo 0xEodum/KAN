@@ -174,7 +174,8 @@ class RecursiveBSplineBasis(BasisFunction):
                     
                     # Обработка правой границы для последнего интервала
                     if i == self.num_basis - 1:
-                        value[:, :, i] = value[:, :, i] | (x == right_bound).float()
+                        # Используем сложение вместо побитового ИЛИ для операций с float
+                        value[:, :, i] = value[:, :, i] + (x == right_bound).float()
             
             return value
         else:
