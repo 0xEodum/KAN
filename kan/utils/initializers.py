@@ -793,13 +793,13 @@ def get_initializer(name: str) -> Callable:
         'uniform': init_chebyshev_uniform,
         'orthogonal': init_chebyshev_orthogonal,
         'zeros': init_chebyshev_zeros,
-        'identity': init_chebyshev_identity
+        'identity': init_chebyshev_identity,
         
         'recursive_bspline_normal': init_recursive_bspline_normal,
         'recursive_bspline_uniform': init_recursive_bspline_uniform,
         'recursive_bspline_orthogonal': init_recursive_bspline_orthogonal,
         'recursive_bspline_identity': init_recursive_bspline_identity,
-        'recursive_bspline_grid_based': init_recursive_bspline_grid_based,
+        'recursive_bspline_grid_based': init_recursive_bspline_grid_based
     }
     
     if name not in initializers:
