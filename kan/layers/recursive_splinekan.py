@@ -128,17 +128,24 @@ class RecursiveSplineKANLayer(KANLayer):
         # Вычисляем базовую составляющую
         base_component = self.base_fun(x)  # (batch_size, input_dim)
         
-        # Вычисляем сплайновую составляющую используя базисную функцию
-        spline_values = self.basis_function.forward(x, self.spline_coeffs)  # (batch_size, output_dim)
-        
-        # Объединяем компоненты и применяем маску
+        # Создаем тензор для выходных значений
         y = torch.zeros(batch_size, self.output_dim, device=x.device)
         
+        # Обрабатываем каждое входное измерение отдельно
         for i in range(self.input_dim):
+            # Выбираем только i-е входное измерение
+            x_i = x[:, i:i+1]
+            
+            # Вычисляем сплайновую составляющую только для i-го измерения
+            # Берем соответствующие коэффициенты для i-го входа
+            coeffs_i = self.spline_coeffs[i:i+1]
+            spline_values_i = self.basis_function.forward(x_i, coeffs_i)  # (batch_size, output_dim)
+            
+            # Применяем масштабирование и маску
             for o in range(self.output_dim):
                 y[:, o] += (
                     self.scale_base[i, o] * base_component[:, i] +
-                    self.scale_sp[i, o] * spline_values[:, o, i]
+                    self.scale_sp[i, o] * spline_values_i[:, o]
                 ) * self.mask[i, o]
         
         return y
