@@ -141,95 +141,95 @@ class RecursiveBSplineBasis(BasisFunction):
         return self._batch_bspline_values(x)
     
     def _batch_bspline_values(self, x: torch.Tensor) -> torch.Tensor:
-    """
-    Вычисляет значения B-сплайнов рекурсивно с использованием векторизованных операций.
-    
-    Args:
-        x: Входной тензор формы (batch_size, input_dim)
+        """
+        Вычисляет значения B-сплайнов рекурсивно с использованием векторизованных операций.
         
-    Returns:
-        Тензор формы (batch_size, input_dim, num_basis)
-    """
-    batch_size, input_dim = x.shape
-    device = x.device
-    
-    # Подготавливаем x для вычислений (batch_size, input_dim, 1)
-    x_unsqueezed = x.unsqueeze(dim=2)
-    
-    # Рекурсивное вычисление B-сплайнов
-    if self.degree == 0:
-        # Базовый случай: B-сплайны степени 0 (индикаторные функции)
-        grid = self.grid
+        Args:
+            x: Входной тензор формы (batch_size, input_dim)
+            
+        Returns:
+            Тензор формы (batch_size, input_dim, num_basis)
+        """
+        batch_size, input_dim = x.shape
+        device = x.device
         
-        # Создаем тензор для хранения результатов
-        value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+        # Подготавливаем x для вычислений (batch_size, input_dim, 1)
+        x_unsqueezed = x.unsqueeze(dim=2)
         
-        # Вычисляем индикаторные функции для каждого интервала
-        for i in range(self.num_basis):
-            if i < grid.shape[0] - 1:  # Проверка, что у нас достаточно узлов
-                left_bound = grid[i]
-                right_bound = grid[i+1]
-                # B-сплайн степени 0 равен 1, если x в интервале [t_i, t_{i+1})
-                value[:, :, i] = ((x >= left_bound) & (x < right_bound)).float()
-                
-                # Обработка правой границы для последнего интервала
-                if i == self.num_basis - 1:
-                    # Используем сложение вместо побитового ИЛИ для операций с float
-                    value[:, :, i] = value[:, :, i] + (x == right_bound).float()
-        
-        return value
-    else:
-        # Рекурсивный случай
-        # Создаем временный базис меньшей степени
-        temp_basis = RecursiveBSplineBasis(
-            degree=self.degree - 1,
-            num_knots=self.num_knots,
-            domain=self.domain,
-            uniform=self.uniform
-        )
-        temp_basis.grid = self.grid
-        
-        # Вычисляем B-сплайны меньшей степени
-        B_km1 = temp_basis._batch_bspline_values(x)
-        
-        # Создаем тензор для хранения результатов
-        value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
-        
-        # Вычисляем B-сплайны степени k по рекурсивной формуле
-        # B_{i,k}(x) = (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x) + 
-        #               (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
-        
-        for i in range(self.num_basis):
-            # Убедимся, что у нас есть нужные индексы узлов
-            # Изменяем проверку, чтобы учесть i + self.degree + 1
-            if i + self.degree + 1 < len(self.grid) and i + 1 < len(self.grid):
-                # Коэффициенты для первого слагаемого
-                denom1 = self.grid[i + self.degree] - self.grid[i]
-                
-                # Коэффициенты для второго слагаемого
-                denom2 = self.grid[i + self.degree + 1] - self.grid[i + 1]
-                
-                # Проверяем деление на ноль
-                mask1 = (denom1 != 0)
-                mask2 = (denom2 != 0)
-                
-                # Первое слагаемое: (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x)
-                term1 = torch.zeros_like(x)
-                if mask1 and i < B_km1.shape[2]:
-                    term1 = (x - self.grid[i]) / denom1 * B_km1[:, :, i]
-                
-                # Второе слагаемое: (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
-                term2 = torch.zeros_like(x)
-                if mask2 and i + 1 < B_km1.shape[2]:
-                    term2 = (self.grid[i + self.degree + 1] - x) / denom2 * B_km1[:, :, i+1]
-                
-                # Суммируем слагаемые
-                value[:, :, i] = term1 + term2
-        
-        # Проверка на NaN и замена NaN на 0
-        value = torch.nan_to_num(value)
-        
-        return value
+        # Рекурсивное вычисление B-сплайнов
+        if self.degree == 0:
+            # Базовый случай: B-сплайны степени 0 (индикаторные функции)
+            grid = self.grid
+            
+            # Создаем тензор для хранения результатов
+            value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+            
+            # Вычисляем индикаторные функции для каждого интервала
+            for i in range(self.num_basis):
+                if i < grid.shape[0] - 1:  # Проверка, что у нас достаточно узлов
+                    left_bound = grid[i]
+                    right_bound = grid[i+1]
+                    # B-сплайн степени 0 равен 1, если x в интервале [t_i, t_{i+1})
+                    value[:, :, i] = ((x >= left_bound) & (x < right_bound)).float()
+                    
+                    # Обработка правой границы для последнего интервала
+                    if i == self.num_basis - 1:
+                        # Используем сложение вместо побитового ИЛИ для операций с float
+                        value[:, :, i] = value[:, :, i] + (x == right_bound).float()
+            
+            return value
+        else:
+            # Рекурсивный случай
+            # Создаем временный базис меньшей степени
+            temp_basis = RecursiveBSplineBasis(
+                degree=self.degree - 1,
+                num_knots=self.num_knots,
+                domain=self.domain,
+                uniform=self.uniform
+            )
+            temp_basis.grid = self.grid
+            
+            # Вычисляем B-сплайны меньшей степени
+            B_km1 = temp_basis._batch_bspline_values(x)
+            
+            # Создаем тензор для хранения результатов
+            value = torch.zeros(batch_size, input_dim, self.num_basis, device=device)
+            
+            # Вычисляем B-сплайны степени k по рекурсивной формуле
+            # B_{i,k}(x) = (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x) + 
+            #               (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
+            
+            for i in range(self.num_basis):
+                # Убедимся, что у нас есть нужные индексы узлов
+                # Изменяем проверку, чтобы учесть i + self.degree + 1
+                if i + self.degree + 1 < len(self.grid) and i + 1 < len(self.grid):
+                    # Коэффициенты для первого слагаемого
+                    denom1 = self.grid[i + self.degree] - self.grid[i]
+                    
+                    # Коэффициенты для второго слагаемого
+                    denom2 = self.grid[i + self.degree + 1] - self.grid[i + 1]
+                    
+                    # Проверяем деление на ноль
+                    mask1 = (denom1 != 0)
+                    mask2 = (denom2 != 0)
+                    
+                    # Первое слагаемое: (x - t_i)/(t_{i+k} - t_i) * B_{i,k-1}(x)
+                    term1 = torch.zeros_like(x)
+                    if mask1 and i < B_km1.shape[2]:
+                        term1 = (x - self.grid[i]) / denom1 * B_km1[:, :, i]
+                    
+                    # Второе слагаемое: (t_{i+k+1} - x)/(t_{i+k+1} - t_{i+1}) * B_{i+1,k-1}(x)
+                    term2 = torch.zeros_like(x)
+                    if mask2 and i + 1 < B_km1.shape[2]:
+                        term2 = (self.grid[i + self.degree + 1] - x) / denom2 * B_km1[:, :, i+1]
+                    
+                    # Суммируем слагаемые
+                    value[:, :, i] = term1 + term2
+            
+            # Проверка на NaN и замена NaN на 0
+            value = torch.nan_to_num(value)
+            
+            return value
     
     def _extend_grid(self, grid: torch.Tensor, k_extend: int) -> torch.Tensor:
         """
