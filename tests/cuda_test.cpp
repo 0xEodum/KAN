@@ -34,7 +34,6 @@ void parity(std::size_t inputs, std::size_t outputs, std::size_t terms, std::siz
 }
 
 TEST(cuda_forward_and_backward_match_cpu_across_shapes) {
-    if (!kan::cuda::available()) return;
     parity(1, 1, 1, 1);
     parity(2, 3, 2, 5);
     parity(5, 2, 8, 37);
@@ -43,7 +42,6 @@ TEST(cuda_forward_and_backward_match_cpu_across_shapes) {
 }
 
 TEST(cuda_endpoint_derivatives_and_unclipped_values) {
-    if (!kan::cuda::available()) return;
     kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 9});
     std::vector<double> coefficients(9, 0.0);
     coefficients[8] = 1.0;
@@ -57,7 +55,6 @@ TEST(cuda_endpoint_derivatives_and_unclipped_values) {
 }
 
 TEST(cuda_empty_batch_has_zero_parameter_gradients) {
-    if (!kan::cuda::available()) return;
     auto layer = make_layer(3, 2, 7);
     REQUIRE(kan::cuda::forward(layer, {}, 0).empty());
     const auto gradient = kan::cuda::backward(layer, {}, 0, {});
@@ -67,7 +64,6 @@ TEST(cuda_empty_batch_has_zero_parameter_gradients) {
 }
 
 TEST(cuda_rejects_invalid_shapes_and_nonfinite_data) {
-    if (!kan::cuda::available()) return;
     auto layer = make_layer(2, 3, 4);
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, {}, 1); });
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, std::vector<double>{1.0}, 0); });
@@ -83,7 +79,6 @@ TEST(cuda_rejects_invalid_shapes_and_nonfinite_data) {
 }
 
 TEST(cuda_checks_dimension_multiplication_before_allocation) {
-    if (!kan::cuda::available()) return;
     auto layer = make_layer(2, 3, 4);
     test::throws<std::overflow_error>([&] {
         kan::cuda::forward(layer, {}, std::numeric_limits<std::size_t>::max());
@@ -94,7 +89,6 @@ TEST(cuda_checks_dimension_multiplication_before_allocation) {
 }
 
 TEST(cuda_rejects_unsupported_families) {
-    if (!kan::cuda::available()) return;
     const kan::Layer layer(1, 1, {kan::BasisKind::Legendre, 3});
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
     test::throws<std::invalid_argument>([&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
@@ -102,7 +96,6 @@ TEST(cuda_rejects_unsupported_families) {
 }
 
 TEST(cuda_reports_nonfinite_computed_results) {
-    if (!kan::cuda::available()) return;
     kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 4});
     layer.set_parameters(std::vector<double>{1.0, 1.0, 1.0, 1.0}, std::vector<double>{0.0});
     const std::vector<double> input{1e200}, upstream{1.0};
@@ -119,10 +112,14 @@ TEST(cuda_reports_nonfinite_computed_results) {
     test::throws<std::overflow_error>([&] {
         kan::cuda::backward(zero, std::vector<double>{0.0, 0.0}, 2, std::vector<double>{1e308, 1e308});
     });
+    // At x=2 these terms have finite values but high-order derivatives
+    // overflow. Forward must retain the CPU evaluator's derivative checks.
+    const kan::Layer high_degree(1, 1, {kan::BasisKind::Chebyshev, 539});
+    test::throws<std::overflow_error>([&] { high_degree.forward(std::vector<double>{2.0}, 1); });
+    test::throws<std::overflow_error>([&] { kan::cuda::forward(high_degree, std::vector<double>{2.0}, 1); });
 }
 
 TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
-    if (!kan::cuda::available()) return;
     for (int repeat = 0; repeat < 3; ++repeat) parity(3, 2, 6, 41);
     auto first = std::async(std::launch::async, [] { parity(2, 3, 5, 79); });
     auto second = std::async(std::launch::async, [] { parity(5, 1, 9, 53); });
@@ -130,14 +127,37 @@ TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
     second.get();
 }
 
-TEST(cuda_no_device_failure_is_explicit) {
-    if (kan::cuda::available()) return;
+void cuda_no_device_failure_is_explicit() {
     const auto layer = make_layer(1, 1, 2);
     test::throws<std::runtime_error>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
     test::throws<std::runtime_error>([&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
 }
 
-int main() {
-    std::cout << "CUDA device available: " << (kan::cuda::available() ? "yes" : "no (GPU cases skipped)") << '\n';
+int main(int argc, char** argv) {
+    const bool expect_no_device = argc == 2 && std::string(argv[1]) == "--expect-no-device";
+    if (argc != 1 && !expect_no_device) {
+        std::cerr << "usage: cuda_test [--expect-no-device]\n";
+        return 2;
+    }
+    const bool has_device = kan::cuda::available();
+    std::cout << "CUDA device available: " << (has_device ? "yes" : "no") << '\n';
+    if (expect_no_device) {
+        if (has_device) {
+            std::cerr << "FAIL no-device mode requires a hidden or absent CUDA device\n";
+            return 1;
+        }
+        try {
+            cuda_no_device_failure_is_explicit();
+            std::cout << "PASS cuda_no_device_failure_is_explicit\n1/1 passed\n";
+            return 0;
+        } catch (const std::exception& ex) {
+            std::cerr << "FAIL cuda_no_device_failure_is_explicit: " << ex.what() << '\n';
+            return 1;
+        }
+    }
+    if (!has_device) {
+        std::cerr << "FAIL real CUDA hardware is required for the GPU parity suite\n";
+        return 1;
+    }
     return test::run();
 }
