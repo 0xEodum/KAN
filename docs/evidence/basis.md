@@ -93,3 +93,18 @@ derivatives, so true range overflow raises `std::overflow_error`.
 The same standalone GCC compile with `-Werror` and test run passed **16/16**,
 compiler and test exit codes 0. Only the basis implementation, tests, and this
 evidence were changed; the shared integrated build was left to the main lane.
+
+## Final review: Jacobi parameters near -1 RED
+
+The final independent review reproduced alpha = nextafter(-1, 0),
+beta = nextafter(alpha, 0), size = 3, x = 0 producing P2 = -0.14062500000000003,
+against the finite-sum reference -0.25000000000000006. Expressions `n + half_sum`
+and `(n+1)/2 + half_sum` lost relative precision in the first recurrence step when
+both parameters approached -1. The first derivative slope had the same issue.
+
+A new regression tests both neighboring doubles above -1 in all four alpha/beta
+combinations, seven coordinates from -1 to +1, and degrees zero through seven.
+Values use the existing independent finite binomial sum, derivatives use the
+shifted-polynomial identity, and the first slope is additionally compared with
+relative scaling. The standalone GCC warning-as-error build succeeded, while
+the test run returned **16/17 passed**, exit code 1, before implementation changes.

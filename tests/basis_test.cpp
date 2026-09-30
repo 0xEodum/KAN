@@ -144,6 +144,30 @@ TEST(jacobi_endpoint_extreme_derivative_finiteness_and_overflow) {
     test::throws<std::overflow_error>([&] { kan::evaluate_basis(config, -1); });
 }
 
+TEST(jacobi_parameters_adjacent_to_minus_one_match_independent_sum) {
+    const double first = std::nextafter(-1.0, 0.0);
+    const double second = std::nextafter(first, 0.0);
+    for (const auto params : {std::pair{first,first}, std::pair{first,second},
+                             std::pair{second,first}, std::pair{second,second}}) {
+        auto config = polynomial(BasisKind::Jacobi, 8);
+        config.alpha = params.first;
+        config.beta = params.second;
+        for (double x : {-1.0, -0.8, -0.3, 0.0, 0.4, 0.9, 1.0}) {
+            const auto result = kan::evaluate_basis(config, x);
+            const double first_slope = 0.5*(config.alpha+1)+0.5*(config.beta+1);
+            test::near(result.derivatives[1]/first_slope, 1);
+            for (std::size_t k = 0; k < config.size; ++k) {
+                test::near(result.values[k], jacobi_sum(k, config.alpha, config.beta, x));
+                const double derivative = k == 0 ? 0 :
+                    (0.5*(config.alpha+1) + 0.5*(config.beta+1) +
+                     0.5*(static_cast<double>(k)-1)) *
+                    jacobi_sum(k-1, config.alpha+1, config.beta+1, x);
+                test::near(result.derivatives[k], derivative);
+            }
+        }
+    }
+}
+
 TEST(fourier_order_and_angular_frequency) {
     auto config = polynomial(BasisKind::Fourier, 7);
     config.frequency = 2.7;
