@@ -43,6 +43,9 @@ if(KAN_ENABLE_CUDA)
     add_library(kan_cuda STATIC src/cuda.cu)
     add_library(kan::cuda ALIAS kan_cuda)
     set_target_properties(kan_cuda PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON EXPORT_NAME cuda)
+    # Preserve CPU overflow checks: fusion can hide an overflowing product
+    # through cancellation with a finite accumulator.
+    target_compile_options(kan_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
     target_link_libraries(kan_cuda PUBLIC kan PRIVATE CUDA::cudart)
 endif()
 
