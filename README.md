@@ -113,6 +113,8 @@ with the same configuration/runtime as the installed static library (Release in
 the examples above); mixing Debug and Release STL objects is unsupported.
 A CPU package requires
 no CUDA discovery. See [tests/consumer](tests/consumer) for a standalone consumer.
+Set `-DKAN_CONSUMER_CUDA=ON` for that consumer to additionally validate an installed
+`kan::cuda` package on actual GPU hardware.
 
 ## Development evidence
 

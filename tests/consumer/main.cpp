@@ -1,4 +1,7 @@
 #include <kan/network.hpp>
+#ifdef KAN_CONSUMER_CUDA
+#include <kan/cuda.hpp>
+#endif
 #include <cmath>
 #include <iostream>
 
@@ -11,6 +14,13 @@ int main() {
     const std::vector<double> expected{-0.9, 0.2, 0.5};
     for (std::size_t i = 0; i < expected.size(); ++i)
         if (std::abs(result[i] - expected[i]) > 1e-12) return 1;
+#ifdef KAN_CONSUMER_CUDA
+    if (!kan::cuda::available()) return 1;
+    const auto gpu_result = kan::cuda::forward(layer, std::vector<double>{-1, 0, 1}, 3);
+    for (std::size_t i = 0; i < expected.size(); ++i)
+        if (std::abs(gpu_result[i] - expected[i]) > 1e-12) return 1;
+    std::cout << "Installed kan::cuda consumer passed\n";
+#endif
     std::cout << "Installed kan::kan consumer passed\n";
     return 0;
 }
