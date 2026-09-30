@@ -79,3 +79,17 @@ the maximum finite parameter with a finite first derivative, and true endpoint
 value/derivative overflow. The standalone GCC command above with `-Werror`
 compiled successfully and returned **14/16 passed**, test exit code 1. Both new
 cases failed against the pre-fix implementation; all previous cases still passed.
+
+## Independent review: Jacobi endpoint cancellation GREEN
+
+For exactly x = -1 or +1, Jacobi evaluation now propagates endpoint values
+through their rising-factorial identities and computes derivatives through the
+shifted-parameter endpoint identity. The derivative prefactor uses half-sums to
+preserve representable results for maximum finite parameters. No coordinate
+clipping or near-endpoint substitution is introduced; other coordinates retain
+the general recurrence. Finite-result guards remain on endpoint values and
+derivatives, so true range overflow raises `std::overflow_error`.
+
+The same standalone GCC compile with `-Werror` and test run passed **16/16**,
+compiler and test exit codes 0. Only the basis implementation, tests, and this
+evidence were changed; the shared integrated build was left to the main lane.

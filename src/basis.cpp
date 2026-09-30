@@ -99,6 +99,26 @@ BasisValues evaluate_basis(const BasisConfig& config, double x) {
                             0.5*config.alpha + 0.5*config.beta : 0;
     const double half_difference = config.kind == BasisKind::Jacobi ?
                                    0.5*config.alpha - 0.5*config.beta : 0;
+    if (config.kind == BasisKind::Jacobi && (x == -1 || x == 1)) {
+        // DLMF 18.6.T1: endpoint rising-factorial values. The general
+        // three-term recurrence can cancel a small endpoint against huge terms.
+        const double parameter = x == 1 ? config.alpha : config.beta;
+        double endpoint_value = 1;
+        double shifted_endpoint_value = 1;
+        for (std::size_t k = 1; k < config.size; ++k) {
+            const double n = static_cast<double>(k);
+            endpoint_value = finite_result(endpoint_value*((parameter+n)/n));
+            result.values[k] = x < 0 && k % 2 ? -endpoint_value : endpoint_value;
+            if (k > 1)
+                shifted_endpoint_value = finite_result(shifted_endpoint_value*((parameter+n)/(n-1)));
+            // DLMF 18.9.E15: P'_n = (n+alpha+beta+1)/2 *
+            // P_(n-1)^(alpha+1,beta+1). Half-sums keep a finite slope
+            // representable even when alpha+beta would overflow.
+            const double derivative = finite_result((half_sum+0.5*(n+1))*shifted_endpoint_value);
+            result.derivatives[k] = x < 0 && k % 2 == 0 ? -derivative : derivative;
+        }
+        return result;
+    }
     double first_slope = 1;
     double first_offset = 0;
     if (config.kind == BasisKind::Hermite) first_slope = 2;
