@@ -1,0 +1,29 @@
+name: CPU correctness
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --parallel
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - run: cmake --install build --config Release --prefix "${{ github.workspace }}/install"
+      - run: cmake -S tests/consumer -B consumer-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install"
+      - run: cmake --build consumer-build --config Release --parallel
+      - run: ctest --test-dir consumer-build -C Release --output-on-failure
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: cmake -S . -B build-coverage -DCMAKE_CXX_COMPILER=g++ -DKAN_ENABLE_COVERAGE=ON
+      - run: cmake --build build-coverage --parallel
+      - run: ctest --test-dir build-coverage --output-on-failure
+      - run: python -m gcovr --root . --filter 'src/' --exclude-unreachable-branches --exclude-throw-branches --txt --fail-under-line 80 build-coverage

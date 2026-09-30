@@ -1,0 +1,2 @@
+# Optional CPU coverage reporter; not a library runtime dependency.
+gcovr==8.6
