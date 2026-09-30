@@ -64,3 +64,18 @@ After that test-only change, standalone GCC with `-Werror` passed 14/14. MSVC
 Both builds and test runs exited 0. Calling the MSVC build in a plain shell without
 the compiler environment had failed to locate `cstddef`; rerunning in the initialized
 environment resolved that setup issue.
+
+## Independent review: Jacobi endpoint cancellation RED
+
+Independent review found that alpha = 1e17, beta = 0, size = 5, x = -1
+returned `[1, 0, -0.5, 0, 0.375]` instead of `[1, -1, 1, -1, 1]`.
+The general recurrence lost the small endpoint value when subtracting large
+terms; degree-2 derivative also lost its approximately -1e17 value.
+
+Two new test cases use [NIST DLMF 18.6.T1](https://dlmf.nist.gov/18.6.T1)
+endpoint rising-factorial identities and [18.9.E15](https://dlmf.nist.gov/18.9.E15)
+for derivatives. They exercise both endpoints, asymmetric parameters up to 1e70,
+the maximum finite parameter with a finite first derivative, and true endpoint
+value/derivative overflow. The standalone GCC command above with `-Werror`
+compiled successfully and returned **14/16 passed**, test exit code 1. Both new
+cases failed against the pre-fix implementation; all previous cases still passed.

@@ -93,6 +93,57 @@ TEST(jacobi_large_parameters_avoid_spurious_coefficient_overflow) {
     test::near(result.derivatives[2], 0);
 }
 
+TEST(jacobi_asymmetric_large_parameter_endpoint_identities) {
+    for (const auto params : {std::pair{1e17,0.0}, std::pair{0.0,1e17},
+                             std::pair{1e70,0.2}, std::pair{-0.7,1e70}}) {
+        auto config = polynomial(BasisKind::Jacobi, 5);
+        config.alpha = params.first;
+        config.beta = params.second;
+        for (double x : {-1.0, 1.0}) {
+            const auto result = kan::evaluate_basis(config, x);
+            const double endpoint_parameter = x == 1 ? config.alpha : config.beta;
+            for (std::size_t k = 0; k < config.size; ++k) {
+                // DLMF 18.6.T1: endpoint values depend on only one parameter.
+                double expected_value = 1;
+                for (std::size_t j = 1; j <= k; ++j)
+                    expected_value *= (endpoint_parameter + static_cast<double>(j))/static_cast<double>(j);
+                if (x < 0 && k % 2) expected_value = -expected_value;
+                test::near(result.values[k]/expected_value, 1);
+                if (k == 0) {
+                    test::near(result.derivatives[k], 0);
+                    continue;
+                }
+                // DLMF 18.9.E15 with the shifted polynomial's endpoint identity.
+                double expected_derivative = 0.5*config.alpha + 0.5*config.beta +
+                                             0.5*(static_cast<double>(k)+1);
+                for (std::size_t j = 1; j < k; ++j)
+                    expected_derivative *= (endpoint_parameter + static_cast<double>(j)+1)/static_cast<double>(j);
+                if (x < 0 && k % 2 == 0) expected_derivative = -expected_derivative;
+                test::near(result.derivatives[k]/expected_derivative, 1);
+            }
+        }
+    }
+}
+
+TEST(jacobi_endpoint_extreme_derivative_finiteness_and_overflow) {
+    const double max = std::numeric_limits<double>::max();
+    auto config = polynomial(BasisKind::Jacobi, 2);
+    config.alpha = config.beta = max;
+    for (double x : {-1.0, 1.0}) {
+        const auto result = kan::evaluate_basis(config, x);
+        test::near(result.values[1]/max, x);
+        test::near(result.derivatives[1]/max, 1);
+    }
+    config.beta = 0;
+    config.size = 3;
+    const auto finite = kan::evaluate_basis(config, -1);
+    test::near(finite.values[2], 1);
+    test::near(finite.derivatives[2]/max, -1);
+    test::throws<std::overflow_error>([&] { kan::evaluate_basis(config, 1); });
+    config.size = 4;
+    test::throws<std::overflow_error>([&] { kan::evaluate_basis(config, -1); });
+}
+
 TEST(fourier_order_and_angular_frequency) {
     auto config = polynomial(BasisKind::Fourier, 7);
     config.frequency = 2.7;
