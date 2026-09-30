@@ -52,3 +52,20 @@ In that same hidden-GPU environment,
 and confirmed `std::runtime_error` for forward and backward without a device.
 This explicit mode runs only the no-device assertion, independently of the
 real-GPU suite, and does not claim GPU parity validation.
+
+## Independent-review FMA regression
+
+The independent reviewer found a concrete exception-contract mismatch:
+Chebyshev size 2, one input/output, coefficients `{-DBL_MAX, DBL_MAX}`,
+bias 0 and input 2. CPU raises overflow for `DBL_MAX * 2`; CUDA's default
+fused multiply-add instead computes that product plus `-DBL_MAX` in one
+operation and returns finite `DBL_MAX`.
+
+The new test `cuda_preserves_unfused_intermediate_overflow_contract` first
+asserts CPU overflow and then requires CUDA overflow. Running the normal full
+build/test command against the default-fused backend returned failure on the
+real GPU: CUDA 8/9 passed; the new case reported
+`expected exception was not thrown`. All four other CTest suites passed.
+This is the executable RED checkpoint for the independently reported issue.
+Correction is pending a uniform CUDA-only `--fmad=false` compile option;
+the demonstrated numerical exception semantics justify that option.

@@ -127,6 +127,17 @@ TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
     second.get();
 }
 
+TEST(cuda_preserves_unfused_intermediate_overflow_contract) {
+    kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 2});
+    const auto maximum = std::numeric_limits<double>::max();
+    layer.set_parameters(std::vector<double>{-maximum, maximum}, std::vector<double>{0.0});
+    const std::vector<double> input{2.0};
+    // The second coefficient multiplication overflows before addition.
+    // A fused multiply-add would hide that overflow and return DBL_MAX.
+    test::throws<std::overflow_error>([&] { layer.forward(input, 1); });
+    test::throws<std::overflow_error>([&] { kan::cuda::forward(layer, input, 1); });
+}
+
 void cuda_no_device_failure_is_explicit() {
     const auto layer = make_layer(1, 1, 2);
     test::throws<std::runtime_error>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
