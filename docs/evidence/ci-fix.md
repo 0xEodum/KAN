@@ -15,3 +15,14 @@ Local harness RED: configured `build-ci-empty` using GCC/Ninja without
 `ctest --test-dir build-ci-empty -R '^package_default_configuration$' --output-on-failure`.
 The regression actually executed and failed **0/1** with that same invalid
 empty `--config` argument.
+
+Correction: when the root build type is empty, the isolated package/consumer pair
+explicitly selects matching Release configurations. The root build type is unchanged.
+Same targeted invocation then passed **1/1**, and the complete no-build-type GCC
+suite passed **6/6**. An independent reviewer built a separate no-build-type tree,
+also passed **6/6**, checked the root remained unconfigured and the isolated
+package selected Release, and approved the harness correction without findings.
+
+After correction, local MSVC CPU passed **6/6**, CUDA-enabled CTest **7/7**,
+and the GCC coverage suite **6/6**, with the same numerical coverage summary.
+Hosted CI rerun is pending publication of the correction.

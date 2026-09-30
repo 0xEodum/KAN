@@ -4,6 +4,11 @@ foreach(required KAN_SOURCE_DIR KAN_BUILD_DIR KAN_CONFIG KAN_COMPILER KAN_GENERA
         message(FATAL_ERROR "Missing ${required}")
     endif()
 endforeach()
+if(KAN_CONFIG STREQUAL "")
+    # Single-config generators allow an unset root build type. The isolated
+    # package and its consumer still need the same explicit valid configuration.
+    set(KAN_CONFIG Release)
+endif()
 function(checked_command)
     execute_process(COMMAND ${ARGN} RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
