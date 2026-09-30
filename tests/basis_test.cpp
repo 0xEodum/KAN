@@ -83,6 +83,16 @@ TEST(jacobi_independent_sum_and_derivative_identity) {
     }
 }
 
+TEST(jacobi_large_parameters_avoid_spurious_coefficient_overflow) {
+    auto config = polynomial(BasisKind::Jacobi, 3);
+    config.alpha = config.beta = 1e200;
+    const auto result = kan::evaluate_basis(config, 0);
+    test::near(result.values[1], 0);
+    test::near(result.derivatives[1] / config.alpha, 1);
+    test::near(result.values[2] / config.alpha, -0.25);
+    test::near(result.derivatives[2], 0);
+}
+
 TEST(fourier_order_and_angular_frequency) {
     auto config = polynomial(BasisKind::Fourier, 7);
     config.frequency = 2.7;
@@ -134,6 +144,19 @@ TEST(gaussian_extreme_finite_parameters_and_underflow_tails) {
     const auto center = kan::evaluate_basis(config, 0);
     test::near(center.values[0], 1);
     test::near(center.derivatives[0], 0);
+}
+
+TEST(gaussian_underflow_value_can_have_representable_derivative) {
+    auto config = polynomial(BasisKind::GaussianRbf, 1);
+    config.centers = {0};
+    config.width = std::numeric_limits<double>::denorm_min();
+    const auto result = kan::evaluate_basis(config, 30*config.width);
+    test::near(result.values[0], 0);
+    const double expected = static_cast<double>(-60.0L*std::exp(-900.0L) /
+                                                static_cast<long double>(config.width));
+    REQUIRE(expected != 0);
+    REQUIRE(result.derivatives[0] != 0);
+    test::near(result.derivatives[0]/expected, 1, 1e-12);
 }
 
 TEST(analytic_derivatives_match_central_differences) {
