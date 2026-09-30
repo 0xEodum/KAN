@@ -20,3 +20,19 @@ intended absent safety guard / incorrect installed path, not missing dependencie
 
 CUDA fused-arithmetic RED/GREEN evidence is in [cuda.md](cuda.md).
 Jacobi asymmetric endpoint RED/GREEN evidence is in [basis.md](basis.md).
+
+## Moved-from objects and custom include directory: GREEN
+
+Added Layer invariant guards before numerical/parameter update operations, Network
+empty/moved-from guards, and validation of supplied Layer values at network construction.
+Reassignment restores normal operation; no moved-from null access is permitted.
+Moved-from semantics are explicit in docs/CONTRACT.md.
+
+Moved GNUInstallDirs initialization before target definitions and use its include
+directory in the exported target interface. The regression configures an actual
+CPU-only package with `CMAKE_INSTALL_INCLUDEDIR=kan-headers`, installs it, compiles
+an external `find_package(KAN)` consumer and runs its numerical assertion.
+
+`./scripts/build.ps1 -Test` after these changes: **5/5 CTest targets passed**,
+including layer 12/12 and network 8/8, custom installed consumer and holdout fitting.
+Post-fix AddressSanitizer/coverage and reviewer recheck are recorded in M1.md.

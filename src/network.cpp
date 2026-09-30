@@ -2,18 +2,24 @@
 #include <stdexcept>
 namespace kan {
 Network::Network(std::vector<Layer> layers) : layers_(std::move(layers)) {
-    if (layers_.empty()) throw std::invalid_argument("network must contain at least one layer");
+    validate_state();
+    for (const auto& layer : layers_) layer.validate_state();
     for (std::size_t i = 1; i < layers_.size(); ++i)
         if (layers_[i - 1].outputs() != layers_[i].inputs())
             throw std::invalid_argument("incompatible adjacent layer dimensions");
 }
+void Network::validate_state() const {
+    if (layers_.empty()) throw std::invalid_argument("network is empty or moved from");
+}
 std::vector<double> Network::forward(std::span<const double> input, std::size_t batch) const {
+    validate_state();
     auto output = layers_.front().forward(input, batch);
     for (std::size_t i = 1; i < layers_.size(); ++i) output = layers_[i].forward(output, batch);
     return output;
 }
 NetworkGradients Network::backward(std::span<const double> input, std::size_t batch,
                                    std::span<const double> output_gradient) const {
+    validate_state();
     std::vector<std::vector<double>> activations;
     activations.reserve(layers_.size());
     auto current = input;
@@ -33,6 +39,7 @@ NetworkGradients Network::backward(std::span<const double> input, std::size_t ba
     return gradient;
 }
 void Network::sgd(const NetworkGradients& gradients, double learning_rate) {
+    validate_state();
     if (gradients.layers.size() != layers_.size()) throw std::invalid_argument("network gradient shape mismatch");
     auto next = layers_;
     for (std::size_t i = 0; i < next.size(); ++i) next[i].sgd(gradients.layers[i], learning_rate);

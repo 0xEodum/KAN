@@ -26,6 +26,8 @@ public:
     void sgd(const LayerGradients& gradients, double learning_rate);
 
 private:
+    friend class Network;
+    void validate_state() const;
     std::size_t inputs_, outputs_;
     BasisConfig basis_;
     std::vector<double> coefficients_, bias_;

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(KAN VERSION 0.1.0 LANGUAGES CXX)
+include(GNUInstallDirs)
 
 option(KAN_ENABLE_CUDA "Build optional CUDA Chebyshev backend" OFF)
 option(KAN_ALLOW_UNSUPPORTED_CUDA_COMPILER "Explicitly override nvcc host compiler version guard" OFF)
@@ -11,7 +12,7 @@ add_library(kan STATIC src/basis.cpp src/layer.cpp src/network.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
 target_include_directories(kan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-                                     $<INSTALL_INTERFACE:include>)
+                                     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 if(MSVC)
     target_compile_options(kan PRIVATE /W4 /permissive-)
 else()
@@ -86,7 +87,6 @@ if(KAN_BUILD_EXAMPLES)
     endif()
 endif()
 
-include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 install(TARGETS kan EXPORT KANTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

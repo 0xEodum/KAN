@@ -26,7 +26,15 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, BasisConfig basis)
     coefficients_.resize(checked_size(checked_size(inputs, outputs), basis_.size), 0.0);
     bias_.resize(checked_size(outputs, 1), 0.0);
 }
+void Layer::validate_state() const {
+    if (inputs_ == 0 || outputs_ == 0 ||
+        coefficients_.size() != checked_size(checked_size(inputs_, outputs_), basis_.size) ||
+        bias_.size() != outputs_)
+        throw std::invalid_argument("layer is uninitialized or moved from");
+    validate_basis(basis_);
+}
 void Layer::set_parameters(std::span<const double> coefficients, std::span<const double> bias) {
+    validate_state();
     if (coefficients.size() != coefficients_.size() || bias.size() != bias_.size())
         throw std::invalid_argument("parameter shape mismatch");
     require_finite(coefficients); require_finite(bias);
@@ -35,6 +43,7 @@ void Layer::set_parameters(std::span<const double> coefficients, std::span<const
 }
 
 std::vector<double> Layer::forward(std::span<const double> input, std::size_t batch) const {
+    validate_state();
     const auto input_size = checked_size(batch, inputs_), output_size = checked_size(batch, outputs_);
     if (input.size() != input_size) throw std::invalid_argument("input shape mismatch");
     require_finite(input);
@@ -54,6 +63,7 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
 
 LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
                                std::span<const double> output_gradient) const {
+    validate_state();
     const auto input_size = checked_size(batch, inputs_), output_size = checked_size(batch, outputs_);
     if (input.size() != input_size || output_gradient.size() != output_size)
         throw std::invalid_argument("backward shape mismatch");
@@ -80,6 +90,7 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
 }
 
 void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
+    validate_state();
     if (!std::isfinite(learning_rate) || learning_rate <= 0.0)
         throw std::invalid_argument("learning rate must be finite and positive");
     if (gradients.coefficients.size() != coefficients_.size() || gradients.bias.size() != bias_.size())

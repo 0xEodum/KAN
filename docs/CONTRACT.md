@@ -30,6 +30,9 @@ Dimension multiplication is checked before allocation (`std::overflow_error`).
 Layer dimensions are positive; batch zero accepts only empty inputs/upstream and returns
 empty outputs/input gradients and zero parameter gradients. Networks are nonempty,
 adjacent dimensions match, and can mix basis families.
+Moved-from layers and networks remain assignable; their numerical/parameter-update
+operations raise `std::invalid_argument`. A network rejects moved-from layer values.
+Accessors are safe but their moved-from values are unspecified.
 
 CUDA is an optional separate `kan::cuda` target; CPU has no CUDA dependency.
 M1 CUDA supports Chebyshev only, with the same mathematical/validation contract.

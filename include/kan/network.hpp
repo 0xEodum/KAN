@@ -18,6 +18,7 @@ public:
                               std::span<const double> output_gradient) const;
     void sgd(const NetworkGradients& gradients, double learning_rate);
 private:
+    void validate_state() const;
     std::vector<Layer> layers_;
 };
 
