@@ -1,1 +1,6 @@
 .venv/
+build*/
+coverage*/
+*.gcda
+*.gcno
+__pycache__/
