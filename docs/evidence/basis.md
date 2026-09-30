@@ -108,3 +108,27 @@ Values use the existing independent finite binomial sum, derivatives use the
 shifted-polynomial identity, and the first slope is additionally compared with
 relative scaling. The standalone GCC warning-as-error build succeeded, while
 the test run returned **16/17 passed**, exit code 1, before implementation changes.
+
+## Final review: Jacobi parameters near -1 GREEN
+
+Jacobi's shifted half-sum is now computed as
+`0.5*(alpha+1) + 0.5*(beta+1)`. It directly supplies P1's slope, the recurrence
+quantities `t = shifted_half_sum + (n-1)` and
+`denominator_half = shifted_half_sum + 0.5*(n-1)`, and the endpoint derivative
+prefactor. These additions preserve positive distance from the parameter boundary
+without subtractive cancellation; the existing half-sum/difference remain in the
+other recurrence coefficients.
+
+The regression was expanded to the first, second, fourth, and eighth neighboring
+doubles above -1, including symmetric cases and swapped asymmetric cases. The
+first derivative is checked as a ratio to its independently computed expected
+slope, so an absolute tolerance cannot hide errors at approximately 1e-16.
+The standalone GCC build with warnings as errors and full basis suite passed
+**17/17**, compiler and test exit codes 0. The reviewer's exact reproducer was
+separately rebuilt against the fixed source and printed:
+
+```text
+alpha -0.99999999999999989 beta -0.99999999999999978 P2 -0.25000000000000006 oracle -0.25000000000000006
+```
+
+The shared integrated build remained untouched.

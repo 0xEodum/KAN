@@ -97,6 +97,10 @@ BasisValues evaluate_basis(const BasisConfig& config, double x) {
     // Half-sums avoid overflow in Jacobi's valid, very large parameters.
     const double half_sum = config.kind == BasisKind::Jacobi ?
                             0.5*config.alpha + 0.5*config.beta : 0;
+    // Preserve distance from the admissible boundary alpha,beta > -1.
+    // Adding one after summing the parameters can erase that distance.
+    const double shifted_half_sum = config.kind == BasisKind::Jacobi ?
+                                   0.5*(config.alpha+1) + 0.5*(config.beta+1) : 0;
     const double half_difference = config.kind == BasisKind::Jacobi ?
                                    0.5*config.alpha - 0.5*config.beta : 0;
     if (config.kind == BasisKind::Jacobi && (x == -1 || x == 1)) {
@@ -114,7 +118,7 @@ BasisValues evaluate_basis(const BasisConfig& config, double x) {
             // DLMF 18.9.E15: P'_n = (n+alpha+beta+1)/2 *
             // P_(n-1)^(alpha+1,beta+1). Half-sums keep a finite slope
             // representable even when alpha+beta would overflow.
-            const double derivative = finite_result((half_sum+0.5*(n+1))*shifted_endpoint_value);
+            const double derivative = finite_result((shifted_half_sum+0.5*(n-1))*shifted_endpoint_value);
             result.derivatives[k] = x < 0 && k % 2 == 0 ? -derivative : derivative;
         }
         return result;
@@ -123,7 +127,7 @@ BasisValues evaluate_basis(const BasisConfig& config, double x) {
     double first_offset = 0;
     if (config.kind == BasisKind::Hermite) first_slope = 2;
     if (config.kind == BasisKind::Jacobi) {
-        first_slope = half_sum + 1;
+        first_slope = shifted_half_sum;
         first_offset = half_difference;
     }
     result.values[1] = finite_result(first_slope*x + first_offset);
@@ -150,8 +154,8 @@ BasisValues evaluate_basis(const BasisConfig& config, double x) {
         case BasisKind::Jacobi: {
             // NIST DLMF 18.9.2, rearranged into ratios to avoid squaring
             // large parameters. P1 above handles alpha+beta = -1 or 0.
-            const double t = n + half_sum;
-            const double denominator_half = (n+1)*0.5 + half_sum;
+            const double t = shifted_half_sum + (n-1);
+            const double denominator_half = shifted_half_sum + 0.5*(n-1);
             a = ((t+0.5)/(n+1))*((t+1)/denominator_half);
             b = (half_difference/(n+1))*(half_sum/t)*((t+0.5)/denominator_half);
             c = 0.5*((n+config.alpha)/(n+1))*((n+config.beta)/t)*((t+1)/denominator_half);

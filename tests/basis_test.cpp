@@ -147,8 +147,15 @@ TEST(jacobi_endpoint_extreme_derivative_finiteness_and_overflow) {
 TEST(jacobi_parameters_adjacent_to_minus_one_match_independent_sum) {
     const double first = std::nextafter(-1.0, 0.0);
     const double second = std::nextafter(first, 0.0);
+    const double third = std::nextafter(second, 0.0);
+    const double fourth = std::nextafter(third, 0.0);
+    double eighth = fourth;
+    for (int step = 0; step < 4; ++step) eighth = std::nextafter(eighth, 0.0);
     for (const auto params : {std::pair{first,first}, std::pair{first,second},
-                             std::pair{second,first}, std::pair{second,second}}) {
+                             std::pair{second,first}, std::pair{second,second},
+                             std::pair{first,fourth}, std::pair{fourth,first},
+                             std::pair{fourth,fourth}, std::pair{first,eighth},
+                             std::pair{eighth,first}, std::pair{eighth,eighth}}) {
         auto config = polynomial(BasisKind::Jacobi, 8);
         config.alpha = params.first;
         config.beta = params.second;
