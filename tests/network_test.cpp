@@ -64,4 +64,15 @@ TEST(sgd_training_fits_polynomial) {
     for(int epoch=0;epoch<400;++epoch){auto g=net.forward(x,x.size());for(std::size_t i=0;i<g.size();++i)g[i]=2*(g[i]-target[i])/static_cast<double>(g.size());net.sgd(net.backward(x,x.size(),g),0.1);}
     const auto y=net.forward(x,x.size());double mse=0;for(std::size_t i=0;i<y.size();++i)mse+=(y[i]-target[i])*(y[i]-target[i]);REQUIRE(mse/y.size()<1e-12);
 }
+TEST(moved_from_network_and_layers_are_rejected) {
+    auto source=fixture();auto destination=std::move(source);
+    REQUIRE(destination.forward(std::vector<double>{0.1,0.2},1).size()==1);
+    test::throws<std::invalid_argument>([&]{source.forward(std::vector<double>{0.1,0.2},1);});
+    test::throws<std::invalid_argument>([&]{source.backward(std::vector<double>{0.1,0.2},1,std::vector<double>{1});});
+    test::throws<std::invalid_argument>([&]{source.sgd({},0.1);});
+    source=fixture();REQUIRE(source.forward(std::vector<double>{0.1,0.2},1).size()==1);
+    kan::Layer layer(2,1,{});auto moved=std::move(layer);
+    test::throws<std::invalid_argument>([&]{kan::Network invalid({layer});});
+    REQUIRE(moved.inputs()==2);
+}
 int main(){return test::run();}

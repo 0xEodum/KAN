@@ -133,4 +133,14 @@ TEST(nonfinite_contractions_raise_overflow) {
     test::throws<std::overflow_error>([&]{layer.backward(std::vector<double>{0,0,0,0},2,std::vector<double>{huge,huge});});
 }
 
+TEST(moved_from_layer_rejects_numerical_and_update_operations) {
+    auto source=fixture(); auto destination=std::move(source);
+    REQUIRE(destination.forward(std::vector<double>{0.1,0.2},1).size()==3);
+    test::throws<std::invalid_argument>([&]{source.forward(std::vector<double>{0.1,0.2},1);});
+    test::throws<std::invalid_argument>([&]{source.backward(std::vector<double>{0.1,0.2},1,std::vector<double>{1,1,1});});
+    test::throws<std::invalid_argument>([&]{source.set_parameters({},{});});
+    test::throws<std::invalid_argument>([&]{source.sgd({},0.1);});
+    source=fixture();REQUIRE(source.forward(std::vector<double>{0.1,0.2},1).size()==3);
+}
+
 int main(){return test::run();}
