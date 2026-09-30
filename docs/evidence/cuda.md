@@ -67,5 +67,18 @@ build/test command against the default-fused backend returned failure on the
 real GPU: CUDA 8/9 passed; the new case reported
 `expected exception was not thrown`. All four other CTest suites passed.
 This is the executable RED checkpoint for the independently reported issue.
-Correction is pending a uniform CUDA-only `--fmad=false` compile option;
-the demonstrated numerical exception semantics justify that option.
+The correction adds a uniform CUDA-only `--fmad=false` compile option in
+CMake commit `92862a3`. The demonstrated numerical exception semantics justify
+this option; tolerance-based CPU/GPU comparisons still apply.
+
+After rebuilding via `./scripts/build.ps1 -Cuda -AllowUnsupportedCudaCompiler`,
+`ctest --test-dir build-cuda -R '^cuda$' --output-on-failure` returned exit 0,
+1/1 CUDA suite passed. Repeating Compute Sanitizer memcheck on the rebuilt
+executable returned exit 0: device available, all 9/9 GPU cases passed including
+the FMA regression, and `ERROR SUMMARY: 0 errors`. Repeating both hidden-GPU
+entry-point checks retained default exit 1 and explicit `--expect-no-device`
+exit 0 with 1/1 no-device assertion passed.
+
+The final targeted validation isolates the CUDA correction while the root
+agent handles separate independent-review CPU/install regressions; the root
+owns the final full-suite validation after those corrections.
