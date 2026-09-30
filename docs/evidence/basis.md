@@ -45,3 +45,22 @@ zero and derivatives that exceed double range still raise overflow_error.
 All builds and executables remain in ignored `build-basis/`. The deterministic
 suite includes six-family central differences and independent polynomial oracles;
 integration and independent review are coordinated by the main project lane.
+
+## MSVC portability follow-up
+
+The integrated MSVC run exposed an oracle portability issue: MSVC's `long double`
+has the same range as `double`, so the test's independent `exp(-900)` oracle
+underflowed before division and failed with 13/14 passing. Production evaluation
+was unaffected. The regression now uses a precomputed constant from Python
+`decimal.Decimal` with precision 100, evaluating `-60 * exp(-900) / (2 ** -1074)`:
+
+```text
+-1.657039574215751920267356912558436470529179262842470867148420005915681625311244551783798700124454242E-66
+```
+
+After that test-only change, standalone GCC with `-Werror` passed 14/14. MSVC
+14.50.35717 Release, after initializing `vcvars64.bat`, also passed 14/14 using
+`cmake --build build --target basis_test` followed by `build/basis_test.exe`.
+Both builds and test runs exited 0. Calling the MSVC build in a plain shell without
+the compiler environment had failed to locate `cstddef`; rerunning in the initialized
+environment resolved that setup issue.

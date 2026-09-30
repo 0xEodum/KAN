@@ -152,8 +152,9 @@ TEST(gaussian_underflow_value_can_have_representable_derivative) {
     config.width = std::numeric_limits<double>::denorm_min();
     const auto result = kan::evaluate_basis(config, 30*config.width);
     test::near(result.values[0], 0);
-    const double expected = static_cast<double>(-60.0L*std::exp(-900.0L) /
-                                                static_cast<long double>(config.width));
+    // Independent Python Decimal oracle (100-digit precision):
+    // -60 * exp(-900) / (2 ** -1074). MSVC long double has double precision.
+    constexpr double expected = -1.657039574215751920267356912558436470529179262842470867148420005915681625311244551783798700124454242E-66;
     REQUIRE(expected != 0);
     REQUIRE(result.derivatives[0] != 0);
     test::near(result.derivatives[0]/expected, 1, 1e-12);
