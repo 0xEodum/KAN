@@ -25,4 +25,7 @@ package selected Release, and approved the harness correction without findings.
 
 After correction, local MSVC CPU passed **6/6**, CUDA-enabled CTest **7/7**,
 and the GCC coverage suite **6/6**, with the same numerical coverage summary.
-Hosted CI rerun is pending publication of the correction.
+Hosted rerun [36733786401](https://github.com/0xEodum/KAN/actions/runs/36733786401)
+at source commit `73f207492a8bea5635ed0e10dd70516a7f70df9c` completed **success**:
+Windows Release build/test/install/consumer, Ubuntu Release build/test/install/consumer,
+and Ubuntu coverage all passed. The subsequent evidence commit changes documentation only.
