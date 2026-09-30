@@ -1,14 +1,16 @@
 # Implementation roadmap
 
-## M1: numerical foundation — IN PROGRESS
+## M1: numerical foundation — DONE
 
 Independent basis/layer/CUDA development with tests before implementation.
 Acceptance: six basis families, analytic derivatives, finite-difference layer and
 network gradients, arbitrary compatible topology, deterministic training example,
 optional Chebyshev CUDA forward/backward parity on real hardware, CPU coverage >=80%,
 build/use documentation, independent review and incremental RED/GREEN commits.
+Completed 2026-09-30 with all acceptance gates passed and all five independent
+review findings resolved. See [M1 evidence](evidence/M1.md) for exact validation.
 
-## M2: persistent GPU execution — NEXT after M1 review
+## M2: persistent GPU execution — NEXT
 
 Resident tensors/parameters, stream ownership, reusable workspaces, GPU optimizer,
 all M1 basis families, Python bindings. Frozen full-call CPU/GPU benchmarks must
