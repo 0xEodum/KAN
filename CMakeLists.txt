@@ -68,6 +68,15 @@ if(BUILD_TESTING)
              "-DKAN_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_test.cmake")
     set_tests_properties(package_custom_include PROPERTIES LABELS "integration;cpu" TIMEOUT 120)
+    add_test(NAME package_default_configuration COMMAND ${CMAKE_COMMAND}
+             "-DKAN_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+             "-DKAN_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/default-config-regression"
+             "-DKAN_CONFIG="
+             "-DKAN_COMPILER=${CMAKE_CXX_COMPILER}"
+             "-DKAN_GENERATOR=${CMAKE_GENERATOR}"
+             "-DKAN_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_test.cmake")
+    set_tests_properties(package_default_configuration PROPERTIES LABELS "integration;cpu" TIMEOUT 120)
     if(KAN_ENABLE_CUDA)
         add_executable(cuda_test tests/cuda_test.cpp)
         target_include_directories(cuda_test PRIVATE tests)
