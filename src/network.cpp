@@ -1,9 +1,23 @@
 #include "kan/network.hpp"
 #include <stdexcept>
+#include <cmath>
 namespace kan {
-void Network::insert_knot(std::size_t, double) { throw std::logic_error("M3 pending"); }
-double Network::adapt_grid(std::size_t, std::span<const double>) { throw std::logic_error("M3 pending"); }
-NetworkRegularizationResult Network::regularization(double) const { throw std::logic_error("M3 pending"); }
+void Network::insert_knot(std::size_t index, double x) {
+    validate_state();if(index>=layers_.size())throw std::invalid_argument("layer index out of range");
+    layers_[index].insert_knot(x);
+}
+double Network::adapt_grid(std::size_t index, std::span<const double> samples) {
+    validate_state();if(index>=layers_.size())throw std::invalid_argument("layer index out of range");
+    return layers_[index].adapt_grid(samples);
+}
+NetworkRegularizationResult Network::regularization(double lambda) const {
+    validate_state();NetworkRegularizationResult r;
+    for(const auto& l:layers_) {
+        auto q=l.regularization(lambda);r.value+=q.value;r.gradients.layers.push_back(std::move(q.gradients));
+        if(!std::isfinite(r.value))throw std::overflow_error("nonfinite network penalty");
+    }
+    return r;
+}
 Network::Network(std::vector<Layer> layers) : layers_(std::move(layers)) {
     validate_state();
     for (const auto& layer : layers_) layer.validate_state();
