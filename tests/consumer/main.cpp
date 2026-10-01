@@ -28,6 +28,15 @@ int main() {
     nonlinear.sgd(nonlinear.regularization(0.1).gradients,0.01);
     kan::BasisConfig wave;wave.kind=kan::BasisKind::MexicanHat;wave.size=1;wave.centers={0};wave.scales={1};
     if(!std::isfinite(kan::evaluate_basis(wave,0).values[0]))return 1;
+    kan::RationalConfig rational; rational.numerator_degree=1; rational.denominator_degree=1;
+    kan::Layer pade(1,1,rational);
+    pade.set_rational_parameters(std::vector<double>{1,0.5},std::vector<double>{-0.5},std::vector<double>{0});
+    const std::vector<double> rational_input{-0.4,0,0.7}, rational_upstream{0.1,-0.2,0.3};
+    const auto rational_output=pade.forward(rational_input,3);
+    for(std::size_t i=0;i<3;++i)
+        if(std::abs(rational_output[i]-(1+0.5*rational_input[i])/(1-0.5*rational_input[i]))>1e-12)return 1;
+    const auto rational_gradients=pade.backward(rational_input,3,rational_upstream);
+    if(rational_gradients.denominators.size()!=1)return 1;
 #ifdef KAN_CONSUMER_CUDA
     if (!kan::cuda::available()) return 1;
     const auto gpu_result = kan::cuda::forward(layer, std::vector<double>{-1, 0, 1}, 3);
@@ -59,6 +68,14 @@ int main() {
     const auto snapshot=adaptive.download_parameters();
     if(snapshot.layers()[1].basis().centers==localized.layers()[1].basis().centers)return 1;
     std::cout << "Installed M3 localized/nonlinear CUDA consumer passed\n";
+    kan::Network rational_network({pade});
+    kan::cuda::ResidentNetwork rational_gpu(rational_network,3);
+    rational_gpu.upload_input(rational_input,3);rational_gpu.upload_output_gradient(rational_upstream);
+    rational_gpu.forward();rational_gpu.backward();
+    if(std::abs(rational_gpu.download_gradients().layers[0].denominators[0]-rational_gradients.denominators[0])>1e-12)return 1;
+    rational_gpu.sgd(0.001);rational_network.sgd(rational_network.backward(rational_input,3,rational_upstream),0.001);
+    if(std::abs(rational_gpu.download_parameters().layers()[0].denominators()[0]-rational_network.layers()[0].denominators()[0])>1e-12)return 1;
+    std::cout << "Installed M4 rational CUDA consumer passed\n";
 #endif
     std::cout << "Installed kan::kan consumer passed\n";
     return 0;
