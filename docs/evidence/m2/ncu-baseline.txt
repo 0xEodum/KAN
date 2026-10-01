@@ -1,0 +1,5 @@
+==PROF== Connected to process 26584 (K:\PycharmProjects\auxiliary_projects\KAN\build-m2-bench\m2_benchmark.exe)
+==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
+case,family,topology,batch,terms,precision,backend,warmups,repeats,setup_ms,median_ms,iqr_ms,output_checksum,gradient_checksum,parameter_checksum,max_abs_error,workspace_allocations,samples_ms
+3,chebyshev,64x64x32x16,1024,7,double,m1_host_full,0,1,0.46949999999999997,214.18369999999999,0,-94.881449964858362,0.036721307704276084,0.15049098304905814,0,0,214.18369999999999
+==PROF== Disconnected from process 26584

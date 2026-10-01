@@ -1,0 +1,5 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+71.9,169757872,27,6287328.6,5156745.0,4238471,10591923,2242726.1,"kan::cuda::<unnamed>::coefficient_gradient_kernel(const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+17.7,41836043,54,774741.5,720001.5,163808,1702147,512554.4,"kan::cuda::<unnamed>::forward_kernel(const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+9.6,22751149,27,842635.1,786338.0,178145,2317988,605098.9,"kan::cuda::<unnamed>::input_gradient_kernel(const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long)"
+0.8,1805123,27,66856.4,61856.0,55329,103232,14805.9,"kan::cuda::<unnamed>::bias_gradient_kernel(const double *, double *, unsigned long long, unsigned long long)"

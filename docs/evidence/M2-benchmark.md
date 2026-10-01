@@ -42,3 +42,57 @@ reference, not a claim to compare against an optimized BLAS or other KAN library
 Reproduction: build Release CUDA with `KAN_BUILD_BENCHMARKS=ON`; run
 `./scripts/benchmark-m2.ps1`. Baseline can be built with `KAN_BENCH_RESIDENT=OFF`.
 Profiling invocations and matched before/after evidence will be recorded below.
+
+## Baseline recorded before resident optimization
+
+Frozen protocol commit: `a784993`. Release build used MSVC 19.50.35724.0,
+CUDA 13.1.115, compute architecture 86, `/O2 /Ob2 /DNDEBUG`, CUDA `--fmad=false`,
+and explicit `--allow-unsupported-compiler` because CUDA rejects this newer MSVC
+by default. Hardware: Intel Core i5-12400 (6 cores/12 logical), NVIDIA RTX 3090
+(24 GiB), driver 591.86, Windows WDDM with active display processes. No locked
+clocks or exclusive GPU access; these are this machine's measured observations.
+
+`./scripts/benchmark-m2.ps1 -Output docs/evidence/m2/baseline-host.csv`
+returned exit 0: 24 CPU rows and four Chebyshev M1 rows, all M1 numerical
+comparisons passed with maximum absolute discrepancy zero on this input set.
+Chebyshev median full-call milliseconds:
+
+| Topology | Batch | CPU | M1 host CUDA |
+| --- | ---: | ---: | ---: |
+| 16 -> 24 -> 8 | 32 | 0.797 | 3.485 |
+| 16 -> 24 -> 8 | 1024 | 25.909 | 14.109 |
+| 64 -> 64 -> 32 -> 16 | 32 | 7.010 | 7.561 |
+| 64 -> 64 -> 32 -> 16 | 1024 | 219.001 | 34.212 |
+
+This already demonstrates that CUDA is slower for the small case. Raw samples,
+IQRs and checksums are in [baseline-host.csv](m2/baseline-host.csv).
+
+Nsight Systems 2025.5.2 profile of case 3:
+
+```
+nsys profile --trace=cuda --sample=none --cpuctxsw=none --force-overwrite=true
+  -o build-m2-bench/m1-profile build-m2-bench/m2_benchmark.exe
+  --backend legacy --case 3 --warmups 2 --repeats 7
+nsys stats --report cuda_api_sum,cuda_gpu_kern_sum,cuda_gpu_mem_time_sum
+  --format csv --output docs/evidence/m2/m1-profile --force-export=true
+  build-m2-bench/m1-profile.nsys-rep
+```
+
+The nine-step trace includes warmups and first CUDA initialization, unlike the
+unprofiled steady timing rows. It recorded 378 cudaMalloc/378 cudaFree calls,
+81 stream constructions, 378 cudaMemcpyAsync calls and 135 kernel launches.
+CUDA API time was 71.4% cudaMemcpyAsync and 23.5% cudaMalloc; the latter includes
+85.9 ms first-use initialization and is not per-call steady cost. The coefficient
+gradient kernel accounted for 71.9% of kernel time, 169.758 ms across 27 calls
+(median 5.157 ms), with each thread scanning the batch and recomputing recurrence.
+Forward accounted for 17.7%, input gradient 9.6%, bias reduction 0.8%.
+This supports persistent buffers/streams, basis reuse and a targeted investigation
+of the coefficient reduction, without claiming its actual attainable speedup.
+The small exported profile CSVs are retained under `m2/m1-profile_*`; binary traces
+and SQLite exports remain reproducible local build artifacts.
+
+Nsight Compute 2025.4.1 `--set basic --launch-count 1 ... --backend legacy --case 3
+--warmups 0 --repeats 1` reported `ERR_NVGPUCTRPERM`; the exact diagnostic is
+[ncu-baseline.txt](m2/ncu-baseline.txt). No occupancy, bandwidth utilization or
+hardware-counter bottleneck claim is supported. Profiler-instrumented wall times
+are deliberately excluded from matched benchmark results.
