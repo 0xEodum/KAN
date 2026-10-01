@@ -73,6 +73,24 @@ calls are timed, all outputs/VJPs and nonlinear parameter snapshots are compared
 and the resident untimed trajectory replay must reproduce the actual timed
 final parameters. Source inspection alone does not establish performance.
 
-No blocking resident/benchmark source findings were found. Final matched timing,
-profiler/tuning, regression, installed-consumer and complete-stage acceptance
-evidence must be reviewed before marking M3 complete.
+## Tiled nonlinear reduction follow-up
+
+Read the profiled replacement shared-parameter reduction while timing runs were
+isolated. The flattened edge index, deterministic per-lane loop/tree/tile order,
+64-tile persistent scratch bound, compact indexing across changing batch sizes,
+zero-batch initialization and all-network candidate swap were sound. Nonfinite
+lane/tile results remain observable at the reported reduction outputs.
+
+One blocking large-dimension finding was sent to both implementers: the finish
+kernel initially handled one index per thread while the shared launch helper
+caps blocks at 65535. More than 8388480 basis terms could therefore leave trailing
+nonlinear gradients unwritten; capacity-zero persistent storage at that threshold
+is approximately 8.6 GB and can fit the validation GPU. The required correction
+is a grid-stride finish loop, preserving normal-size reduction behavior.
+The coordinator retained an actual failing 8,388,481-term regression at `accdf49`.
+Correction `f36d22d` adds the grid-stride finish loop and capacity-bounded scratch;
+the same case passes with unchanged allocation counts. The separate final
+auditor independently reviewed the correction, numerical probes and complete
+evidence at `b7e763b`: [final review](M3-final-review.md), **PASS**, no blocking
+findings. This append records that later audit rather than attributing it to the
+initial basis-lane reviewer. See [M3 final evidence](M3.md) for acceptance closure.
