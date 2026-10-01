@@ -1,0 +1,2 @@
+# Recorded benchmark/profiler bytes must retain their manifest SHA-256 on checkout.
+* -text
