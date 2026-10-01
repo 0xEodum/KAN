@@ -194,6 +194,8 @@ through CPU parity and Compute Sanitizer. See [the roadmap](docs/ROADMAP.md)
 and [M1 evidence](docs/evidence/M1.md) for status and exact validation. M2's
 [acceptance plan](docs/evidence/M2-plan.md) links execution scope to its tests;
 its final evidence records closure only after all gates pass.
+M2 is complete; [final M2 evidence](docs/evidence/M2.md) records the acceptance
+results and measured limits. M3 is the next stage.
 
 The original [KAN paper](https://arxiv.org/abs/2404.19756) motivates the edge-function
 architecture; [NIST DLMF](https://dlmf.nist.gov/18.9) specifies polynomial conventions.

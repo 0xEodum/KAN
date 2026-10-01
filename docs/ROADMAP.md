@@ -10,13 +10,17 @@ build/use documentation, independent review and incremental RED/GREEN commits.
 Completed 2026-09-30 with all acceptance gates passed and all five independent
 review findings resolved. See [M1 evidence](evidence/M1.md) for exact validation.
 
-## M2: persistent GPU execution — NEXT
+## M2: persistent GPU execution — DONE
 
 Resident tensors/parameters, stream ownership, reusable workspaces, GPU optimizer,
 all M1 basis families, Python bindings. Frozen full-call CPU/GPU benchmarks must
 precede optimization claims; kernel timing alone is insufficient.
+Completed 2026-10-01 with all acceptance gates passed: six-family resident mixed
+networks, reusable storage, atomic GPU SGD, optional NumPy bindings, real-hardware
+parity/sanitizer/installation checks, matched full-call profiling and independent
+implementation/evidence review. See [M2 evidence](evidence/M2.md).
 
-## M3: localized and adaptive bases — PLANNED
+## M3: localized and adaptive bases — NEXT
 
 B-splines with knot/domain contracts, wavelets with scale/translation conventions,
 learnable RBF centers/widths, adaptive grids and regularization.
