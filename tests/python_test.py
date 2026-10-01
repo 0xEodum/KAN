@@ -103,6 +103,19 @@ class Bindings(unittest.TestCase):
             minus[index] -= h
             fd = np.sum((model.forward(plus)-model.forward(minus))*upstream)/(2*h)
             self.assertAlmostEqual(gradient.input[index], fd, places=9)
+        original = model.layers
+        for layer_index, target in enumerate(original):
+            for index in np.ndindex(target.coefficients.shape):
+                plus_layers, minus_layers = model.layers, model.layers
+                cp, cm = target.coefficients, target.coefficients
+                cp[index] += h
+                cm[index] -= h
+                plus_layers[layer_index].set_parameters(cp, target.bias)
+                minus_layers[layer_index].set_parameters(cm, target.bias)
+                fp = np.sum(kan.Network(plus_layers).forward(x)*upstream)
+                fm = np.sum(kan.Network(minus_layers).forward(x)*upstream)
+                self.assertAlmostEqual(gradient.layers[layer_index].coefficients[index],
+                                       (fp-fm)/(2*h), places=9)
         snapshots = model.layers
         snapshots[0].set_parameters(np.zeros((3, 2, 5)), np.ones(3))
         self.assertFalse(np.array_equal(snapshots[0].coefficients, model.layers[0].coefficients))
@@ -114,11 +127,14 @@ class Bindings(unittest.TestCase):
         self.assertTrue(np.isfinite(output).all() and np.isfinite(owned).all())
 
     def test_strict_validation(self):
+        if not kan.cuda_enabled:
+            self.assertFalse(kan.cuda_available())
         model = layer(2, 2)
         x = np.ones((3, 2))
+        unaligned = np.ndarray((3, 2), dtype=np.float64, buffer=bytearray(49), offset=1)
         for invalid in [x.astype(np.float32), x.astype(np.int64), x[:, ::-1],
                         np.asfortranarray(x), x.ravel(), x.tolist(), np.ones((3, 3)),
-                        x.astype('>f8')]:
+                        x.astype('>f8'), unaligned]:
             with self.assertRaises((TypeError, ValueError)):
                 model.forward(invalid)
         with self.assertRaises(ValueError):
@@ -127,6 +143,10 @@ class Bindings(unittest.TestCase):
             model.backward(x, np.ones((3, 1)))
         with self.assertRaises(ValueError):
             model.set_parameters(np.ones((2, 10)), np.zeros(2))
+        with self.assertRaises(TypeError):
+            model.set_parameters(np.ones((2, 2, 5), dtype=np.float32), np.zeros(2))
+        with self.assertRaises(ValueError):
+            model.sgd(layer(1, 4).backward(np.ones((3, 1)), np.ones((3, 4))), 0.1)
         bad = x.copy()
         bad[0, 0] = np.nan
         with self.assertRaises(ValueError):
@@ -138,6 +158,7 @@ class Bindings(unittest.TestCase):
     @unittest.skipUnless('--cuda' in __import__('sys').argv, 'CPU-only binding run')
     def test_resident_all_families_training_and_validation(self):
         self.assertTrue(kan.cuda_enabled)
+        self.assertTrue(kan.cuda_available())
         kinds = [kan.BasisKind.Chebyshev, kan.BasisKind.Legendre, kan.BasisKind.Jacobi,
                  kan.BasisKind.Hermite, kan.BasisKind.Fourier, kan.BasisKind.GaussianRbf]
         x = np.array([[-0.4, 0.2], [0.7, -0.1], [0.1, 0.3]])
@@ -173,6 +194,21 @@ class Bindings(unittest.TestCase):
                 gpu.upload_input(x.astype(np.float32))
             with self.assertRaises(ValueError):
                 gpu.upload_output_gradient(np.ones((3, 2)))
+        # Train an actual objective, then evaluate independent holdout inputs.
+        train_x = np.linspace(-0.9, 0.9, 31).reshape(-1, 1)
+        target = 0.4 - 0.2*train_x + 0.3*train_x**2
+        train_model = kan.Network([layer(1, 1)])
+        gpu = kan.ResidentNetwork(train_model, len(train_x))
+        gpu.upload_input(train_x)
+        for _ in range(600):
+            gpu.forward()
+            output = gpu.download_output()
+            gpu.upload_output_gradient(2*(output-target)/len(train_x))
+            gpu.backward()
+            gpu.sgd(0.1)
+        holdout = np.array([[-0.83], [-0.17], [0.38], [0.81]])
+        prediction = gpu.download_parameters().forward(holdout)
+        self.assertLess(np.mean((prediction-(0.4-0.2*holdout+0.3*holdout**2))**2), 1e-6)
 
 
 if __name__ == '__main__':
