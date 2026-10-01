@@ -234,10 +234,11 @@ __global__ void nonlinear_partial_kernel(const double* dx, const double* dw, con
     }
 }
 __global__ void nonlinear_finish_kernel(const double* partial, double* gradient, std::size_t terms, unsigned tiles, int* status) {
-    const auto k=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
-    if(k>=2*terms)return;
-    double sum=0;for(unsigned tile=0;tile<tiles;++tile)sum+=partial[k*tiles+tile];
-    gradient[k]=sum;report(sum,status);
+    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for(auto k=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;k<2*terms;k+=stride) {
+        double sum=0;for(unsigned tile=0;tile<tiles;++tile)sum+=partial[k*tiles+tile];
+        gradient[k]=sum;report(sum,status);
+    }
 }
 __global__ void validate_width_kernel(const double* next, std::size_t count, int* status) {
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
@@ -256,6 +257,7 @@ struct Layout {
     std::size_t inputs, outputs, terms, coefficients, parameter_offset;
     std::size_t values, derivatives, centers, log_derivatives=0, scales=0, knots=0, nonlinear_partials=0;
     bool trainable=false;
+    unsigned partial_tiles=1;
 };
 }
 
@@ -303,7 +305,9 @@ struct ResidentNetwork::Impl {
                 layout.centers = reserve(layout.terms);
             if(layout.trainable) {
                 layout.log_derivatives=reserve(product(product(capacity,layout.inputs),layout.terms));
-                layout.nonlinear_partials=reserve(product(layout.terms,2*nonlinear_tiles));
+                const auto count=product(product(capacity,layout.inputs),layout.outputs);
+                layout.partial_tiles=static_cast<unsigned>(std::min<std::size_t>(nonlinear_tiles,count?((count-1)/256+1):1));
+                layout.nonlinear_partials=reserve(product(layout.terms,2*layout.partial_tiles));
             }
             if(basis.kind==BasisKind::MexicanHat)layout.scales=reserve(layout.terms);
             if(basis.kind==BasisKind::BSpline)layout.knots=reserve(basis.knots.size());
@@ -408,9 +412,9 @@ void ResidentNetwork::backward(double coefficient_l2) {
         check(cudaGetLastError(), "resident parameter gradient launch");
         if(l.trainable) {
             const auto count=product(product(s.batch,l.inputs),l.outputs);
-            const auto tiles=static_cast<unsigned>(std::min<std::size_t>(nonlinear_tiles,std::max<std::size_t>(1,(count+255)/256)));
+            const auto tiles=static_cast<unsigned>(std::min<std::size_t>(l.partial_tiles,count?((count-1)/256+1):1));
             // Bound the launch dimension even for large valid basis term counts.
-            if(l.terms>std::numeric_limits<unsigned>::max()/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
+            if(l.terms>2147483647U/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
             nonlinear_partial_kernel<<<static_cast<unsigned>(l.terms)*tiles,256,0,s.stream>>>(s.ptr(l.derivatives),s.ptr(l.log_derivatives),s.ptr(s.parameters+l.parameter_offset),
                 s.ptr(s.upstream[j+1]),s.ptr(l.nonlinear_partials),count,l.inputs,l.outputs,l.terms,tiles,s.status);
             check(cudaGetLastError(),"resident nonlinear partial launch");

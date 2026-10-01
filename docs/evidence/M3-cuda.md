@@ -38,3 +38,20 @@ returned exit 0 with **0 errors**, retained in
 Profiling and complete-call performance acceptance are recorded separately in
 [M3-benchmark.md](M3-benchmark.md); the initial scalar shared-parameter reduction
 is a numerical baseline, not an accepted performance claim.
+
+## Tiled shared-parameter reduction review closure
+
+Nsight Systems measured the initial RBF shared-parameter VJP at 99.8% of kernel
+time for frozen case 11. It used just one thread per basis term. Tiled GPU
+partial reductions and a second fixed-order tile accumulation now expose batch
+and edge work across blocks; construction reserves all scratch. Scratch tile
+capacity is bounded by the configured maximum batch and edge count, avoiding
+64-fold oversized storage for capacity-zero/single-edge models.
+
+Independent review found the first finish kernel omitted terms beyond the capped
+launch size. The retained [review RED](M3-reduction-red.md) reproduces an actual
+nonzero tail with 8,388,481 trainable terms. A grid-stride finish loop now covers
+every parameter. The same manual test passes on the RTX 3090 with two unchanged
+workspace allocations, exact output in [large-basis-green.txt](m3/large-basis-green.txt).
+The default numerical suite remains **7/7**; Compute Sanitizer memcheck remains
+**0 errors** in [resident-tuned-memcheck.txt](m3/resident-tuned-memcheck.txt).
