@@ -1,4 +1,4 @@
-# KAN numerical contract (M1)
+# KAN numerical contract (M1 and M2)
 
 An edge is a learned univariate expansion. A layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -42,6 +42,51 @@ no performance claim. Device memory is owned per invocation, exceptions release 
 and reductions have fixed summation order, without floating-point atomic accumulation.
 No device returns `available() == false`; actual operations fail explicitly with
 `std::runtime_error`. CPU/CUDA equivalence is tolerance-based, not bitwise promised.
+
+## Persistent CUDA execution (M2)
+
+`kan::cuda::ResidentNetwork` is a move-only executor built from an owned snapshot
+of a CPU `Network`, with a fixed maximum batch capacity. It supports every M1
+basis family and mixed compatible networks. All storage remains double precision.
+The M1 synchronous Chebyshev layer functions keep their original contract.
+
+Each resident executor owns its CUDA stream and preallocated device storage for
+parameters, inputs, upstream gradients, activations, basis values/derivatives,
+input/parameter gradients, and candidate SGD parameters. Construction uploads the
+model; `upload_input` and `upload_output_gradient` explicitly transfer finite host
+data. No numerical call allocates device storage. Batches above capacity fail.
+`workspace_allocations()` reports the executor's construction-time device allocation
+count, which remains unchanged by subsequent operations.
+
+Uploads, computations, and downloads complete before returning. Computations check
+a small device error status on the host without copying full tensors. There is no
+asynchronous-submission guarantee. Different instances can run independently;
+callers must serialize operations on the same instance. Host input buffers need
+only remain alive for their upload call. Downloads return independently owned values.
+
+After input upload, `forward()` saves the activations for `backward()`. Backward
+requires a successful current forward and a correctly sized uploaded upstream.
+`download_output()` and `download_gradients()` require their corresponding current
+successful computation. Input upload invalidates output/gradients and the uploaded
+upstream. Upstream upload invalidates gradients. SGD requires current gradients
+and a finite positive learning rate. It validates every candidate parameter on
+the GPU before committing any layer, preserving network-wide atomicity. Successful
+SGD invalidates output/gradients while retaining input/upstream for another iteration.
+Batch zero produces empty outputs/input gradients and zero parameter gradients.
+Invalid lifecycle and moved-from operations raise `std::logic_error`; invalid
+host shapes/data raise `std::invalid_argument`, dimension/numerical overflow raises
+`std::overflow_error`, and absent hardware/runtime failures raise `std::runtime_error`.
+All M1 mathematical domain and finite-result
+requirements apply; CPU/GPU equivalence is tolerance-based.
+
+Python bindings expose the same mathematics through an optional `kan` module.
+Numerical tensor arguments must be NumPy C-contiguous float64 arrays of the declared
+shape. No implicit float32 promotion or layout conversion is performed. Returned
+arrays own their storage; expensive computation releases the GIL. Serialize access
+to shared model instances and do not mutate borrowed input arrays during a call.
+Building CPU
+static libraries needs neither Python nor pybind11. Python package/wheel distribution
+and model serialization remain outside M2.
 
 ## Extension boundaries
 
