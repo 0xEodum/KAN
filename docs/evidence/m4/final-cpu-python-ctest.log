@@ -1,0 +1,318 @@
+Start testing: Oct 01 12:37 Russia TZ 2 Standard Time
+----------------------------------------------------------
+1/14 Testing: basis
+1/14 Test: basis
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/basis_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"basis" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS polynomial_closed_forms
+PASS polynomial_endpoint_identities
+PASS jacobi_independent_sum_and_derivative_identity
+PASS jacobi_large_parameters_avoid_spurious_coefficient_overflow
+PASS jacobi_asymmetric_large_parameter_endpoint_identities
+PASS jacobi_endpoint_extreme_derivative_finiteness_and_overflow
+PASS jacobi_parameters_adjacent_to_minus_one_match_independent_sum
+PASS fourier_order_and_angular_frequency
+PASS gaussian_values_centers_and_derivatives
+PASS gaussian_extreme_finite_parameters_and_underflow_tails
+PASS gaussian_underflow_value_can_have_representable_derivative
+PASS analytic_derivatives_match_central_differences
+PASS one_term_bases_and_relevant_parameters_only
+PASS invalid_kind_and_sizes
+PASS invalid_family_parameters
+PASS nonfinite_input_is_rejected_for_every_family
+PASS numeric_overflow_is_explicit
+17/17 passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"basis" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"basis" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/14 Testing: layer
+2/14 Test: layer
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/layer_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"layer" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS zero_initialization
+PASS known_forward_layout_and_batch
+PASS all_basis_layer_gradients_match_finite_differences
+PASS backward_sums_without_averaging_or_mutation
+PASS empty_batch_is_well_defined
+PASS invalid_dimensions_and_shape_overflow
+PASS invalid_shapes_and_nonfinite_data
+PASS parameter_set_is_validated_before_mutation
+PASS sgd_updates_with_explicit_rate
+PASS sgd_invalid_update_is_atomic
+PASS nonfinite_contractions_raise_overflow
+PASS moved_from_layer_rejects_numerical_and_update_operations
+12/12 passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"layer" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"layer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/14 Testing: network
+3/14 Test: network
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/network_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"network" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS topology_must_be_nonempty_and_compatible
+PASS forward_is_layer_composition
+PASS network_gradients_match_finite_differences
+PASS empty_and_invalid_network_batches
+PASS network_sgd_is_atomic_across_layers
+PASS single_layer_network_matches_layer
+PASS sgd_training_fits_polynomial
+PASS moved_from_network_and_layers_are_rejected
+8/8 passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"network" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"network" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/14 Testing: m3_basis
+4/14 Test: m3_basis
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/m3_basis_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m3_basis" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS clamped_cubic_matches_bernstein_closed_form
+PASS spline_right_knots_upper_inward_and_zero_extension
+PASS spline_partition_nonuniform_repeated_and_derivatives
+PASS spline_contract_validation
+PASS spline_extreme_domains_preserve_partition_and_slopes
+PASS wavelet_closed_forms_and_translation_scale_convention
+PASS wavelet_unit_energy_and_zero_mean
+PASS trainable_rbf_input_and_parameter_derivatives
+PASS localized_parameter_and_input_validation
+PASS localized_extreme_tails_and_explicit_overflow
+10/10 passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"m3_basis" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m3_basis" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/14 Testing: m3_layer
+5/14 Test: m3_layer
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/m3_layer_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m3_layer" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS trainable_shared_rbf_vjp_and_sgd
+PASS rbf_invalid_updates_are_atomic_across_network
+PASS exact_knot_insertion_preserves_values_and_derivatives
+PASS data_adaptation_and_indexed_network_refinement
+PASS l2_objective_vjp_and_zero_defaults
+5/5 passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"m3_layer" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m3_layer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/14 Testing: m4_rational
+6/14 Test: m4_rational
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/m4_rational_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m4_rational" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS independent_pade_and_scaled_quotient_identities
+PASS all_orders_input_and_nonlinear_parameter_derivatives
+PASS relative_guard_boundary_poles_and_conditioning
+PASS large_finite_denominator_preserves_small_nonlinear_vjp
+PASS representable_vjp_survives_underflowing_power_and_quotient
+PASS invalid_configuration_shapes_data_and_intermediates
+6/6 passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"m4_rational" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m4_rational" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/14 Testing: m4_layer
+7/14 Test: m4_layer
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/m4_layer_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m4_layer" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+PASS rational_identity_shape_layout_and_empty_batch
+PASS layer_and_mixed_network_all_vjps
+PASS invalid_setters_sgd_and_network_atomicity
+PASS pole_guards_even_zero_upstream_and_explicit_update
+PASS rational_dimensions_shapes_nonfinite_and_moved_state
+rational training initial=0.204799 final=7.65998e-10 holdout=1.20136e-09
+PASS deterministic_rational_learning_with_independent_holdout
+6/6 passed
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"m4_layer" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m4_layer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/14 Testing: m4_allocation
+8/14 Test: m4_allocation
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/m4_allocation_test.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m4_allocation" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+width=1 batch=1 full_call_allocations=8
+width=1 batch=64 full_call_allocations=8
+width=8 batch=1 full_call_allocations=8
+width=8 batch=64 full_call_allocations=8
+width=32 batch=1 full_call_allocations=8
+width=32 batch=64 full_call_allocations=8
+PASS complete_rational_layer_call_has_no_per_edge_heap_allocations
+1/1 passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"m4_allocation" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m4_allocation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/14 Testing: package_custom_include
+9/14 Test: package_custom_include
+Command: "C:/Program Files/CMake/bin/cmake.exe" "-DKAN_SOURCE_DIR=K:/PycharmProjects/auxiliary_projects/KAN" "-DKAN_BUILD_DIR=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python" "-DKAN_CONFIG=Release" "-DKAN_COMPILER=C:/Program Files/Microsoft Visual Studio/18/Professional/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe" "-DKAN_GENERATOR=Ninja" "-DKAN_MAKE_PROGRAM=C:/Program Files/Microsoft Visual Studio/18/Professional/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" "-P" "K:/PycharmProjects/auxiliary_projects/KAN/tests/package_test.cmake"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"package_custom_include" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+-- Custom include directory installed-package consumer passed
+<end of output>
+Test time =   1.63 sec
+----------------------------------------------------------
+Test Passed.
+"package_custom_include" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"package_custom_include" time elapsed: 00:00:01
+----------------------------------------------------------
+
+10/14 Testing: package_default_configuration
+10/14 Test: package_default_configuration
+Command: "C:/Program Files/CMake/bin/cmake.exe" "-DKAN_SOURCE_DIR=K:/PycharmProjects/auxiliary_projects/KAN" "-DKAN_BUILD_DIR=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/default-config-regression" "-DKAN_CONFIG=" "-DKAN_COMPILER=C:/Program Files/Microsoft Visual Studio/18/Professional/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe" "-DKAN_GENERATOR=Ninja" "-DKAN_MAKE_PROGRAM=C:/Program Files/Microsoft Visual Studio/18/Professional/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" "-P" "K:/PycharmProjects/auxiliary_projects/KAN/tests/package_test.cmake"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"package_default_configuration" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+-- Custom include directory installed-package consumer passed
+<end of output>
+Test time =   1.80 sec
+----------------------------------------------------------
+Test Passed.
+"package_default_configuration" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"package_default_configuration" time elapsed: 00:00:01
+----------------------------------------------------------
+
+11/14 Testing: fit_polynomial
+11/14 Test: fit_polynomial
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/fit_polynomial.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"fit_polynomial" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+Chebyshev KAN holdout MSE: 2.94787770627e-26
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"fit_polynomial" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"fit_polynomial" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/14 Testing: python
+12/14 Test: python
+Command: "C:/Program Files/CMake/bin/cmake.exe" "-E" "env" "PYTHONPATH=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/python" "K:\PycharmProjects\auxiliary_projects\KAN\.venv\Scripts\python.exe" "K:/PycharmProjects/auxiliary_projects/KAN/tests/python_test.py"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"python" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+...s.
+----------------------------------------------------------------------
+Ran 5 tests in 0.083s
+
+OK (skipped=1)
+<end of output>
+Test time =   0.44 sec
+----------------------------------------------------------
+Test Passed.
+"python" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"python" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/14 Testing: m3_python
+13/14 Test: m3_python
+Command: "C:/Program Files/CMake/bin/cmake.exe" "-E" "env" "PYTHONPATH=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/python" "K:\PycharmProjects\auxiliary_projects\KAN\.venv\Scripts\python.exe" "K:/PycharmProjects/auxiliary_projects/KAN/tests/m3_python_test.py"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m3_python" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+...s
+----------------------------------------------------------------------
+Ran 4 tests in 0.086s
+
+OK (skipped=1)
+<end of output>
+Test time =   0.34 sec
+----------------------------------------------------------
+Test Passed.
+"m3_python" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m3_python" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/14 Testing: m4_python
+14/14 Test: m4_python
+Command: "C:/Program Files/CMake/bin/cmake.exe" "-E" "env" "PYTHONPATH=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python/python" "K:\PycharmProjects\auxiliary_projects\KAN\.venv\Scripts\python.exe" "K:/PycharmProjects/auxiliary_projects/KAN/tests/m4_python_test.py"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-python
+"m4_python" start time: Oct 01 12:37 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+...s
+----------------------------------------------------------------------
+Ran 4 tests in 0.109s
+
+OK (skipped=1)
+<end of output>
+Test time =   0.33 sec
+----------------------------------------------------------
+Test Passed.
+"m4_python" end time: Oct 01 12:37 Russia TZ 2 Standard Time
+"m4_python" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 01 12:37 Russia TZ 2 Standard Time
+
+cpu =   3.66 sec*proc
+
+integration =   4.55 sec*proc
+
+python =   1.11 sec*proc
+

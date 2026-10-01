@@ -1,0 +1,8 @@
+========= COMPUTE-SANITIZER
+PASS resident_all_families_mixed_topology_and_repeated_gpu_sgd
+PASS resident_states_upload_validation_and_move
+PASS resident_zero_batch_and_independent_instances
+PASS resident_numerical_overflow_and_atomic_network_sgd
+PASS resident_jacobi_endpoints_and_gaussian_extreme_tail
+5/5 passed
+========= ERROR SUMMARY: 0 errors

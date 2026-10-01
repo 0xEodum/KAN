@@ -1,0 +1,10 @@
+========= COMPUTE-SANITIZER
+PASS m3_resident_spline_independent_hat_values
+PASS m3_resident_mixed_families_and_learned_parameter_snapshots
+PASS m3_resident_localized_extreme_tails_and_spline_contracts
+PASS m3_resident_nonzero_batch_l2_combines_with_data_vjp
+PASS m3_resident_zero_batch_regularization_and_validation
+PASS m3_resident_width_candidate_validation_is_atomic
+PASS m3_resident_explicit_refinement_reconstruction
+7/7 passed
+========= ERROR SUMMARY: 0 errors

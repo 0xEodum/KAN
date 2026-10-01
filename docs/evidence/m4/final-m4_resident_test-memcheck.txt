@@ -1,0 +1,10 @@
+========= COMPUTE-SANITIZER
+PASS m4_resident_independent_pade_identity_and_vjp
+PASS m4_resident_mixed_network_all_vjps_and_trajectory
+PASS m4_resident_guard_invalidation_recovery_and_overflow
+PASS m4_resident_relative_conditioning_and_failed_backward_recovery
+PASS m4_resident_zero_batch_l2_and_atomic_sgd
+PASS m4_resident_representable_extreme_denominator_derivatives
+PASS m4_resident_capped_warp_launch_preserves_large_parameter_tail
+7/7 passed
+========= ERROR SUMMARY: 0 errors

@@ -34,3 +34,41 @@ Public use and mathematical/lifecycle contracts are updated in README.md and
 CONTRACT.md. The only implementation-independent numerical review finding so far
 was representable derivative loss through intermediate underflow; retained CPU
 and actual-device RED/GREEN commits correct it with rare log-space paths.
+
+## Final source replay and installed use
+
+After GPU tuning `0071628` and CPU allocation refinement `c80b7d3`, all gates were
+replayed against both final numerical implementations:
+
+| Final command / gate | Observed result |
+| --- | --- |
+| Same full CUDA/Python/benchmarks helper command for `build-m4-final` | **19/19 CTest** |
+| Same CPU-only Python helper for `build-m4-python` | **14/14 CTest** |
+| Same ASAN Debug helper for `build-asan-m4` | **11/11**, no reported memory error |
+| GCC Debug coverage rebuild and CTest | **11/11**, warning-free |
+| Same gcovr command | **98.1% lines574/585,91.0% branches731/803,100% functions39/39** |
+| `compute-sanitizer --tool memcheck --error-exitcode 1 build-m4-final/<suite>.exe` for m4_resident_test, resident_test, resident_review_test, m3_resident_test | **7/7,5/5,4/4,7/7;0errors each** |
+| `cmake --install build-m4-final --prefix build-m4-install` | Installs CPU/CUDA libraries, public rational headers and Python module |
+| VS18 Release installed consumer `build-m4-consumer`, `ctest -C Release` | **1/1**, actual installed CPU/CUDA rational values, VJPs and SGD |
+| `PYTHONPATH=build-m4-install/python` and existing/M3/M4 Python suites with `--cuda` | **5/5,4/4,4/4** |
+
+Consumer configuration:
+`cmake -S tests/consumer -B build-m4-consumer -G "Visual Studio 18 2026" -DCMAKE_PREFIX_PATH=K:/PycharmProjects/auxiliary_projects/KAN/build-m4-install -DKAN_CONSUMER_CUDA=ON`,
+then `cmake --build build-m4-consumer --config Release --parallel` and
+`ctest --test-dir build-m4-consumer -C Release --output-on-failure`.
+Private `src/rational_internal.hpp` is not required by the installed public API.
+
+The final nineteen targets are eleven CPU/integration, five GPU and three Python.
+Retained final CTest/ASAN/CPU-Python/coverage/installed-consumer transcripts,
+coverage summary and four sanitizer diagnostics live under `m4/final-*`.
+Sanitizer resolves through the CUDA13.1 `compute-sanitizer.bat` launcher on PATH;
+the initial guessed `.exe` path did not exist, and no result from that failed
+invocation is counted. The actual launcher commands above completed successfully.
+
+The final independent retained numerical probe covers all289degree pairs,
+1445scalar identities,95mixed rational/RBF parameter finite differences,
+strict arrays/snapshots, repeated GPU trajectories, zero/subnormal derivatives,
+warp batch/block tails, failed-backward recovery and next-execution pole guards.
+Its review/evidence gate is recorded in M4-review.md. CPU/GPU measured tuning
+is separately recorded in M4-cpu-performance.md and M4-benchmark.md; this
+integration replay adds no performance claim.

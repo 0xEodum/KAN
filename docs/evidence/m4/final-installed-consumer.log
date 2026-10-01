@@ -1,0 +1,23 @@
+Start testing: Oct 01 12:38 Russia TZ 2 Standard Time
+----------------------------------------------------------
+1/1 Testing: installed_package
+1/1 Test: installed_package
+Command: "K:/PycharmProjects/auxiliary_projects/KAN/build-m4-consumer/Release/consumer.exe"
+Directory: K:/PycharmProjects/auxiliary_projects/KAN/build-m4-consumer
+"installed_package" start time: Oct 01 12:38 Russia TZ 2 Standard Time
+Output:
+----------------------------------------------------------
+Installed kan::cuda consumer passed
+Installed resident CUDA/SGD consumer passed
+Installed M3 localized/nonlinear CUDA consumer passed
+Installed M4 rational CUDA consumer passed
+Installed kan::kan consumer passed
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"installed_package" end time: Oct 01 12:38 Russia TZ 2 Standard Time
+"installed_package" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 01 12:38 Russia TZ 2 Standard Time

@@ -1,0 +1,7 @@
+========= COMPUTE-SANITIZER
+PASS resident_input_and_parameter_gradients_match_independent_finite_differences
+PASS resident_failed_uploads_preserve_current_results_and_gradients
+PASS resident_gaussian_underflow_tail_has_relative_accuracy
+PASS resident_move_assignment_and_moved_cpu_rejection
+4/4 passed
+========= ERROR SUMMARY: 0 errors
