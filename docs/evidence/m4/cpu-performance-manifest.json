@@ -1,0 +1,206 @@
+{
+  "date": "2026-10-01",
+  "cpu": "12th Gen Intel(R) Core(TM) i5-12400, 6 cores / 12 logical processors",
+  "baseline_cpu_commit": "4b808d2",
+  "final_cpu_commit": "c80b7d3",
+  "fixture_commit": "2f01c81",
+  "compiler": "MSVC Visual Studio 18 Professional, cl /O2 /MD /EHsc /std:c++20, Release kan.lib",
+  "fixture": {
+    "topology": [
+      64,
+      64,
+      32,
+      16
+    ],
+    "batch": 1024,
+    "degrees": [
+      6,
+      4
+    ],
+    "center": 0.1,
+    "scale": 1.2,
+    "learning_rate": 0.001,
+    "warmups": 1,
+    "repeats": 3,
+    "trajectory_steps": 4,
+    "order": [
+      "cpu-baseline-a",
+      "cpu-final-a",
+      "cpu-final-b",
+      "cpu-baseline-b"
+    ]
+  },
+  "runs": [
+    {
+      "name": "cpu-baseline-a",
+      "order": 0,
+      "samples_ms": [
+        4609.9118,
+        4595.3241,
+        4622.2489
+      ],
+      "median_ms": 4609.9118,
+      "csv_sha256": "34fb14b7c2b47819710e4a01e387213a05e8944769814d2835c94426e2848dcf",
+      "snapshot_sha256": "eefedb1bcfa72bc93dd761021b9c39c3ca4d65e3bb5d8814fd1d3579bd5ed66b",
+      "snapshot_bytes": 3139512,
+      "allocation_counts": [
+        40894504,
+        40894504,
+        40894504,
+        40894504
+      ],
+      "allocated_bytes": [
+        1804788788,
+        1804788788,
+        1804788788,
+        1804788788
+      ]
+    },
+    {
+      "name": "cpu-final-a",
+      "order": 1,
+      "samples_ms": [
+        1509.7147,
+        1506.1053,
+        1531.2888
+      ],
+      "median_ms": 1509.7147,
+      "csv_sha256": "70c2c39c7d1b10bf5cf05078af1b34560763dc0987848f81b007e552438b47c7",
+      "snapshot_sha256": "eefedb1bcfa72bc93dd761021b9c39c3ca4d65e3bb5d8814fd1d3579bd5ed66b",
+      "snapshot_bytes": 3139512,
+      "allocation_counts": [
+        40,
+        40,
+        40,
+        40
+      ],
+      "allocated_bytes": [
+        5432372,
+        5432372,
+        5432372,
+        5432372
+      ]
+    },
+    {
+      "name": "cpu-final-b",
+      "order": 2,
+      "samples_ms": [
+        1534.6207,
+        1512.656,
+        1534.425
+      ],
+      "median_ms": 1534.425,
+      "csv_sha256": "cb8b04857df93549fac5cf8ca6f266acfe1d61cd2aa68f1c6a2e8cd7a4977540",
+      "snapshot_sha256": "eefedb1bcfa72bc93dd761021b9c39c3ca4d65e3bb5d8814fd1d3579bd5ed66b",
+      "snapshot_bytes": 3139512,
+      "allocation_counts": [
+        40,
+        40,
+        40,
+        40
+      ],
+      "allocated_bytes": [
+        5432372,
+        5432372,
+        5432372,
+        5432372
+      ]
+    },
+    {
+      "name": "cpu-baseline-b",
+      "order": 3,
+      "samples_ms": [
+        4600.8422,
+        4617.7773,
+        4648.6329
+      ],
+      "median_ms": 4617.7773,
+      "csv_sha256": "6aa9d6df102ff2d4c5068f76ccf514b380e5ed424647c921f45713c24ae7fed9",
+      "snapshot_sha256": "eefedb1bcfa72bc93dd761021b9c39c3ca4d65e3bb5d8814fd1d3579bd5ed66b",
+      "snapshot_bytes": 3139512,
+      "allocation_counts": [
+        40894504,
+        40894504,
+        40894504,
+        40894504
+      ],
+      "allocated_bytes": [
+        1804788788,
+        1804788788,
+        1804788788,
+        1804788788
+      ]
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "median_ms": 4613.84455,
+      "iqr_ms": 18.02139999999963,
+      "samples_ms": [
+        4609.9118,
+        4595.3241,
+        4622.2489,
+        4600.8422,
+        4617.7773,
+        4648.6329
+      ]
+    },
+    "final": {
+      "median_ms": 1521.9724,
+      "iqr_ms": 23.19092499999988,
+      "samples_ms": [
+        1509.7147,
+        1506.1053,
+        1531.2888,
+        1534.6207,
+        1512.656,
+        1534.425
+      ]
+    },
+    "improvement_percent": 67.01292417838394
+  },
+  "verification": {
+    "bit_identical": true,
+    "max_abs_error": 0,
+    "numerical_doubles": 392416,
+    "span_sizes": [
+      16384,
+      65536,
+      65536,
+      28672,
+      64,
+      16384,
+      28672,
+      64,
+      16384,
+      65536,
+      14336,
+      32,
+      8192,
+      14336,
+      32,
+      8192,
+      32768,
+      3584,
+      16,
+      2048,
+      3584,
+      16,
+      2048
+    ],
+    "snapshot_fields": "output; network input gradient; per layer input, numerator, bias, denominator gradients and numerator,bias,denominator parameters"
+  },
+  "sources_sha256": {
+    "docs/evidence/m4/cpu_allocation_probe.cpp": "2e196b8b4250514813ab0c2a8cbf6944550afdf863cf246c6c6c55b3b2d53ed3",
+    "src/rational.cpp": "2dce232407e2566a3bedcf48c320d8b9c0bf036ec0aaafeecb657245a1295747",
+    "src/rational_internal.hpp": "16fd9ab40437d92d038092c9c2ba8db8712ed8daa9712274d4ef4d66520c9bae",
+    "src/layer.cpp": "92784fbf2d4b144772a8da6bfa47685264adc92aa2ab03499884e04a9c917bab",
+    "tests/m4_allocation_test.cpp": "a111cd03c4873b711b0a4009f47e3c7b8133c6c673d0e71aa0a6106e60c7ab06"
+  },
+  "executables_sha256": {
+    "cpu_baseline.exe": "21710139f6447dd51718c9e5db179f28a1912f4ffc664baacc3f5c231135ee29",
+    "cpu_final.exe": "7212c45c296af190b92ad62ddfb45a2a19f3290efe5b90d37c140079f885de31"
+  },
+  "instrumentation": "Global operator new counts every C++ dynamic allocation; timer covers forward/backward/SGD and counting overhead identically in both binaries. Snapshot serialization is outside timing.",
+  "isolation": "Accepted runs repeated after discarding a sequence that overlapped a CUDA rebuild/sweep; no agent builds or benchmarks overlapped accepted runs."
+}

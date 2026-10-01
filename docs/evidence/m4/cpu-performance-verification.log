@@ -1,0 +1,60 @@
+{
+  "summary": {
+    "baseline": {
+      "median_ms": 4613.84455,
+      "iqr_ms": 18.02139999999963,
+      "samples_ms": [
+        4609.9118,
+        4595.3241,
+        4622.2489,
+        4600.8422,
+        4617.7773,
+        4648.6329
+      ]
+    },
+    "final": {
+      "median_ms": 1521.9724,
+      "iqr_ms": 23.19092499999988,
+      "samples_ms": [
+        1509.7147,
+        1506.1053,
+        1531.2888,
+        1534.6207,
+        1512.656,
+        1534.425
+      ]
+    },
+    "improvement_percent": 67.01292417838394
+  },
+  "verification": {
+    "bit_identical": true,
+    "max_abs_error": 0,
+    "numerical_doubles": 392416,
+    "span_sizes": [
+      16384,
+      65536,
+      65536,
+      28672,
+      64,
+      16384,
+      28672,
+      64,
+      16384,
+      65536,
+      14336,
+      32,
+      8192,
+      14336,
+      32,
+      8192,
+      32768,
+      3584,
+      16,
+      2048,
+      3584,
+      16,
+      2048
+    ],
+    "snapshot_fields": "output; network input gradient; per layer input, numerator, bias, denominator gradients and numerator,bias,denominator parameters"
+  }
+}
