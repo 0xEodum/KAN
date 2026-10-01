@@ -269,7 +269,7 @@ void ResidentNetwork::forward() {
     }
     s.result(); s.has_forward = true;
 }
-void ResidentNetwork::backward() {
+void ResidentNetwork::backward(double coefficient_l2) {
     auto& s = state();
     if (!s.has_forward || !s.has_upstream) throw std::logic_error("resident backward requires current forward and upstream");
     s.has_backward = false; s.reset_status();

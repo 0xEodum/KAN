@@ -19,7 +19,8 @@ public:
     void upload_input(std::span<const double> input, std::size_t batch);
     void upload_output_gradient(std::span<const double> gradient);
     void forward();
-    void backward();
+    // Add lambda*c to coefficient VJPs on device; shared RBF parameters are unpenalized.
+    void backward(double coefficient_l2 = 0.0);
     void sgd(double learning_rate);
     std::vector<double> download_output();
     NetworkGradients download_gradients();
