@@ -28,9 +28,13 @@ is synchronized before stopping it. No event or kernel-only time is a speedup me
   forward, backward, SGD and synchronization including scalar status traffic and
   validation. Caches activations per the resident API. Full tensor downloads occur
   after timing. This row must not be described as a host transfer inclusive result.
+  Because SGD invalidates downloadable pre-update state, an untimed identical
+  trajectory replay captures final output/gradients before its final SGD; replay
+  final parameters must match the timed object's parameters exactly.
 - `m2_transfer_full`: the same M2 calls plus input/upstream uploads each step and
   output/all-gradient downloads, timed. Parameter download for independent final
   verification is outside timing, as CPU/M1 already hold parameters on the host.
+  These downloads occur before SGD, respecting the API's state validity contract.
 
 Setup is measured separately once per row, including network construction and,
 for M2, resident allocation, parameter/input/upstream uploads and synchronization.

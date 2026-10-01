@@ -116,15 +116,37 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
     for (int step = 0; step < warmups + repeats; ++step) {
         start = Clock::now();
         if (transfers) { gpu.upload_input(input, c.batch); gpu.upload_output_gradient(upstream); }
-        gpu.forward(); gpu.backward(); gpu.sgd(learning_rate); gpu.synchronize();
+        gpu.forward(); gpu.backward();
         if (transfers) { result.output = gpu.download_output(); result.gradients = gpu.download_gradients(); }
+        gpu.sgd(learning_rate); gpu.synchronize();
         const auto elapsed = milliseconds(start);
         if (step >= warmups) result.times.push_back(elapsed);
     }
-    // Verification downloads are excluded only in explicitly labelled resident mode.
-    if (!transfers) { result.output = gpu.download_output(); result.gradients = gpu.download_gradients(); }
     result.parameters = gpu.download_parameters();
     if (result.allocations != gpu.workspace_allocations()) throw std::runtime_error("workspace allocation count changed");
+    // SGD invalidates the downloadable output/gradient state. Replay the identical
+    // trajectory outside timing for steady-mode pre-update verification; compare
+    // its final parameters independently with the actually timed network.
+    if (!transfers) {
+        kan::cuda::ResidentNetwork replay(network(c), c.batch);
+        replay.upload_input(input, c.batch); replay.upload_output_gradient(upstream);
+        for (int step = 0; step < warmups + repeats; ++step) {
+            replay.forward(); replay.backward();
+            if (step == warmups + repeats - 1) {
+                result.output = replay.download_output(); result.gradients = replay.download_gradients();
+            }
+            replay.sgd(learning_rate);
+        }
+        replay.synchronize();
+        const auto replay_parameters = replay.download_parameters();
+        for (std::size_t l = 0; l < result.parameters.layers().size(); ++l) {
+            const auto expected = result.parameters.layers()[l];
+            const auto actual = replay_parameters.layers()[l];
+            if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
+                !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()))
+                throw std::runtime_error("resident verification replay changed parameters");
+        }
+    }
     return result;
 }
 #endif
