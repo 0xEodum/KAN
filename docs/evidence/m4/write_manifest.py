@@ -35,7 +35,12 @@ manifest = {
             "src/resident.cu", "src/rational.cpp", "src/layer.cpp",
             "src/rational_internal.hpp",
             "include/kan/rational.hpp", "include/kan/layer.hpp",
-            "benchmarks/m4_benchmark.cpp", "tests/m4_resident_test.cpp")],
+            "include/kan/resident.hpp", "include/kan/network.hpp", "src/network.cpp",
+            "CMakeLists.txt", "python/bindings.cpp", "python/kan/__init__.py",
+            "benchmarks/m4_benchmark.cpp", "tests/m4_resident_test.cpp",
+            "tests/m4_rational_test.cpp", "tests/m4_layer_test.cpp",
+            "tests/m4_allocation_test.cpp", "tests/m4_python_test.py",
+            "docs/evidence/m4/cpu_allocation_probe.cpp")],
     },
     "environment": {
         "gpu": "NVIDIA RTX3090,24576MiB,driver591.86,WindowsWDDM",
@@ -75,5 +80,5 @@ manifest = {
         "build-m4-cuda/resident-preopt.cu", "build-m4-cuda/m4-preopt-profile.nsys-rep",
         "build-m4-cuda/m4-final-profile.nsys-rep") if (ROOT / path).exists()],
 }
-(EVIDENCE / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+(EVIDENCE / "manifest.json").write_bytes((json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 print(f"Recorded {len(manifest['retained'])} retained artifacts")
