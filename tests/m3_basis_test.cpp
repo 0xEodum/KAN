@@ -105,6 +105,17 @@ TEST(spline_contract_validation) {
     test::throws<std::invalid_argument>([&]{kan::validate_basis(bad);});
 }
 
+TEST(spline_extreme_domains_preserve_partition_and_slopes) {
+    const double max=std::numeric_limits<double>::max();
+    auto c=spline(1,{-max,-max,max,max});
+    auto a=kan::evaluate_basis(c,0);
+    test::near(a.values[0],0.5);test::near(a.values[1],0.5);
+    test::near(a.derivatives[0]*max,-0.5);test::near(a.derivatives[1]*max,0.5);
+    const double tiny=std::numeric_limits<double>::denorm_min();
+    c=spline(1,{0,0,tiny,tiny});
+    test::throws<std::overflow_error>([&]{kan::evaluate_basis(c,0);});
+}
+
 TEST(wavelet_closed_forms_and_translation_scale_convention) {
     auto c=wavelet();
     const double norm=2/(std::sqrt(3.)*std::pow(std::acos(-1.),0.25));
@@ -119,6 +130,20 @@ TEST(wavelet_closed_forms_and_translation_scale_convention) {
         input_differences(c,x);
         REQUIRE(a.center_derivatives.empty());REQUIRE(a.log_width_derivatives.empty());
     }
+}
+
+TEST(wavelet_unit_energy_and_zero_mean) {
+    auto c=wavelet();c.size=1;c.centers={0};c.scales={1};
+    // Composite Simpson quadrature independently checks the normalization.
+    constexpr std::size_t intervals=12000;
+    constexpr double lo=-12,step=24./intervals;
+    double energy=0,mean=0;
+    for(std::size_t j=0;j<=intervals;++j) {
+        const double v=kan::evaluate_basis(c,lo+step*static_cast<double>(j)).values[0];
+        const double weight=j==0 || j==intervals ? 1 : (j%2 ? 4 : 2);
+        energy+=weight*v*v;mean+=weight*v;
+    }
+    test::near(energy*step/3,1,1e-11);test::near(mean*step/3,0,1e-11);
 }
 
 TEST(trainable_rbf_input_and_parameter_derivatives) {
@@ -190,6 +215,11 @@ TEST(localized_extreme_tails_and_explicit_overflow) {
     c.centers={0};c.scales={tiny};
     a=kan::evaluate_basis(c,1);test::near(a.values[0],0);test::near(a.derivatives[0],0);
     a=kan::evaluate_basis(c,0);REQUIRE(std::isfinite(a.values[0]));test::near(a.derivatives[0],0);
+    a=kan::evaluate_basis(c,55*tiny);
+    // Python Decimal, 100 digits; value is -1.59025760021617e-492.
+    constexpr double wavelet_oracle=1.76912363925034805752500849835501785e-167;
+    test::near(a.values[0],0);REQUIRE(a.derivatives[0]!=0);
+    test::near(a.derivatives[0]/wavelet_oracle,1,2e-12);
     test::throws<std::overflow_error>([&]{kan::evaluate_basis(c,tiny);});
 }
 
