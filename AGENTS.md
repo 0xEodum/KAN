@@ -8,6 +8,10 @@ Before doing any work in this workspace:
    are current.
 3. Work only on the single `NEXT` stage, or on the nearest `READY` stage
    when no stage is in progress. Respect all declared dependencies.
+   Until every item in `docs\BACKLOG.md` is closed, the backlog stage is the
+   `NEXT` stage: M5 must not start while any backlog item remains open.
+   Close an item only after its fix is verified, and record the closure in
+   the backlog status journal with a link to its evidence.
 4. Do not mark a stage `DONE` without satisfying its tasks, exit criteria, and
    evidence requirements.
 5. Record scope, default, dependency, or acceptance-criteria changes in the
