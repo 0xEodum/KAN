@@ -1,0 +1,88 @@
+﻿{
+    "date":  "2026-10-01",
+    "protocol_commit":  "a784993",
+    "benchmark_source_commit":  "a464876",
+    "baseline_resident_commit":  "2123ed8",
+    "final_resident_commit":  "dfbf679",
+    "baseline_executable_sha256":  "A01C3968B6E008172232EB7FACFC7A4475CE146DE31393A5DB7BA39F874A0777",
+    "final_executable_sha256":  "699C34D141F3A464A48894D795D772F9C523DDD1338263382296D87D63770137",
+    "configuration":  "Release",
+    "architecture":  "86",
+    "precision":  "double",
+    "gpu":  "NVIDIA GeForce RTX 3090, 24 GiB, WDDM",
+    "cpu":  "Intel Core i5-12400, 6 cores, 12 logical",
+    "driver":  "591.86",
+    "cuda":  "13.1.115",
+    "msvc":  "19.50.35724.0",
+    "cuda_flags":  "--fmad=false --allow-unsupported-compiler",
+    "host_release_flags":  "/O2 /Ob2 /DNDEBUG",
+    "warmups":  2,
+    "repeats":  7,
+    "balanced_runs_per_variant":  4,
+    "files":  [
+                  {
+                      "file":  "balanced-swap.csv",
+                      "sha256":  "9345C00064DB7BADD96589D935223F6BC3338157BBF215A61D3754E555822986"
+                  },
+                  {
+                      "file":  "balanced-swap-summary.json",
+                      "sha256":  "EFE4F943F870F40DB3DCBB5BCC5BE072A2B127AC6B60AD5F0B70F6DEA400F1BC"
+                  },
+                  {
+                      "file":  "baseline-host.csv",
+                      "sha256":  "1EB3A43EA3528C4C722AFF348D1864E9DEED61406DC4132228AE64E3BBEE56E0"
+                  },
+                  {
+                      "file":  "m1-profile_cuda_api_sum.csv",
+                      "sha256":  "B30629B3FF9A6864DA86E43A45390D181E1E39636DF7E3D5D1EBCDA9FED3AB6A"
+                  },
+                  {
+                      "file":  "m1-profile_cuda_gpu_kern_sum.csv",
+                      "sha256":  "0E1545EAD583FF14CA25A809187EDA3A9DE97B90F4C59FA9CF7D778D0367C3A2"
+                  },
+                  {
+                      "file":  "m1-profile_cuda_gpu_mem_time_sum.csv",
+                      "sha256":  "B1C32DBD000EB2B7A863F34D3929351F1D23717F7BA696CBECEBF3729FD18D87"
+                  },
+                  {
+                      "file":  "matched-preopt.csv",
+                      "sha256":  "9A3C24F3778FE4C3EED5A05EBB3EDA3D45036D3D14BBE09A9B31C27DA5C0B5D1"
+                  },
+                  {
+                      "file":  "matched-trial.csv",
+                      "sha256":  "5332ECB4A1FFFE8763314F9C502AEB0266DEA10CA1F1DBBADA0A85AA96390010"
+                  },
+                  {
+                      "file":  "ncu-baseline.txt",
+                      "sha256":  "95C1F4AC8E9B7408FA6B12052E81F0AB5E8DBB12DA88B94E8203C06A5BFD4522"
+                  },
+                  {
+                      "file":  "resident-final-profile_cuda_api_sum.csv",
+                      "sha256":  "A193F3F56E67D543049327682560E3D41753F2EAA5D6D84B3C3327A0BEFD9BAC"
+                  },
+                  {
+                      "file":  "resident-final-profile_cuda_gpu_kern_sum.csv",
+                      "sha256":  "90B8954C57E631E6AA0BC9FC388FCBCE6437726BC467F135CD9F3116350EDC58"
+                  },
+                  {
+                      "file":  "resident-final-profile_cuda_gpu_mem_time_sum.csv",
+                      "sha256":  "7C33FCBA3530A311E787217CB8C6F2E8224CDB83B576FFE51DD74F55605A1C5F"
+                  },
+                  {
+                      "file":  "resident-preopt.csv",
+                      "sha256":  "B9B70738F0A6A95954939AD23FFFDC2D4989749447BD62E2A770F94061DF0762"
+                  },
+                  {
+                      "file":  "resident-preopt-profile_cuda_api_sum.csv",
+                      "sha256":  "53BD8A54A5DC58B89D8ACC1AAD76A4D65B8BED3C3481F1E7711FE524C4EF919B"
+                  },
+                  {
+                      "file":  "resident-preopt-profile_cuda_gpu_kern_sum.csv",
+                      "sha256":  "EFEB97DAD53EDBAFBE3680A0D4A204976A463A29659EC2C1E1546DA93EB58F75"
+                  },
+                  {
+                      "file":  "resident-preopt-profile_cuda_gpu_mem_time_sum.csv",
+                      "sha256":  "31843EABC84FF0ED6478A00EFAC76C389C3172F6218406DCE0FFC9CD66A4D221"
+                  }
+              ]
+}

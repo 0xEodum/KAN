@@ -1,0 +1,110 @@
+﻿[
+    {
+        "case":  0,
+        "backend":  "m2_resident_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.27990000000000004,
+        "iqr_ms":  0.015174999999999994
+    },
+    {
+        "case":  0,
+        "backend":  "m2_resident_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.26215,
+        "iqr_ms":  0.0099750000000000116
+    },
+    {
+        "case":  0,
+        "backend":  "m2_transfer_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.40915,
+        "iqr_ms":  0.097775
+    },
+    {
+        "case":  0,
+        "backend":  "m2_transfer_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.39615,
+        "iqr_ms":  0.027575000000000016
+    },
+    {
+        "case":  1,
+        "backend":  "m2_resident_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.69090000000000007,
+        "iqr_ms":  0.045250000000000012
+    },
+    {
+        "case":  1,
+        "backend":  "m2_resident_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  0.66775000000000007,
+        "iqr_ms":  0.01177499999999998
+    },
+    {
+        "case":  1,
+        "backend":  "m2_transfer_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  1.04785,
+        "iqr_ms":  0.0330499999999998
+    },
+    {
+        "case":  1,
+        "backend":  "m2_transfer_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  1.04715,
+        "iqr_ms":  0.093425000000000091
+    },
+    {
+        "case":  3,
+        "backend":  "m2_resident_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  2.3093500000000002,
+        "iqr_ms":  0.19799999999999995
+    },
+    {
+        "case":  3,
+        "backend":  "m2_resident_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  2.27685,
+        "iqr_ms":  0.046924999999999883
+    },
+    {
+        "case":  3,
+        "backend":  "m2_transfer_full",
+        "variant":  "preopt",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  4.1962,
+        "iqr_ms":  0.28462500000000013
+    },
+    {
+        "case":  3,
+        "backend":  "m2_transfer_full",
+        "variant":  "trial",
+        "runs":  4,
+        "samples":  28,
+        "median_ms":  4.04865,
+        "iqr_ms":  0.25109999999999966
+    }
+]

@@ -132,3 +132,86 @@ The first stream construction includes 82.667 ms CUDA initialization and is
 excluded by the benchmark warmups. These timeline data cannot establish hardware
 utilization without unavailable Nsight Compute counters. Baseline summaries are
 retained as [resident-preopt-profile CSVs](m2/resident-preopt-profile_cuda_gpu_kern_sum.csv).
+
+## Isolated matched final measurements and accepted tuning
+
+Root and both other agents stopped CPU/GPU builds and tests for the entire two
+sweeps and balanced comparison. Windows display activity and unlocked clocks
+remain. [matched-preopt.csv](m2/matched-preopt.csv) uses resident source `2123ed8`;
+[matched-trial.csv](m2/matched-trial.csv) uses the accepted SGD swap in `dfbf679`.
+Both use benchmark `a464876`, unchanged mathematical fixtures, two warmups and
+seven repeats. Each sweep contains 76 rows. Every elementwise check passed,
+maximum discrepancy 5.2042e-18; two allocations remained constant on every M2 row.
+Final Chebyshev full-call medians in milliseconds (IQR in parentheses):
+
+| Topology | Batch | CPU | M1 host CUDA | M2 resident | M2 transfer inclusive |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 16 -> 24 -> 8 | 32 | 0.839 (0.043) | 3.478 (0.395) | 0.438 (0.103) | 0.385 (0.021) |
+| 16 -> 24 -> 8 | 1024 | 27.708 (1.971) | 14.808 (0.279) | 0.644 (0.009) | 1.090 (0.129) |
+| 64 -> 64 -> 32 -> 16 | 32 | 7.395 (1.569) | 7.514 (0.468) | 0.570 (0.024) | 0.922 (0.018) |
+| 64 -> 64 -> 32 -> 16 | 1024 | 224.582 (17.749) | 35.613 (1.016) | 2.109 (0.043) | 4.008 (0.197) |
+
+These observations include different public API behavior: CPU and M1 recompute
+activations in backward, while M2 reuses forward state. M2 resident excludes tensor
+downloads, M2 transfer includes them. Thus these are workload measurements, not
+a hardware throughput comparison. Other families and all raw samples are in the
+linked CSVs. WDDM timing remains variable: for example some large-family resident
+observations are much slower than their transfer-inclusive observations, despite
+the latter doing additional work. This limits general conclusions and prevents
+interpreting a single apparent large difference as an algorithmic gain.
+
+The scoped trial replaces the validated SGD candidate arena's D2D copy with an
+atomic swap of equally sized arena offsets. It preserves sequential reduction
+and checked overflow semantics. Since the full sweeps were noisy, the same
+frozen protocol was repeated in balanced `preopt, trial, trial, preopt` order
+twice for cases 0, 1, and 3: four runs and 28 retained samples per variant/mode.
+[balanced-swap.csv](m2/balanced-swap.csv) contains the 48 rows; each variant starts
+from identical parameters in every run. Pooled medians/IQRs are independently
+reported in [balanced-swap-summary.json](m2/balanced-swap-summary.json):
+
+| Case / mode | Before median (IQR), ms | After median (IQR), ms |
+| --- | ---: | ---: |
+| 0 resident | 0.27990 (0.01518) | 0.26215 (0.00998) |
+| 1 resident | 0.69090 (0.04525) | 0.66775 (0.01178) |
+| 3 resident | 2.30935 (0.19800) | 2.27685 (0.04692) |
+| 0 transfer | 0.40915 (0.09778) | 0.39615 (0.02758) |
+| 1 transfer | 1.04785 (0.03305) | 1.04715 (0.09343) |
+| 3 transfer | 4.19620 (0.28463) | 4.04865 (0.25110) |
+
+The accepted benefit is limited to small resident full calls: case 0 decreased
+6.34% (the trial beat neighboring baseline runs in all four observations), case 1
+3.35% (three of four). Case 3 resident difference and transfer-inclusive differences
+are within substantial variation; no reliable improvement is claimed for them.
+The tuning is retained for the demonstrated small resident-call benefit, not a
+global speedup claim. Constructor/setup costs remain separately exposed in the
+raw rows and are excluded from these steady-state observations.
+
+Reproduce balanced order using two executables built from the source revisions
+above with identical configuration and benchmark source:
+
+```
+./scripts/benchmark-m2.ps1 -Executable build-m2-bench/m2_benchmark.exe
+  -BaselineExecutable build-m2-bench/m2_benchmark-preopt.exe
+  -Output docs/evidence/m2/balanced-swap.csv
+```
+
+The added balanced-script path was smoke-verified with `-Case 0 -Warmups 0
+-Repeats 1`: exit 0, 16 rows and all comparisons passed. Smoke measurements are
+not performance evidence. The historical executed comparison used the identical
+order/arguments now encoded in that script.
+
+Final Nsight Systems case 3 uses prefix `resident-final-profile` and the same
+profiling arguments as the baseline. It records six allocations/frees and three
+streams for the three objects, unchanged 351 kernel launches, but copies decrease
+268 -> 241 and synchronizations 188 -> 161: one D2D copy and synchronization
+removed per each of 27 steps. The final memory summary has no D2D copy. Kernel
+time distribution remains input 35.5%, parameter 33.8%, forward 24.1%, basis 6.4%,
+candidate 0.1%; unchanged medians corroborate that this tune changes execution
+overhead rather than numerical contraction. Full-call measurements above, not
+these profiler durations, determine accepted benefit. Final trace summary CSVs
+and artifact/binary hashes are listed in [manifest.json](m2/manifest.json).
+
+Remaining limitation: GPU performance counters are unavailable. These profiles
+identify allocation/copy/synchronization and kernel-time bottlenecks and prove the
+targeted removals, but do not prove full GPU occupancy or saturated bandwidth.
+No utilization or universal performance claim is made.
