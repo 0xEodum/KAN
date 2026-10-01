@@ -90,7 +90,7 @@ PyTorch FP64 упирается в пик). Сверх этого FP32 даёт 
 | C8 | P1 | Rational parameter VJP: один warp на ребро, собирающий все m+n+1 сумм сразу | `rational_parameter_kernel` (`:337`): warp на параметр, каждый заново читает z, P, Q и пересчитывает степени |
 | C9 | P1 | Проверять статус раз за шаг / раз в N шагов; захват шага в CUDA Graph | `result()` (`:482`) — memcpy статуса + sync после forward, backward и sgd (3 раза за шаг) |
 | C10 | P2 | `--fmad=false` только в сборке паритета, в сборке производительности включить FMA | Сейчас выключено везде |
-| C11 | P0 (процесс) | Включить счётчики Nsight Compute: NVIDIA Control Panel → Developer → Manage GPU Performance Counters → «Allow access to all users» (или ncu от администратора) | `ERR_NVGPUCTRPERM` во всех трёх вехах — оптимизация шла без occupancy/bandwidth |
+| C11 | P0 (процесс) | (ГОТОВО) Включить счётчики Nsight Compute: NVIDIA Control Panel → Developer → Manage GPU Performance Counters → «Allow access to all users» (или ncu от администратора) | `ERR_NVGPUCTRPERM` во всех трёх вехах — оптимизация шла без occupancy/bandwidth |
 | C12 | P2 | Nonlinear RBF reduction: коалесцированный доступ | `nonlinear_partial_kernel`: чтения `dx`/`dw`/`c` с шагом K |
 
 ---
