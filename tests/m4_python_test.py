@@ -29,6 +29,11 @@ class M4(unittest.TestCase):
         l.denominators[:] = 99
         np.testing.assert_array_equal(l.denominators, [[[-.5]]])
         g = l.backward(x, np.ones_like(x))
+        v, dx, da, db = kan.evaluate_rational(rational(), .5, np.array([1.,.5]), np.array([-.5]))
+        self.assertAlmostEqual(v, 5/3)
+        self.assertAlmostEqual(dx, 16/9)
+        np.testing.assert_allclose(da,[4/3,2/3])
+        np.testing.assert_allclose(db,[-10/9])
         np.testing.assert_allclose(g.input, 1/(1-.5*x)**2, atol=1e-14)
         self.assertEqual(g.denominators.shape, (1, 1, 1))
         g.denominators[:] = 99

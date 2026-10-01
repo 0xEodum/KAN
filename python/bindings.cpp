@@ -63,12 +63,23 @@ py::array_t<double> owned(std::span<const double> values, const Shape& shape) {
 }
 
 Shape coefficient_shape(const kan::Layer& layer) {
-    return {axis(layer.outputs()), axis(layer.inputs()), axis(layer.basis().size)};
+    return {axis(layer.outputs()), axis(layer.inputs()), axis(layer.is_rational() ?
+        layer.rational_config().numerator_degree+1 : layer.basis().size)};
+}
+
+std::size_t numerator_size(const kan::Layer& layer) {
+    return layer.is_rational() ? layer.rational_config().numerator_degree+1 : layer.basis().size;
+}
+Shape denominator_shape(const kan::Layer& layer) {
+    if (!layer.is_rational()) return {0};
+    return {axis(layer.outputs()), axis(layer.inputs()), axis(layer.rational_config().denominator_degree)};
 }
 
 struct LayerGradient {
     kan::LayerGradients value;
     std::size_t batch, inputs, outputs, basis_size;
+    bool rational;
+    std::size_t denominator_size;
 };
 struct NetworkGradient {
     kan::NetworkGradients value;
@@ -77,7 +88,8 @@ struct NetworkGradient {
 };
 
 LayerGradient wrap(kan::LayerGradients value, std::size_t batch, const kan::Layer& layer) {
-    return {std::move(value), batch, layer.inputs(), layer.outputs(), layer.basis().size};
+    return {std::move(value), batch, layer.inputs(), layer.outputs(), numerator_size(layer),
+            layer.is_rational(), layer.is_rational() ? layer.rational_config().denominator_degree : 0};
 }
 
 template <typename Model> std::size_t input_count(const Model& model) {
@@ -129,6 +141,13 @@ struct Resident {
 
 PYBIND11_MODULE(_kan, module) {
     module.doc() = "Optional strict float64 NumPy bindings for KAN";
+    py::class_<kan::RationalConfig>(module, "RationalConfig")
+        .def(py::init<>())
+        .def_readwrite("numerator_degree", &kan::RationalConfig::numerator_degree)
+        .def_readwrite("denominator_degree", &kan::RationalConfig::denominator_degree)
+        .def_readwrite("center", &kan::RationalConfig::center)
+        .def_readwrite("scale", &kan::RationalConfig::scale)
+        .def_readwrite("epsilon", &kan::RationalConfig::epsilon);
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;
 #else
@@ -173,6 +192,16 @@ PYBIND11_MODULE(_kan, module) {
         return py::make_tuple(owned(basis.values, {axis(basis.values.size())}),
                               owned(basis.derivatives, {axis(basis.derivatives.size())}));
     }, py::arg("config"), py::arg("x"));
+    module.def("evaluate_rational", [](kan::RationalConfig config, double x, py::array numerator, py::array denominator) {
+        kan::validate_rational(config);
+        const auto a = shaped(numerator, {axis(config.numerator_degree+1)});
+        const auto b = shaped(denominator, {axis(config.denominator_degree)});
+        kan::RationalEvaluation r;
+        { py::gil_scoped_release release; r=kan::evaluate_rational(config,x,a,b); }
+        return py::make_tuple(r.value,r.input_derivative,
+            owned(r.numerator_derivatives,{axis(r.numerator_derivatives.size())}),
+            owned(r.denominator_derivatives,{axis(r.denominator_derivatives.size())}));
+    }, py::arg("config"), py::arg("x"), py::arg("numerator").noconvert(), py::arg("denominator").noconvert());
 
     py::class_<LayerGradient>(module, "LayerGradients")
         .def_property_readonly("input", [](const LayerGradient& g) {
@@ -189,6 +218,10 @@ PYBIND11_MODULE(_kan, module) {
         })
         .def_property_readonly("log_widths", [](const LayerGradient& g) {
             return owned(g.value.log_widths, {axis(g.value.log_widths.size())});
+        })
+        .def_property_readonly("denominators", [](const LayerGradient& g) {
+            return owned(g.value.denominators, g.rational ?
+                Shape{axis(g.outputs),axis(g.inputs),axis(g.denominator_size)} : Shape{0});
         });
     py::class_<NetworkGradient>(module, "NetworkGradients")
         .def_property_readonly("input", [](const NetworkGradient& g) {
@@ -203,9 +236,16 @@ PYBIND11_MODULE(_kan, module) {
     py::class_<kan::Layer>(module, "Layer")
         .def(py::init<std::size_t, std::size_t, kan::BasisConfig>(),
              py::arg("inputs"), py::arg("outputs"), py::arg("basis"))
+        .def(py::init<std::size_t, std::size_t, kan::RationalConfig>(),
+             py::arg("inputs"), py::arg("outputs"), py::arg("rational"))
         .def_property_readonly("inputs", &kan::Layer::inputs)
         .def_property_readonly("outputs", &kan::Layer::outputs)
         .def_property_readonly("basis", [](const kan::Layer& layer) { return layer.basis(); })
+        .def_property_readonly("is_rational", &kan::Layer::is_rational)
+        .def_property_readonly("rational_config", [](const kan::Layer& layer) { return layer.rational_config(); })
+        .def_property_readonly("denominators", [](const kan::Layer& layer) {
+            return owned(layer.denominators(), denominator_shape(layer));
+        })
         .def_property_readonly("coefficients", [](const kan::Layer& layer) {
             return owned(layer.coefficients(), coefficient_shape(layer));
         })
@@ -218,6 +258,12 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release;
             layer.set_parameters(c, b);
         }, py::arg("coefficients").noconvert(), py::arg("bias").noconvert())
+        .def("set_rational_parameters", [](kan::Layer& layer, py::array coefficients, py::array denominators, py::array bias) {
+            const auto c = shaped(coefficients, coefficient_shape(layer));
+            const auto d = shaped(denominators, denominator_shape(layer));
+            const auto b = shaped(bias, {axis(layer.outputs())});
+            py::gil_scoped_release release; layer.set_rational_parameters(c, d, b);
+        }, py::arg("coefficients").noconvert(), py::arg("denominators").noconvert(), py::arg("bias").noconvert())
         .def("set_rbf_parameters", [](kan::Layer& layer, py::array centers, py::array log_widths) {
             const auto c=shaped(centers,{axis(layer.basis().size)});
             const auto w=shaped(log_widths,{axis(layer.basis().size)});
@@ -239,7 +285,8 @@ PYBIND11_MODULE(_kan, module) {
              py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
         .def("sgd", [](kan::Layer& layer, const LayerGradient& gradient, double learning_rate) {
             if (gradient.inputs != layer.inputs() || gradient.outputs != layer.outputs() ||
-                gradient.basis_size != layer.basis().size)
+                gradient.basis_size != numerator_size(layer) || gradient.rational != layer.is_rational() ||
+                gradient.denominator_size != (layer.is_rational() ? layer.rational_config().denominator_degree : 0))
                 throw py::value_error("gradient topology mismatch");
             py::gil_scoped_release release;
             layer.sgd(gradient.value, learning_rate);
@@ -272,7 +319,8 @@ PYBIND11_MODULE(_kan, module) {
                 const auto& actual = model.layers()[i];
                 const auto& expected = gradient.topology[i];
                 if (actual.inputs() != expected.inputs() || actual.outputs() != expected.outputs() ||
-                    actual.basis().size != expected.basis().size)
+                    numerator_size(actual) != numerator_size(expected) || actual.is_rational() != expected.is_rational() ||
+                    (actual.is_rational() && actual.rational_config().denominator_degree != expected.rational_config().denominator_degree))
                     throw py::value_error("gradient topology mismatch");
             }
             py::gil_scoped_release release;
