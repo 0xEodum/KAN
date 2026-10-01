@@ -1,0 +1,24 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,0.744,0.614,0.851
+m2,m1_host_full,4,0.990,0.943,1.034
+m2,m2_resident_full,24,0.967,0.615,2.160
+m2,m2_transfer_full,24,0.929,0.484,1.571
+m3,cpu_full,12,0.771,0.662,0.881
+m3,m3_resident_full,12,0.912,0.392,1.055
+m3,m3_transfer_full,12,0.979,0.865,1.033
+m4,cpu_full,12,1.004,0.976,1.020
+m4,m4_resident_full,12,0.998,0.842,1.077
+m4,m4_transfer_full,12,1.006,0.959,1.094
+checksum mismatches: 12
+   ('m3', '0', 'bspline', '16x24x8', '32', 'cpu_full')
+   ('m3', '0', 'bspline', '16x24x8', '32', 'm3_resident_full')
+   ('m3', '0', 'bspline', '16x24x8', '32', 'm3_transfer_full')
+   ('m3', '1', 'bspline', '16x24x8', '1024', 'cpu_full')
+   ('m3', '1', 'bspline', '16x24x8', '1024', 'm3_resident_full')
+   ('m3', '1', 'bspline', '16x24x8', '1024', 'm3_transfer_full')
+   ('m3', '2', 'bspline', '64x64x32x16', '32', 'cpu_full')
+   ('m3', '2', 'bspline', '64x64x32x16', '32', 'm3_resident_full')
+   ('m3', '2', 'bspline', '64x64x32x16', '32', 'm3_transfer_full')
+   ('m3', '3', 'bspline', '64x64x32x16', '1024', 'cpu_full')
+   ('m3', '3', 'bspline', '64x64x32x16', '1024', 'm3_resident_full')
+   ('m3', '3', 'bspline', '64x64x32x16', '1024', 'm3_transfer_full')

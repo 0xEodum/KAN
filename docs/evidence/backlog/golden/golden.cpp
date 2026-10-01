@@ -11,6 +11,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 using namespace kan;
@@ -43,70 +44,28 @@ void guarded(const std::string& label, const std::function<void()>& body) {
     }
 }
 
-BasisConfig polynomial(BasisKind kind, std::size_t size, double alpha = 0, double beta = 0) {
-    BasisConfig c;
-    c.kind = kind;
-    c.size = size;
-    c.alpha = alpha;
-    c.beta = beta;
-    return c;
-}
-
-BasisConfig fourier(std::size_t size, double frequency) {
-    BasisConfig c;
-    c.kind = BasisKind::Fourier;
-    c.size = size;
-    c.frequency = frequency;
-    return c;
-}
-
-BasisConfig rbf(std::vector<double> centers, double width) {
-    BasisConfig c;
-    c.kind = BasisKind::GaussianRbf;
-    c.size = centers.size();
-    c.centers = std::move(centers);
-    c.width = width;
-    return c;
-}
-
+// Fixture constructors. Typed configurations since R1; the dumped fixtures and
+// their order are unchanged, so dumps stay comparable across the refactor.
+BasisConfig fourier(std::size_t size, double frequency) { return FourierConfig{size, frequency}; }
+BasisConfig rbf(std::vector<double> centers, double width) { return GaussianRbfConfig{std::move(centers), width}; }
 BasisConfig trainable_rbf(std::vector<double> centers, std::vector<double> log_widths) {
-    BasisConfig c;
-    c.kind = BasisKind::GaussianRbf;
-    c.size = centers.size();
-    c.centers = std::move(centers);
-    c.trainable_rbf = true;
-    c.log_widths = std::move(log_widths);
-    return c;
+    return TrainableRbfConfig{std::move(centers), std::move(log_widths)};
 }
-
 BasisConfig wavelet(std::vector<double> centers, std::vector<double> scales) {
-    BasisConfig c;
-    c.kind = BasisKind::MexicanHat;
-    c.size = centers.size();
-    c.centers = std::move(centers);
-    c.scales = std::move(scales);
-    return c;
+    return MexicanHatConfig{std::move(centers), std::move(scales)};
 }
-
-BasisConfig spline(std::size_t degree, std::vector<double> knots) {
-    BasisConfig c;
-    c.kind = BasisKind::BSpline;
-    c.degree = degree;
-    c.size = knots.size() - degree - 1;
-    c.knots = std::move(knots);
-    return c;
-}
+BasisConfig spline(std::size_t degree, std::vector<double> knots) { return BSplineConfig{degree, std::move(knots)}; }
 
 std::vector<std::pair<std::string, BasisConfig>> basis_fixtures() {
     return {
-        {"chebyshev7", polynomial(BasisKind::Chebyshev, 7)},
-        {"chebyshev1", polynomial(BasisKind::Chebyshev, 1)},
-        {"legendre6", polynomial(BasisKind::Legendre, 6)},
-        {"hermite6", polynomial(BasisKind::Hermite, 6)},
-        {"jacobi_asym", polynomial(BasisKind::Jacobi, 6, 0.5, -0.3)},
-        {"jacobi_sum_m1", polynomial(BasisKind::Jacobi, 5, -0.5, -0.5)},
-        {"jacobi_near_bound", polynomial(BasisKind::Jacobi, 5, -0.999999, 3.5)},
-        {"jacobi_huge", polynomial(BasisKind::Jacobi, 4, 1e300, 1e300)},
+        {"chebyshev7", ChebyshevConfig{7}},
+        {"chebyshev1", ChebyshevConfig{1}},
+        {"legendre6", LegendreConfig{6}},
+        {"hermite6", HermiteConfig{6}},
+        {"jacobi_asym", JacobiConfig{6, 0.5, -0.3}},
+        {"jacobi_sum_m1", JacobiConfig{5, -0.5, -0.5}},
+        {"jacobi_near_bound", JacobiConfig{5, -0.999999, 3.5}},
+        {"jacobi_huge", JacobiConfig{4, 1e300, 1e300}},
         {"fourier5", fourier(5, 1.3)},
         {"fourier_huge", fourier(3, 1e308)},
         {"rbf", rbf({-1, -0.3, 0.4, 1.2}, 0.7)},
@@ -219,9 +178,9 @@ void dump_network(const char* name, const Network& network, const std::vector<do
             hex("c", layer.coefficients());
             hex("b", layer.bias());
             hex("den", layer.denominators());
-            if (!layer.is_rational() && layer.basis().trainable_rbf) {
-                hex("cen", layer.basis().centers);
-                hex("lw", layer.basis().log_widths);
+            if (const auto* trainable = layer.is_rational() ? nullptr : std::get_if<TrainableRbfConfig>(&layer.basis())) {
+                hex("cen", trainable->centers);
+                hex("lw", trainable->log_widths);
             }
         }
     });
@@ -230,16 +189,16 @@ void dump_network(const char* name, const Network& network, const std::vector<do
 void dump_resident() {
     RationalConfig rational{3, 2, 0.1, 1.3, 1e-8};
     const Network mixed({
-        seeded(Layer(3, 4, polynomial(BasisKind::Chebyshev, 5)), 0.1),
+        seeded(Layer(3, 4, ChebyshevConfig{5}), 0.1),
         seeded(Layer(4, 3, spline(3, {-1, -1, -1, -1, -0.5, 0, 0, 0.5, 1, 1, 1, 1})), 0.2),
         seeded(Layer(3, 3, trainable_rbf({-1, 0, 0.8}, {-0.5, 0.1, -0.2})), 0.3),
         seeded(Layer(3, 2, rational), 0.4),
         seeded(Layer(2, 3, wavelet({0, 0.5}, {1, 0.25})), 0.5),
-        seeded(Layer(3, 2, polynomial(BasisKind::Jacobi, 5, 0.5, -0.3)), 0.6),
+        seeded(Layer(3, 2, JacobiConfig{5, 0.5, -0.3}), 0.6),
         seeded(Layer(2, 2, fourier(5, 1.3)), 0.7),
         seeded(Layer(2, 2, rbf({-1, 0, 1}, 0.7)), 0.8),
-        seeded(Layer(2, 1, polynomial(BasisKind::Hermite, 4)), 0.9),
-        seeded(Layer(1, 2, polynomial(BasisKind::Legendre, 4)), 1.0),
+        seeded(Layer(2, 1, HermiteConfig{4}), 0.9),
+        seeded(Layer(1, 2, LegendreConfig{4}), 1.0),
     });
     std::vector<double> x(6 * 3);
     for (std::size_t k = 0; k < x.size(); ++k) x[k] = 0.9 * std::sin(0.61 * static_cast<double>(k));
@@ -248,10 +207,10 @@ void dump_resident() {
     x[2] = 0;
     dump_network("mixed", mixed, x, 6, 0.1);
 
-    const Network endpoints({seeded(Layer(2, 2, polynomial(BasisKind::Jacobi, 6, 0.5, -0.3)), 0.2),
+    const Network endpoints({seeded(Layer(2, 2, JacobiConfig{6, 0.5, -0.3}), 0.2),
                              seeded(Layer(2, 1, spline(2, {-1, -1, -1, 0, 1, 1, 1})), 0.3)});
     dump_network("endpoints", endpoints, {-1, 1, 1, -1, 0.5, -0.5}, 3, 0);
-    dump_network("hermite_overflow", Network({seeded(Layer(1, 1, polynomial(BasisKind::Hermite, 8)), 0.1)}),
+    dump_network("hermite_overflow", Network({seeded(Layer(1, 1, HermiteConfig{8}), 0.1)}),
                  {1e300}, 1, 0);
     dump_network("rational_pole", Network({[] {
                      Layer l(1, 1, RationalConfig{1, 1, 0, 1, 1e-8});

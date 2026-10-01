@@ -1,0 +1,300 @@
+﻿basis_config_test.cpp
+tests\basis_config_test.cpp(10): error C2039: 'ChebyshevConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(10): error C2065: 'ChebyshevConfig': undeclared identifier
+tests\basis_config_test.cpp(11): error C2039: 'LegendreConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(11): error C2065: 'LegendreConfig': undeclared identifier
+tests\basis_config_test.cpp(12): error C2039: 'HermiteConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(12): error C2065: 'HermiteConfig': undeclared identifier
+tests\basis_config_test.cpp(13): error C2039: 'JacobiConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(13): error C2065: 'JacobiConfig': undeclared identifier
+tests\basis_config_test.cpp(14): error C2039: 'FourierConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(14): error C2065: 'FourierConfig': undeclared identifier
+tests\basis_config_test.cpp(15): error C2039: 'GaussianRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(15): error C2065: 'GaussianRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(16): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(16): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(17): error C2039: 'BSplineConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(17): error C2065: 'BSplineConfig': undeclared identifier
+tests\basis_config_test.cpp(18): error C2039: 'MexicanHatConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(18): error C2065: 'MexicanHatConfig': undeclared identifier
+tests\basis_config_test.cpp(21): error C2039: 'basis_size': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(21): error C3861: 'basis_size': identifier not found
+tests\basis_config_test.cpp(30): error C2143: syntax error: missing ';' before ':'
+tests\basis_config_test.cpp(31): error C2143: syntax error: missing ';' before '{'
+tests\basis_config_test.cpp(31): error C2143: syntax error: missing ')' before '{'
+tests\basis_config_test.cpp(31): error C2039: 'ChebyshevConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(31): error C2065: 'ChebyshevConfig': undeclared identifier
+tests\basis_config_test.cpp(31): error C2039: 'LegendreConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(31): error C2065: 'LegendreConfig': undeclared identifier
+tests\basis_config_test.cpp(32): error C2039: 'HermiteConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(32): error C2065: 'HermiteConfig': undeclared identifier
+tests\basis_config_test.cpp(32): error C2039: 'JacobiConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(32): error C2065: 'JacobiConfig': undeclared identifier
+tests\basis_config_test.cpp(33): error C2039: 'FourierConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(33): error C2065: 'FourierConfig': undeclared identifier
+tests\basis_config_test.cpp(33): error C2143: syntax error: missing ';' before '}'
+tests\basis_config_test.cpp(33): error C2059: syntax error: ')'
+tests\basis_config_test.cpp(34): error C2065: 'config': undeclared identifier
+tests\basis_config_test.cpp(35): error C2039: 'basis_size': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(35): error C2065: 'config': undeclared identifier
+tests\basis_config_test.cpp(35): error C3861: 'basis_size': identifier not found
+tests\basis_config_test.cpp(37): error C2039: 'ChebyshevConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(37): error C2065: 'ChebyshevConfig': undeclared identifier
+tests\basis_config_test.cpp(37): error C2672: 'std::holds_alternative': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1148): note: could be 'bool std::holds_alternative(const std::variant<_Types...> &) noexcept'
+tests\basis_config_test.cpp(37): note: 'std::holds_alternative': invalid template argument for '_Ty', type expected
+tests\basis_config_test.cpp(41): error C2143: syntax error: missing ';' before ':'
+tests\basis_config_test.cpp(42): error C2143: syntax error: missing ';' before '{'
+tests\basis_config_test.cpp(42): error C2143: syntax error: missing ')' before '{'
+tests\basis_config_test.cpp(42): error C2039: 'GaussianRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(42): error C2065: 'GaussianRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(42): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(42): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(43): error C2039: 'MexicanHatConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(43): error C2065: 'MexicanHatConfig': undeclared identifier
+tests\basis_config_test.cpp(44): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(44): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(45): error C2039: 'MexicanHatConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(45): error C2065: 'MexicanHatConfig': undeclared identifier
+tests\basis_config_test.cpp(45): error C2143: syntax error: missing ';' before '}'
+tests\basis_config_test.cpp(45): error C2059: syntax error: ')'
+tests\basis_config_test.cpp(46): error C2065: 'bad': undeclared identifier
+tests\basis_config_test.cpp(50): error C2039: 'BSplineConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(50): error C2065: 'BSplineConfig': undeclared identifier
+tests\basis_config_test.cpp(51): error C2039: 'basis_size': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(51): error C3861: 'basis_size': identifier not found
+tests\basis_config_test.cpp(57): error C2039: 'GaussianRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(57): error C2065: 'GaussianRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(60): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(60): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(64): error C2039: 'GaussianRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(64): error C2065: 'GaussianRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(73): error C2039: 'BSplineConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(73): error C2065: 'BSplineConfig': undeclared identifier
+tests\basis_config_test.cpp(74): error C2039: 'BSplineConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(74): error C2065: 'BSplineConfig': undeclared identifier
+tests\basis_config_test.cpp(74): error C2672: 'std::holds_alternative': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1148): note: could be 'bool std::holds_alternative(const std::variant<_Types...> &) noexcept'
+tests\basis_config_test.cpp(74): note: 'std::holds_alternative': invalid template argument for '_Ty', type expected
+tests\basis_config_test.cpp(77): error C2039: 'BSplineConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(77): error C2065: 'BSplineConfig': undeclared identifier
+tests\basis_config_test.cpp(77): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: could be 'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: or       'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(77): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(77): note: a non-constant (sub-)expression was encountered
+tests\basis_config_test.cpp(77): error C2530: 'refined': references must be initialized
+tests\basis_config_test.cpp(78): error C3536: 'refined': cannot be used before it is initialized
+tests\basis_config_test.cpp(79): error C2039: 'basis_size': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(79): error C3861: 'basis_size': identifier not found
+tests\basis_config_test.cpp(82): error C2039: 'GaussianRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(82): error C2065: 'GaussianRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(86): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(86): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(88): error C2039: 'TrainableRbfConfig': is not a member of 'kan'
+C:\Users\Yu\AppData\Local\Temp\kan-golden\head-include\include\kan/layer.hpp(9): note: see declaration of 'kan'
+tests\basis_config_test.cpp(88): error C2065: 'TrainableRbfConfig': undeclared identifier
+tests\basis_config_test.cpp(88): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: could be 'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: or       'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\basis_config_test.cpp(88): note: expression did not evaluate to a constant
+tests\basis_config_test.cpp(88): note: a non-constant (sub-)expression was encountered
+tests\basis_config_test.cpp(88): error C2530: 'rbf': references must be initialized
+tests\basis_config_test.cpp(89): error C3536: 'rbf': cannot be used before it is initialized
