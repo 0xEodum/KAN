@@ -32,7 +32,7 @@ struct Basis {
     std::size_t degree;
     bool trainable;
 };
-__device__ void report(double value, int* status) { if (!isfinite(value)) atomicExch(status, 1); }
+__device__ void report(double value, int* status) { if (!isfinite(value)) atomicOr(status, 1); }
 __device__ double interval_ratio(double nr, double nl, double right, double left) {
     const double denominator = right-left;
     if (denominator == 0) return 0;
@@ -253,11 +253,91 @@ __global__ void candidate_kernel(const double* parameters, const double* gradien
         next[i] = parameters[i] - rate*gradients[i]; report(next[i], status);
     }
 }
+// Distinct rational execution: caches are edge-major to expose contiguous
+// samples to nonlinear parameter reductions. All caches live in the arena.
+__global__ void rational_forward_kernel(const double* input,const double* a,const double* b,const double* bias,
+                                        double* values,double* inverse,double* derivatives,double* output,
+                                        std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,
+                                        RationalConfig config,int* status) {
+    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    const auto m=config.numerator_degree,n=config.denominator_degree;
+    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<batch*outputs;index+=stride) {
+        const auto sample=index/outputs,o=index%outputs;double sum=bias[o];
+        for(std::size_t i=0;i<inputs;++i) {
+            const auto edge=o*inputs+i,cache=edge*capacity+sample;
+            const double distance=input[sample*inputs+i]-config.center,z=distance/config.scale;
+            report(distance,status);report(z,status);
+            double p=a[edge*(m+1)+m],dp=0,q=1,dq=0,mag=1;
+            for(std::size_t k=m;k>0;--k) {
+                dp=dp*z+p;p=p*z+a[edge*(m+1)+k-1];report(dp,status);report(p,status);
+            }
+            if(n) {
+                q=b[edge*n+n-1];mag=fabs(q);
+                for(std::size_t k=n;k>1;--k) {
+                    dq=dq*z+q;q=q*z+b[edge*n+k-2];mag=mag*fabs(z)+fabs(b[edge*n+k-2]);
+                    report(q,status);report(dq,status);report(mag,status);
+                }
+                dq=dq*z+q;q=q*z+1;mag=mag*fabs(z)+1;report(q,status);report(dq,status);report(mag,status);
+            }
+            if(isfinite(q)&&isfinite(mag)&&fabs(q)<=config.epsilon*mag) {
+                atomicOr(status,2);values[cache]=inverse[cache]=derivatives[cache]=0;continue;
+            }
+            const double inv=1/q,r=p/q,dx=(dp/q-r*(dq/q))/config.scale;
+            report(inv,status);report(r,status);report(dx,status);
+            // Derivative powers are part of the nonlinear contract, including
+            // zero upstream. Detect unusable parameter VJPs during forward.
+            double power=1;
+            for(std::size_t k=0;k<=(m>n?m:n);++k) {
+                if(k){power*=z;report(power,status);}
+                if(k<=m)report(power/q,status);
+                if(k&&k<=n)report(-r*(power/q),status);
+            }
+            values[cache]=r;inverse[cache]=inv;derivatives[cache]=dx;sum+=r;report(sum,status);
+        }
+        output[index]=sum;report(sum,status);
+    }
+}
+__global__ void rational_input_kernel(const double* derivatives,const double* upstream,double* input_gradient,
+                                      std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,int* status) {
+    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<batch*inputs;index+=stride) {
+        const auto sample=index/inputs,i=index%inputs;double sum=0;
+        for(std::size_t o=0;o<outputs;++o)sum+=upstream[sample*outputs+o]*derivatives[(o*inputs+i)*capacity+sample];
+        input_gradient[index]=sum;report(sum,status);
+    }
+}
+__global__ void rational_parameter_kernel(const double* input,const double* values,const double* inverse,const double* upstream,
+                                          const double* parameters,double* gradients,std::size_t batch,std::size_t capacity,
+                                          std::size_t inputs,std::size_t outputs,RationalConfig config,double lambda,int* status) {
+    const auto m=config.numerator_degree+1,n=config.denominator_degree,acount=inputs*outputs*m;
+    const auto total=acount+outputs+inputs*outputs*n;
+    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<total;index+=stride) {
+        const bool numerator=index<acount,bias=index>=acount&&index<acount+outputs;
+        const auto relative=numerator?index:bias?index-acount:index-acount-outputs;
+        const auto edge=bias?0:relative/(numerator?m:n),k=bias?0:relative%(numerator?m:n)+(numerator?0:1);
+        const auto o=bias?relative:edge/inputs,i=edge%inputs;double sum=0;
+        for(std::size_t sample=0;sample<batch;++sample) {
+            double derivative=1;
+            if(!bias) {
+                const double z=(input[sample*inputs+i]-config.center)/config.scale;double power=1;
+                for(std::size_t j=0;j<k;++j)power*=z;
+                derivative=power*inverse[edge*capacity+sample];
+                if(!numerator)derivative*=-values[edge*capacity+sample];
+            }
+            const double term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
+        }
+        if(numerator)sum+=lambda*parameters[index];gradients[index]=sum;report(sum,status);
+    }
+}
+
 struct Layout {
     std::size_t inputs, outputs, terms, coefficients, parameter_offset;
     std::size_t values, derivatives, centers, log_derivatives=0, scales=0, knots=0, nonlinear_partials=0;
     bool trainable=false;
     unsigned partial_tiles=1;
+    bool rational=false;
+    std::size_t denominator_count=0,inverse=0;
 };
 }
 
@@ -283,12 +363,16 @@ struct ResidentNetwork::Impl {
         };
         for (const auto& layer : model.layers()) {
             finite(layer.coefficients()); finite(layer.bias());
-            const auto extra=layer.basis().trainable_rbf?product(layer.basis().size,2):0;
+            const bool rational=layer.is_rational();
+            const auto terms=rational?layer.rational_config().numerator_degree+1:layer.basis().size;
+            const auto extra=rational?layer.denominators().size():layer.basis().trainable_rbf?product(terms,2):0;
             const auto count=layer.coefficients().size()+layer.outputs();
             if (count>std::vector<double>().max_size() || extra>std::vector<double>().max_size()-count || count+extra>std::vector<double>().max_size()-parameter_count)
                 throw std::overflow_error("resident parameter size overflow");
-            layers.push_back({layer.inputs(), layer.outputs(), layer.basis().size, layer.coefficients().size(), parameter_count, 0, 0, 0});
-            layers.back().trainable=layer.basis().trainable_rbf;
+            layers.push_back({layer.inputs(), layer.outputs(), terms, layer.coefficients().size(), parameter_count, 0, 0, 0});
+            layers.back().rational=rational;
+            layers.back().denominator_count=rational?extra:0;
+            layers.back().trainable=!rational&&layer.basis().trainable_rbf;
             parameter_count += count+extra;
         }
         parameters = reserve(parameter_count); gradients = reserve(parameter_count); candidates = reserve(parameter_count);
@@ -298,6 +382,11 @@ struct ResidentNetwork::Impl {
             auto& layout = layers[j];
             activation.push_back(reserve(product(capacity, layout.outputs)));
             upstream.push_back(reserve(product(capacity, layout.outputs)));
+            if(layout.rational) {
+                const auto count=product(product(capacity,layout.inputs),layout.outputs);
+                layout.values=reserve(count);layout.derivatives=reserve(count);layout.inverse=reserve(count);
+                continue;
+            }
             layout.values = reserve(product(product(capacity, layout.inputs), layout.terms));
             layout.derivatives = reserve(product(product(capacity, layout.inputs), layout.terms));
             const auto& basis=model.layers()[j].basis();
@@ -322,6 +411,10 @@ struct ResidentNetwork::Impl {
                 const auto& layout = layers[j]; const auto& layer = model.layers()[j];
                 upload(ptr(parameters+layout.parameter_offset), layer.coefficients());
                 upload(ptr(parameters+layout.parameter_offset+layout.coefficients), layer.bias());
+                if(layout.rational) {
+                    upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs),layer.denominators());
+                    continue;
+                }
                 const auto& basis=layer.basis();
                 if(layout.trainable) {
                     upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs),basis.centers);
@@ -355,7 +448,8 @@ struct ResidentNetwork::Impl {
         int value = 0;
         check(cudaMemcpyAsync(&value, status, sizeof(int), cudaMemcpyDeviceToHost, stream), "resident status download");
         sync();
-        if (value) throw std::overflow_error("nonfinite resident numerical result");
+        if (value&1) throw std::overflow_error("nonfinite resident numerical result");
+        if (value&2) throw std::domain_error("unsafe resident rational denominator");
     }
 };
 ResidentNetwork::ResidentNetwork(const Network& network, std::size_t capacity) : impl_(std::make_unique<Impl>(network, capacity)) {}
@@ -385,7 +479,15 @@ void ResidentNetwork::forward() {
     if (!s.has_input) throw std::logic_error("resident input has not been uploaded");
     s.has_forward = s.has_backward = false; s.reset_status();
     for (std::size_t j = 0; j < s.layers.size() && s.batch; ++j) {
-        const auto& l = s.layers[j]; const auto& b = s.model.layers()[j].basis();
+        const auto& l = s.layers[j];
+        if(l.rational) {
+            rational_forward_kernel<<<blocks(s.batch*l.outputs),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(s.parameters+l.parameter_offset),
+                s.ptr(s.parameters+l.parameter_offset+l.coefficients+l.outputs),s.ptr(s.parameters+l.parameter_offset+l.coefficients),
+                s.ptr(l.values),s.ptr(l.inverse),s.ptr(l.derivatives),s.ptr(s.activation[j+1]),
+                s.batch,s.capacity,l.inputs,l.outputs,s.model.layers()[j].rational_config(),s.status);
+            check(cudaGetLastError(),"resident rational forward launch");continue;
+        }
+        const auto& b = s.model.layers()[j].basis();
         const auto nonlinear=s.parameters+l.parameter_offset+l.coefficients+l.outputs;
         Basis basis{b.kind,b.size,b.alpha,b.beta,b.frequency,b.width,
                     s.ptr(l.trainable?nonlinear:l.centers),s.ptr(nonlinear+l.terms),
@@ -404,6 +506,17 @@ void ResidentNetwork::backward(double coefficient_l2) {
     s.has_backward = false; s.reset_status();
     for (std::size_t j = s.layers.size(); j-- > 0;) {
         const auto& l = s.layers[j];
+        if(l.rational) {
+            if(s.batch) {
+                rational_input_kernel<<<blocks(s.batch*l.inputs),256,0,s.stream>>>(s.ptr(l.derivatives),s.ptr(s.upstream[j+1]),s.ptr(s.upstream[j]),
+                    s.batch,s.capacity,l.inputs,l.outputs,s.status);
+                check(cudaGetLastError(),"resident rational input gradient launch");
+            }
+            rational_parameter_kernel<<<blocks(l.coefficients+l.outputs+l.denominator_count),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(l.values),s.ptr(l.inverse),
+                s.ptr(s.upstream[j+1]),s.ptr(s.parameters+l.parameter_offset),s.ptr(s.gradients+l.parameter_offset),s.batch,s.capacity,l.inputs,l.outputs,
+                s.model.layers()[j].rational_config(),coefficient_l2,s.status);
+            check(cudaGetLastError(),"resident rational parameter gradient launch");continue;
+        }
         if (s.batch) {
             input_kernel<<<blocks(s.batch*l.inputs), 256, 0, s.stream>>>(s.ptr(l.derivatives), s.ptr(s.parameters+l.parameter_offset), s.ptr(s.upstream[j+1]), s.ptr(s.upstream[j]), s.batch*l.inputs, l.inputs, l.outputs, l.terms, s.status);
             check(cudaGetLastError(), "resident input gradient launch");
@@ -456,6 +569,10 @@ NetworkGradients ResidentNetwork::download_gradients() {
         g.input.resize(product(s.batch, l.inputs)); g.coefficients.resize(l.coefficients); g.bias.resize(l.outputs);
         s.download(g.input, s.ptr(s.upstream[j])); s.download(g.coefficients, s.ptr(s.gradients+l.parameter_offset));
         s.download(g.bias, s.ptr(s.gradients+l.parameter_offset+l.coefficients));
+        if(l.rational) {
+            g.denominators.resize(l.denominator_count);
+            s.download(g.denominators,s.ptr(s.gradients+l.parameter_offset+l.coefficients+l.outputs));
+        }
         if(l.trainable) {
             g.centers.resize(l.terms);g.log_widths.resize(l.terms);
             s.download(g.centers,s.ptr(s.gradients+l.parameter_offset+l.coefficients+l.outputs));
@@ -469,6 +586,11 @@ Network ResidentNetwork::download_parameters() {
     for (std::size_t j = 0; j < layers.size(); ++j) {
         const auto& l = s.layers[j]; std::vector<double> coefficients(l.coefficients), bias(l.outputs);
         s.download(coefficients, s.ptr(s.parameters+l.parameter_offset)); s.download(bias, s.ptr(s.parameters+l.parameter_offset+l.coefficients));
+        if(l.rational) {
+            std::vector<double> denominators(l.denominator_count);
+            s.download(denominators,s.ptr(s.parameters+l.parameter_offset+l.coefficients+l.outputs));
+            s.sync();layers[j].set_rational_parameters(coefficients,denominators,bias);continue;
+        }
         s.sync(); layers[j].set_parameters(coefficients, bias);
         if(l.trainable) {
             std::vector<double> centers(l.terms),widths(l.terms);
