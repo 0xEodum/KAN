@@ -1,0 +1,7 @@
+PASS independent scalar identities, degree pairs 0..16: 1445
+PASS strict scalar array interfaces
+PASS mixed rational/trainable-RBF/rational input and 95 parameter finite differences and snapshots; GPU five-step trajectory: True
+PASS representable denominator VJPs through zero/subnormal powers, unequal order and negative z
+PASS high dynamic range finite quotient/VJPs
+PASS backward-only overflow invalidation/recovery and unsafe SGD candidate next-execution guard
+PASS warp sample tails1/31/32/33/37/0/41,62-parameter block tail,capacity43 and allocation invariance

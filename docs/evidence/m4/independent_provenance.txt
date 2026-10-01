@@ -1,0 +1,4 @@
+PASS CPU provenance: all source/CSV/executable/snapshot hashes,392416 finite doubles bit-identical, six-sample pooled medians/IQRs
+PASS GPU provenance: raw balanced source/fixture/mode rows,14 samples per source/mode, pooled medians/IQRs, VJP tolerance, allocations2
+PASS M2/M3/M4 full-call numerical sweeps:76/36/36 rows, tolerances and resident allocation counts
+PASS final M4 manifest: every recorded source, retained evidence and local executable/trace hash/size
