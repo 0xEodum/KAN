@@ -45,3 +45,28 @@ resident region, validates the entire network, then copies device-to-device.
 
 Performance acceptance is tracked in the separate matched benchmark evidence;
 this numerical baseline makes no speedup claim by itself.
+
+## Profile-guided SGD commit improvement
+
+The resident baseline profile identified input-gradient contractions (36.6%)
+and parameter-gradient contractions (33.6%) as the largest GPU kernel costs,
+with cached basis evaluation now 5.5%. This resolves the M1 repeated-basis
+coefficient bottleneck (71.9% in its profile) without changing reduction order.
+The remaining API trace includes synchronous error checks required by the
+numerical contract; hardware-counter access was denied, so no claim of maximum
+GPU utilization is made.
+
+After the frozen baseline, SGD's device-to-device parameter commit copy and
+additional synchronization were replaced by swapping the active/candidate arena
+offsets. Candidate execution and whole-network validation already finish before
+the swap, preserving atomicity and synchronous semantics with no allocation.
+Matched balanced ABBA measurements found modest steady full-call improvements
+of 6.34% for case 0 and 3.35% for case 1. The larger case's 1.41% change was
+comparable to noise; transfer-inclusive timings do not establish a general gain.
+See [frozen benchmark evidence](M2-benchmark.md) for raw samples, protocol,
+profiling, and the separate baseline CPU/M1/resident comparisons.
+
+After this change, `resident_test` passed 5/5, independent `resident_review_test`
+4/4 and unchanged M1 `cuda_test` 9/9. The atomic-update test was strengthened:
+an earlier layer now has a real nonzero candidate update, which must remain
+hidden when a later layer overflows; a subsequent valid retry updates it.

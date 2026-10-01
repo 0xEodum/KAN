@@ -291,8 +291,9 @@ void ResidentNetwork::sgd(double learning_rate) {
     s.reset_status();
     candidate_kernel<<<blocks(s.parameter_count), 256, 0, s.stream>>>(s.ptr(s.parameters), s.ptr(s.gradients), s.ptr(s.candidates), s.parameter_count, learning_rate, s.status);
     s.result(); // All layers validated before any parameter mutation.
-    check(cudaMemcpyAsync(s.ptr(s.parameters), s.ptr(s.candidates), s.parameter_count*sizeof(double), cudaMemcpyDeviceToDevice, s.stream), "resident SGD commit");
-    s.sync();
+    // Both regions are permanently reserved and candidate execution is complete.
+    // Changing the active region commits the whole network without a tensor copy.
+    std::swap(s.parameters, s.candidates);
     s.has_forward = s.has_backward = false;
 }
 std::vector<double> ResidentNetwork::download_output() {
