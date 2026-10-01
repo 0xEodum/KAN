@@ -20,7 +20,9 @@ std::size_t product(std::size_t a, std::size_t b) {
 void finite(std::span<const double> values) {
     for (double x : values) if (!std::isfinite(x)) throw std::invalid_argument("resident data must be finite");
 }
-unsigned blocks(std::size_t count) { return static_cast<unsigned>(std::min<std::size_t>((count - 1) / 256 + 1, 65535)); }
+unsigned blocks(std::size_t count,std::size_t work_per_block=256) {
+    return static_cast<unsigned>(std::min<std::size_t>((count-1)/work_per_block+1,65535));
+}
 struct Basis {
     BasisKind kind;
     std::size_t terms;
@@ -337,13 +339,17 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
                                           std::size_t inputs,std::size_t outputs,RationalConfig config,double lambda,int* status) {
     const auto m=config.numerator_degree+1,n=config.denominator_degree,acount=inputs*outputs*m;
     const auto total=acount+outputs+inputs*outputs*n;
-    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<total;index+=stride) {
+    // A full warp owns each parameter and scans contiguous edge-major
+    // cache samples. Warp reduction preserves bounded launches and avoids
+    // atomics or execution scratch allocations.
+    const auto lane=threadIdx.x%32;
+    const auto stride=static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
+    for(auto index=(static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32;index<total;index+=stride) {
         const bool numerator=index<acount,bias=index>=acount&&index<acount+outputs;
         const auto relative=numerator?index:bias?index-acount:index-acount-outputs;
         const auto edge=bias?0:relative/(numerator?m:n),k=bias?0:relative%(numerator?m:n)+(numerator?0:1);
         const auto o=bias?relative:edge/inputs,i=edge%inputs;double sum=0;
-        for(std::size_t sample=0;sample<batch;++sample) {
+        for(std::size_t sample=lane;sample<batch;sample+=32) {
             double derivative=1;
             if(!bias) {
                 const double z=(input[sample*inputs+i]-config.center)/config.scale;double power=1;
@@ -353,7 +359,11 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
             }
             const double term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
         }
-        if(numerator)sum+=lambda*parameters[index];gradients[index]=sum;report(sum,status);
+        report(sum,status);
+        for(unsigned offset=16;offset;offset/=2)sum+=__shfl_down_sync(0xffffffffU,sum,offset);
+        if(lane==0) {
+            if(numerator)sum+=lambda*parameters[index];gradients[index]=sum;report(sum,status);
+        }
     }
 }
 
@@ -538,7 +548,7 @@ void ResidentNetwork::backward(double coefficient_l2) {
                     s.batch,s.capacity,l.inputs,l.outputs,s.status);
                 check(cudaGetLastError(),"resident rational input gradient launch");
             }
-            rational_parameter_kernel<<<blocks(l.coefficients+l.outputs+l.denominator_count),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(l.values),s.ptr(l.denominator_values),
+            rational_parameter_kernel<<<blocks(l.coefficients+l.outputs+l.denominator_count,8),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(l.values),s.ptr(l.denominator_values),
                 s.ptr(s.upstream[j+1]),s.ptr(s.parameters+l.parameter_offset),s.ptr(s.gradients+l.parameter_offset),s.batch,s.capacity,l.inputs,l.outputs,
                 s.model.layers()[j].rational_config(),coefficient_l2,s.status);
             check(cudaGetLastError(),"resident rational parameter gradient launch");continue;
