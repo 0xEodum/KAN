@@ -1,4 +1,5 @@
-// Manual resource-intensive regression: needs about 9 GiB free device memory.
+// Manual resource-intensive regression: current capacity-bound scratch needs
+// about 1 GiB device memory (the retained original RED used about 9 GiB).
 // Excluded from default CTest so small GPUs retain the ordinary numerical suite.
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
@@ -11,8 +12,8 @@ int main() {
     try {
         if(!kan::cuda::available())throw std::runtime_error("actual CUDA hardware required");
         std::size_t free_bytes=0,total_bytes=0;
-        if(cudaMemGetInfo(&free_bytes,&total_bytes)!=cudaSuccess || free_bytes<10ULL*1024*1024*1024)
-            throw std::runtime_error("large-basis regression requires 10 GiB free GPU memory");
+        if(cudaMemGetInfo(&free_bytes,&total_bytes)!=cudaSuccess || free_bytes<2ULL*1024*1024*1024)
+            throw std::runtime_error("large-basis regression requires 2 GiB free GPU memory");
         constexpr std::size_t terms=65535ULL*256/2+1;
         kan::BasisConfig b; b.kind=kan::BasisKind::GaussianRbf; b.size=terms;
         b.trainable_rbf=true; b.centers.assign(terms,1);b.log_widths.assign(terms,0);
