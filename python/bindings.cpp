@@ -140,7 +140,9 @@ PYBIND11_MODULE(_kan, module) {
         .value("Jacobi", kan::BasisKind::Jacobi)
         .value("Hermite", kan::BasisKind::Hermite)
         .value("Fourier", kan::BasisKind::Fourier)
-        .value("GaussianRbf", kan::BasisKind::GaussianRbf);
+        .value("GaussianRbf", kan::BasisKind::GaussianRbf)
+        .value("BSpline", kan::BasisKind::BSpline)
+        .value("MexicanHat", kan::BasisKind::MexicanHat);
     py::class_<kan::BasisConfig>(module, "BasisConfig")
         .def(py::init<>())
         .def_readwrite("kind", &kan::BasisConfig::kind)
@@ -149,7 +151,12 @@ PYBIND11_MODULE(_kan, module) {
         .def_readwrite("beta", &kan::BasisConfig::beta)
         .def_readwrite("frequency", &kan::BasisConfig::frequency)
         .def_readwrite("centers", &kan::BasisConfig::centers)
-        .def_readwrite("width", &kan::BasisConfig::width);
+        .def_readwrite("width", &kan::BasisConfig::width)
+        .def_readwrite("degree", &kan::BasisConfig::degree)
+        .def_readwrite("knots", &kan::BasisConfig::knots)
+        .def_readwrite("scales", &kan::BasisConfig::scales)
+        .def_readwrite("trainable_rbf", &kan::BasisConfig::trainable_rbf)
+        .def_readwrite("log_widths", &kan::BasisConfig::log_widths);
     module.def("cuda_available", [] {
 #ifdef KAN_PYTHON_CUDA
         return kan::cuda::available();
@@ -176,6 +183,12 @@ PYBIND11_MODULE(_kan, module) {
         })
         .def_property_readonly("bias", [](const LayerGradient& g) {
             return owned(g.value.bias, {axis(g.outputs)});
+        })
+        .def_property_readonly("centers", [](const LayerGradient& g) {
+            return owned(g.value.centers, {axis(g.value.centers.size())});
+        })
+        .def_property_readonly("log_widths", [](const LayerGradient& g) {
+            return owned(g.value.log_widths, {axis(g.value.log_widths.size())});
         });
     py::class_<NetworkGradient>(module, "NetworkGradients")
         .def_property_readonly("input", [](const NetworkGradient& g) {
@@ -205,6 +218,22 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release;
             layer.set_parameters(c, b);
         }, py::arg("coefficients").noconvert(), py::arg("bias").noconvert())
+        .def("set_rbf_parameters", [](kan::Layer& layer, py::array centers, py::array log_widths) {
+            const auto c=shaped(centers,{axis(layer.basis().size)});
+            const auto w=shaped(log_widths,{axis(layer.basis().size)});
+            py::gil_scoped_release release;layer.set_rbf_parameters(c,w);
+        }, py::arg("centers").noconvert(), py::arg("log_widths").noconvert())
+        .def("insert_knot", &kan::Layer::insert_knot, py::arg("x"), py::call_guard<py::gil_scoped_release>())
+        .def("adapt_grid", [](kan::Layer& layer, py::array samples) {
+            const auto data=array_data(samples);
+            if(samples.ndim()!=1)throw py::value_error("samples must be a vector");
+            py::gil_scoped_release release;return layer.adapt_grid(data);
+        }, py::arg("samples").noconvert())
+        .def("regularization", [](const kan::Layer& layer, double lambda) {
+            kan::RegularizationResult r;
+            {py::gil_scoped_release release;r=layer.regularization(lambda);}
+            return py::make_tuple(r.value,wrap(std::move(r.gradients),0,layer));
+        }, py::arg("coefficient_l2"))
         .def("forward", &forward<kan::Layer>, py::arg("input").noconvert(), py::arg("batch") = py::none())
         .def("backward", &backward<kan::Layer>, py::arg("input").noconvert(),
              py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
@@ -220,6 +249,19 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("layers", [](const kan::Network& model) {
             return std::vector<kan::Layer>(model.layers().begin(), model.layers().end());
         })
+        .def("insert_knot", &kan::Network::insert_knot, py::arg("layer_index"), py::arg("x"),
+             py::call_guard<py::gil_scoped_release>())
+        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) {
+            const auto data=array_data(samples);
+            if(samples.ndim()!=1)throw py::value_error("samples must be a vector");
+            py::gil_scoped_release release;return model.adapt_grid(index,data);
+        }, py::arg("layer_index"), py::arg("samples").noconvert())
+        .def("regularization", [](const kan::Network& model, double lambda) {
+            kan::NetworkRegularizationResult r;
+            {py::gil_scoped_release release;r=model.regularization(lambda);}
+            return py::make_tuple(r.value,NetworkGradient{std::move(r.gradients),0,
+                {model.layers().begin(),model.layers().end()}});
+        }, py::arg("coefficient_l2"))
         .def("forward", &forward<kan::Network>, py::arg("input").noconvert(), py::arg("batch") = py::none())
         .def("backward", &backward<kan::Network>, py::arg("input").noconvert(),
              py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
@@ -259,7 +301,8 @@ PYBIND11_MODULE(_kan, module) {
             model.value.upload_output_gradient(data);
         }, py::arg("output_gradient").noconvert())
         .def("forward", [](Resident& model) { model.value.forward(); }, py::call_guard<py::gil_scoped_release>())
-        .def("backward", [](Resident& model) { model.value.backward(); }, py::call_guard<py::gil_scoped_release>())
+        .def("backward", [](Resident& model, double lambda) { model.value.backward(lambda); },
+             py::arg("coefficient_l2")=0.0, py::call_guard<py::gil_scoped_release>())
         .def("sgd", [](Resident& model, double learning_rate) { model.value.sgd(learning_rate); },
              py::arg("learning_rate"), py::call_guard<py::gil_scoped_release>())
         .def("synchronize", [](Resident& model) { model.value.synchronize(); }, py::call_guard<py::gil_scoped_release>())
