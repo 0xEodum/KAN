@@ -1,0 +1,10 @@
+{
+  "rows": 36,
+  "max_abs_error": 5.204170427930421e-18,
+  "resident_allocations": [
+    2
+  ],
+  "cpu_revision": "c80b7d3",
+  "resident_revision": "0071628",
+  "timing_use": "diagnostic_only_cpu_timing_overlap"
+}

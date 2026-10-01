@@ -1,0 +1,6 @@
+==PROF== Connected to process 6468 (K:\PycharmProjects\auxiliary_projects\KAN\build-m4-cuda\m4-preopt-benchmark.exe)
+==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
+case,family,topology,batch,degrees,precision,backend,warmups,repeats,setup_ms,median_ms,iqr_ms,output_checksum,gradient_checksum,parameter_checksum,max_abs_error,workspace_allocations,samples_ms
+11,rational_6_4,64x64x32x16,1024,6/4,double,m4_resident_full,0,1,196.74340000000001,35.514099999999999,0,-96.532213802964833,1.2321636554919067,0.36603246335388245,0,2,35.514099999999999
+11,rational_6_4,64x64x32x16,1024,6/4,double,m4_transfer_full,0,1,7.2817999999999996,32.626100000000001,0,-96.532213802964833,1.2321636554919067,0.36603246335388245,0,2,32.626100000000001
+==PROF== Disconnected from process 6468

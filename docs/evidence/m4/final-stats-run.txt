@@ -1,0 +1,7 @@
+Generating SQLite file build-m4-cuda/m4-final-profile.sqlite from build-m4-cuda/m4-final-profile.nsys-rep
+Processing [build-m4-cuda/m4-final-profile.sqlite] with [C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.5.2\host-windows-x64\reports\cuda_api_sum.py] to [docs/evidence/m4/final-profile_cuda_api_sum.csv]... PROCESSED
+
+Processing [build-m4-cuda/m4-final-profile.sqlite] with [C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.5.2\host-windows-x64\reports\cuda_gpu_kern_sum.py] to [docs/evidence/m4/final-profile_cuda_gpu_kern_sum.csv]... PROCESSED
+
+Processing [build-m4-cuda/m4-final-profile.sqlite] with [C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.5.2\host-windows-x64\reports\cuda_gpu_mem_time_sum.py] to [docs/evidence/m4/final-profile_cuda_gpu_mem_time_sum.csv]... PROCESSED
+

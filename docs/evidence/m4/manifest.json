@@ -1,0 +1,418 @@
+{
+  "stage": "M4",
+  "date": "2026-10-01",
+  "source": {
+    "integration_head": "7fe5e4d1193a2976e01430f8c957ca985d0040ab",
+    "resident_baseline": "c5a54e3",
+    "resident_tuned": "0071628",
+    "cpu_for_balanced_gpu": "4b808d2",
+    "frozen_fixture": "73e3f47",
+    "balanced_source_blobs": [
+      {
+        "revision": "c5a54e3",
+        "path": "src/resident.cu",
+        "bytes": 39359,
+        "sha256": "a6e72d05af9af6acd1df9c3ea8d4f65c3856178cedb3a4092086dbaa077a9992",
+        "git_blob": "0097afaabb9aa55ae96db4ebfde130d1176aff55"
+      },
+      {
+        "revision": "0071628",
+        "path": "src/resident.cu",
+        "bytes": 39805,
+        "sha256": "6e6025136937d67897d8007ce984083eff226c44ccde9c0a13eabf3284930e19",
+        "git_blob": "82e1e6c78a22e0c1f1915b23651dd39b43d9b67d"
+      },
+      {
+        "revision": "4b808d2",
+        "path": "src/rational.cpp",
+        "bytes": 4192,
+        "sha256": "2efd9fbbec94965d157a0456143cedd80665c33a0511bfb36f17db4dd22e646e",
+        "git_blob": "7b8e687137eb02cb250ac69b0bd33357e5d5ad17"
+      },
+      {
+        "revision": "4b808d2",
+        "path": "src/layer.cpp",
+        "bytes": 15204,
+        "sha256": "dc2b025e99fdd58ce9f00165ca61463c5f2db233bd115dfdb363f78ecc814abb",
+        "git_blob": "3da5327973934079e26698d3c75dcb637df5da5a"
+      },
+      {
+        "revision": "73e3f47",
+        "path": "benchmarks/m4_benchmark.cpp",
+        "bytes": 12171,
+        "sha256": "8918de230548ae846e1e1c1db0881c7b34105fc2b7d3ecf5df580b6e8b22a761",
+        "git_blob": "5351a8193d0e6133362c94dd83930ad550eda2fe"
+      }
+    ],
+    "files": [
+      {
+        "path": "src/resident.cu",
+        "bytes": 40445,
+        "sha256": "fa8c2dc062138886165c5e6f5d6e87e3ec004b3789914cd73f521e4679a5455c"
+      },
+      {
+        "path": "src/rational.cpp",
+        "bytes": 4721,
+        "sha256": "2dce232407e2566a3bedcf48c320d8b9c0bf036ec0aaafeecb657245a1295747"
+      },
+      {
+        "path": "src/layer.cpp",
+        "bytes": 15269,
+        "sha256": "92784fbf2d4b144772a8da6bfa47685264adc92aa2ab03499884e04a9c917bab"
+      },
+      {
+        "path": "src/rational_internal.hpp",
+        "bytes": 740,
+        "sha256": "16fd9ab40437d92d038092c9c2ba8db8712ed8daa9712274d4ef4d66520c9bae"
+      },
+      {
+        "path": "include/kan/rational.hpp",
+        "bytes": 742,
+        "sha256": "02c047e0e61358452d5e7e22750cf5e3d94e5468b5927f4b9a4aaf962c064f14"
+      },
+      {
+        "path": "include/kan/layer.hpp",
+        "bytes": 2571,
+        "sha256": "25832975723d43075f65a878dc0aee1e99850ce9c0afe764e9fc9a97f8588ed4"
+      },
+      {
+        "path": "benchmarks/m4_benchmark.cpp",
+        "bytes": 12385,
+        "sha256": "d35ebe1b07a3c6ea623e092b874077affc363bcc1a23299738e4fe6c2662d80a"
+      },
+      {
+        "path": "tests/m4_resident_test.cpp",
+        "bytes": 10774,
+        "sha256": "1620e54bfbe602a6b07c810ca116f71e41a214a38790441a2afc123445d4b56e"
+      }
+    ]
+  },
+  "environment": {
+    "gpu": "NVIDIA RTX3090,24576MiB,driver591.86,WindowsWDDM",
+    "cpu": "Intel i5-12400,6cores,12logical processors",
+    "toolchain": "MSVC19.50.35724.0,CUDA13.1.115,Release,architecture86,--fmad=false,explicit host-compiler override",
+    "nsight_systems": "2025.5.2",
+    "nsight_compute": "2025.4.1",
+    "counter_limit": "ERR_NVGPUCTRPERM; occupancy/bandwidth counters unavailable"
+  },
+  "verification": {
+    "resident_tests": "7/7",
+    "compute_sanitizer_memcheck_errors": 0,
+    "balanced_gpu_order": [
+      "preopt",
+      "final",
+      "final",
+      "preopt"
+    ],
+    "warmups": 2,
+    "measured_samples_per_run": 7,
+    "precision": "binary64",
+    "fixture_change": false,
+    "benchmark_checks": "Final pre-update output/allVJPs and final learned parameters; exact untimed evolvingGPUreplay"
+  },
+  "artifact_notes": {
+    "preopt-initial.csv": "Diagnostic initial single run before rare-derivative fix, CPU4b808d2 precursor; not tuning acceptance",
+    "tuned-initial.csv": "Diagnostic single run of warp prototype; not tuning acceptance",
+    "balanced-*.csv": "Accepted c5a54e3/0071628 GPU comparison, sameCPU4b808d2, frozen mathematical fixtures",
+    "*-profile*": "Diagnostic NsightSystems traces/exports, not accepted unprofiled timing",
+    "final-m2-regression.csv": "Numerical/allocations regression only; CPU refinements may run concurrently",
+    "final-m3-regression.csv": "Numerical/allocations regression only; CPU refinements may run concurrently",
+    "final-m4.csv": "Numerical/allocations final integration sweep after CPU refinement; timing diagnostic only due to CPU timing overlap"
+  },
+  "local_artifact_roles": {
+    "build-m4-cuda/m4-preopt-benchmark.exe": "Preserved exact balanced baseline executable,c5a54e3 GPU/4b808d2 CPU",
+    "build-m4-cuda/m4_benchmark.exe": "Final integration executable,relinked with c80b7d3 CPU after balanced GPU measurements; not the original tuned executable hash",
+    "build-m4-cuda/kan_cuda.lib": "Unchanged tuned0071628 GPU library from accepted balanced runs",
+    "build-m4-cuda/m4-preopt-profile.nsys-rep": "Original baseline diagnostic trace",
+    "build-m4-cuda/m4-final-profile.nsys-rep": "Original tuned diagnostic trace before CPU refinement"
+  },
+  "retained": [
+    {
+      "path": "docs/evidence/m4/.gitattributes",
+      "bytes": 8,
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-final-1.csv",
+      "bytes": 832,
+      "sha256": "e01bb387c5abd75d2abb44c30ea42145a3f187d14f2976bd03d779cd82737545"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-final-2.csv",
+      "bytes": 845,
+      "sha256": "c0b8ed80a8dbb6f3394d4d7f366472475f2fc98093862448202074f2a08bb445"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-final-summary.json",
+      "bytes": 2235,
+      "sha256": "7fa82a424e270cabcaa3a94e167bcea277b1fa7b46ede1591e6153bc6b37ad9c"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-final.csv",
+      "bytes": 2751,
+      "sha256": "55f4d46f6b72461cd832cb885a480eac74b01c7f77cfec7ba73c41146a8f8ae2"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-preopt-1.csv",
+      "bytes": 802,
+      "sha256": "e7ef9133f2c563bc379ba130c8ee3fe51b0d00a6c31a38dfaa17e719c83a3ee0"
+    },
+    {
+      "path": "docs/evidence/m4/balanced-preopt-2.csv",
+      "bytes": 780,
+      "sha256": "cb7a25a5719a490bd550155264c4b2c34976ff8cacc9e5863927fcf6575296b0"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-allocation-green-build.log",
+      "bytes": 2152,
+      "sha256": "4747c05103467c0c0c4bd5ba3cf099f1076abc4289038138884f2a4f6bbb7b2c"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-allocation-green.log",
+      "bytes": 331,
+      "sha256": "1ddd8b163bd9f7e8e65eb055f159881b1777794c70896d80a202653ee40432bf"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-allocation-red-build.log",
+      "bytes": 295,
+      "sha256": "07b743fd21fe76671b131a62e7fc69405ba9d585c254a979926d4706806bd2f2"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-allocation-red.log",
+      "bytes": 357,
+      "sha256": "b8d5f5e91fb2adc430665d3788fca48e90eaa4c3e2329e02cd5ac7a679944e08"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-baseline-a.csv",
+      "bytes": 227,
+      "sha256": "34fb14b7c2b47819710e4a01e387213a05e8944769814d2835c94426e2848dcf"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-baseline-b.csv",
+      "bytes": 218,
+      "sha256": "6aa9d6df102ff2d4c5068f76ccf514b380e5ed424647c921f45713c24ae7fed9"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-final-a.csv",
+      "bytes": 173,
+      "sha256": "70c2c39c7d1b10bf5cf05078af1b34560763dc0987848f81b007e552438b47c7"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-final-b.csv",
+      "bytes": 172,
+      "sha256": "cb8b04857df93549fac5cf8ca6f266acfe1d61cd2aa68f1c6a2e8cd7a4977540"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-performance-manifest.json",
+      "bytes": 5501,
+      "sha256": "4413cebe106f86a88001f3c4573d069c50d7072d84f10615dcb1d5e4f1313d7a"
+    },
+    {
+      "path": "docs/evidence/m4/cpu-performance-verification.log",
+      "bytes": 1155,
+      "sha256": "b3dcab120031f61519ffd24cfc2ce62dd0e666f07cd9758b455e61571b507cf6"
+    },
+    {
+      "path": "docs/evidence/m4/cpu_allocation_probe.cpp",
+      "bytes": 3268,
+      "sha256": "2e196b8b4250514813ab0c2a8cbf6944550afdf863cf246c6c6c55b3b2d53ed3"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-baseline-green.txt",
+      "bytes": 226,
+      "sha256": "ecf555f63de304f7c343023559ad4087bd44454f61de07304d5f04669786f46f"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-final-green.txt",
+      "bytes": 427,
+      "sha256": "64f409db1125d805eb8061830163206a30989ed252e72d5b2a5e433bb2c151e2"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-final-memcheck.txt",
+      "bytes": 491,
+      "sha256": "1285101d8aac4bb366f447a4d5ccb60a9368631ebbab7687513623eee8460872"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-memcheck.txt",
+      "bytes": 354,
+      "sha256": "f4028717056b8a7ff56a5c63a6ef77f9c1482162ecfc6222b9e2a28e959dd7ab"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-red.txt",
+      "bytes": 354,
+      "sha256": "5f48d79b4af6528ca51c2076c3e3fb9bac170de48dbf6d341f1640ade0880263"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-resident-red.txt",
+      "bytes": 350,
+      "sha256": "279289fa2a1c1ed2715ab4354793be3fe5172c31d5805154fe7d949b3dce2dd7"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-underflow-green.txt",
+      "bytes": 290,
+      "sha256": "d877bf0d87956e564d09e72f08bb1363368183a3659c519c23d746c1309acfb4"
+    },
+    {
+      "path": "docs/evidence/m4/cuda-underflow-red.txt",
+      "bytes": 322,
+      "sha256": "ddd084919458667b7361302e8f37542e969d74b4770ab9500469dc8738928287"
+    },
+    {
+      "path": "docs/evidence/m4/final-m2-regression.csv",
+      "bytes": 22549,
+      "sha256": "832eefa656cfc7325e6a6d93bd25a5d4a46c56e5d0603d42d097c8a63b563940"
+    },
+    {
+      "path": "docs/evidence/m4/final-m3-regression.csv",
+      "bytes": 10778,
+      "sha256": "d495aba7cdb7ab3e3e6593f88d2920168050738b065b27db50161f3a6c1c9e5d"
+    },
+    {
+      "path": "docs/evidence/m4/final-m4-summary.json",
+      "bytes": 225,
+      "sha256": "f87b3261dcc0f96b885564be6c421ba9c41c0d226a7f510b6879c6a2f5f59c06"
+    },
+    {
+      "path": "docs/evidence/m4/final-m4.csv",
+      "bytes": 10941,
+      "sha256": "3cc3a6c2d53e7df2319c448500746a5d412d592e6a3ada9e729539d8a6a3b03e"
+    },
+    {
+      "path": "docs/evidence/m4/final-m4_resident_test-memcheck.txt",
+      "bytes": 984,
+      "sha256": "0e86dfb3ac748727d0212f9ce17a25d5f87bd81b66fb3f627c12aba3f29f257e"
+    },
+    {
+      "path": "docs/evidence/m4/final-profile-run.txt",
+      "bytes": 507,
+      "sha256": "fe6c99f419007de4590e6beff6d63f6fb2bec37f36b534939bc5dae07ab3c01e"
+    },
+    {
+      "path": "docs/evidence/m4/final-profile_cuda_api_sum.csv",
+      "bytes": 1076,
+      "sha256": "d4853d7dcde121469ea781e1bfeef76886e5af0a1a4756f5a785b5c0c6ea9ef5"
+    },
+    {
+      "path": "docs/evidence/m4/final-profile_cuda_gpu_kern_sum.csv",
+      "bytes": 1121,
+      "sha256": "c50ce5e100acf83d4360295e5203d69b148747e613944aa82b2f6814b601d9f2"
+    },
+    {
+      "path": "docs/evidence/m4/final-profile_cuda_gpu_mem_time_sum.csv",
+      "bytes": 305,
+      "sha256": "e868425732f24be0b73de0c2a5901119caf7384becfca2d57c65562066c5b79e"
+    },
+    {
+      "path": "docs/evidence/m4/final-resident_test-memcheck.txt",
+      "bytes": 60,
+      "sha256": "197017ac281139a50c2201b4c132fde9bc74e283afc6acd072a07809f151367c"
+    },
+    {
+      "path": "docs/evidence/m4/final-stats-run.txt",
+      "bytes": 819,
+      "sha256": "d7d6c9edd652155352c979f800ce2ce3460d1b07836cd6f95d9127a72d0341d0"
+    },
+    {
+      "path": "docs/evidence/m4/independent_review.py",
+      "bytes": 9185,
+      "sha256": "5bebb43801e075f2e02c54ed0355000cd81b688f2ead77248ceee13d88772d3b"
+    },
+    {
+      "path": "docs/evidence/m4/independent_review.txt",
+      "bytes": 1150,
+      "sha256": "74fcabc249c5d48ebca810b81c300da952be71126c43b373cdb7c5cac372819e"
+    },
+    {
+      "path": "docs/evidence/m4/independent_review_cpu.txt",
+      "bytes": 752,
+      "sha256": "c851c03909f6627ea1c6b46071312ebaa892acf142b58feb9730ee0b44ef3270"
+    },
+    {
+      "path": "docs/evidence/m4/ncu-preopt.txt",
+      "bytes": 980,
+      "sha256": "01633a40f4867b357493962c263fe90e384462fba43fdf836d873651a5958524"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-initial.csv",
+      "bytes": 803,
+      "sha256": "56dc94b46ea2142112640ae1a3622dfe4d92286842c7195da7173ef20105719b"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-profile-run.txt",
+      "bytes": 513,
+      "sha256": "638e6805b4af963b844d07e405279f4bae4c87b2063830b2504c4db19a25bcc8"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-profile_cuda_api_sum.csv",
+      "bytes": 1081,
+      "sha256": "3bf873e44abb45fece00143c3d4e227aa910524f11bef5f8d771b2865b467608"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-profile_cuda_gpu_kern_sum.csv",
+      "bytes": 1122,
+      "sha256": "d365b6f9b05861bec938f9fa9516cf9a2bebd893b2601ab75e530182f370bd33"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-profile_cuda_gpu_mem_time_sum.csv",
+      "bytes": 307,
+      "sha256": "affd9c35fc820055a549ecea81e57fe871d802f683fefe48837a13f754e0c097"
+    },
+    {
+      "path": "docs/evidence/m4/preopt-stats-run.txt",
+      "bytes": 827,
+      "sha256": "9ddb158f79594913b0ebd88b63f7a3d6d6ece4725d621d473f00f3f18b30531e"
+    },
+    {
+      "path": "docs/evidence/m4/regression-summary.json",
+      "bytes": 299,
+      "sha256": "438e4aece72af2ba99d09b3e0b10610c89ad3c561628df34061c0d131b814a97"
+    },
+    {
+      "path": "docs/evidence/m4/summarize_matched.py",
+      "bytes": 2019,
+      "sha256": "8e4976705919fcad4eaca79e1deb763808ae4cca4b8bad2070dc2c59b23078a7"
+    },
+    {
+      "path": "docs/evidence/m4/tuned-initial.csv",
+      "bytes": 821,
+      "sha256": "fd764e49604d2b38796f6ec9dccaca5ee086cf5298b869b625c9740d239e2b16"
+    },
+    {
+      "path": "docs/evidence/m4/write_manifest.py",
+      "bytes": 4696,
+      "sha256": "e48ee149f9bb1436646170da4b0642efb0531006e32e74a9ff43a6ef6d09776d"
+    }
+  ],
+  "local_reproducible_not_committed": [
+    {
+      "path": "build-m4-cuda/m4-preopt-benchmark.exe",
+      "bytes": 397824,
+      "sha256": "990404ed70499cfdce8ccc95b5df4600ae78d20b8239962ac0be5e677d00aeda"
+    },
+    {
+      "path": "build-m4-cuda/m4_benchmark.exe",
+      "bytes": 400384,
+      "sha256": "0a292aceacbc459e9cacabd66376d9a6da3dc99004e602dcfca581aa2093a411"
+    },
+    {
+      "path": "build-m4-cuda/kan_cuda.lib",
+      "bytes": 941764,
+      "sha256": "5bcf7120f768e4db654ed0daa57b43381f69c809c5ab2dcb3d7d2f35158ca24b"
+    },
+    {
+      "path": "build-m4-cuda/resident-preopt.cu",
+      "bytes": 39993,
+      "sha256": "9e8ca548c93edcba0174c63a2da567a8a7e4faa1fe2788824d7d7202fafa0713"
+    },
+    {
+      "path": "build-m4-cuda/m4-preopt-profile.nsys-rep",
+      "bytes": 86792,
+      "sha256": "b546e25655056b198bab517b289cfb4429be9703ebb5531044e307a43ffa84af"
+    },
+    {
+      "path": "build-m4-cuda/m4-final-profile.nsys-rep",
+      "bytes": 86709,
+      "sha256": "f9e1c1a7413a1c9b69906b00a2518f567f588a65009da2354aa894feb71c45a4"
+    }
+  ]
+}

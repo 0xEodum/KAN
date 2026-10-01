@@ -1,0 +1,10 @@
+Collecting data...
+Generating 'C:\Users\Yu\AppData\Local\Temp\nsys-report-5092.qdstrm'
+
+[1/1] [0%                          ] m4-preopt-profile.nsys-rep
+[1/1] [0%                          ] m4-preopt-profile.nsys-rep
+[1/1] [==================77%       ] m4-preopt-profile.nsys-rep
+[1/1] [========================100%] m4-preopt-profile.nsys-rep
+[1/1] [========================100%] m4-preopt-profile.nsys-rep
+Generated:
+	K:\PycharmProjects\auxiliary_projects\KAN\build-m4-cuda/m4-preopt-profile.nsys-rep

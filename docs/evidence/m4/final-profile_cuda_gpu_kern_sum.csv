@@ -1,0 +1,5 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+52.4,268496746,81,3314774.6,2937093.0,728737,6918858,2218870.1,"kan::cuda::<unnamed>::rational_forward_kernel(const double *, const double *, const double *, const double *, double *, double *, double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, kan::RationalConfig, int *)"
+47.0,240785606,81,2972661.8,2649412.0,696545,6180393,1938294.4,"kan::cuda::<unnamed>::rational_parameter_kernel(const double *, const double *, const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, kan::RationalConfig, double, int *)"
+0.5,2634017,81,32518.7,27456.0,7424,66048,22630.6,"kan::cuda::<unnamed>::rational_input_kernel(const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, int *)"
+0.0,92640,27,3431.1,3424.0,3200,3712,133.2,"kan::cuda::<unnamed>::candidate_kernel(const double *, const double *, double *, unsigned long long, double, int *)"
