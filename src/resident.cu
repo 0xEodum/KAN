@@ -253,10 +253,27 @@ __global__ void candidate_kernel(const double* parameters, const double* gradien
         next[i] = parameters[i] - rate*gradients[i]; report(next[i], status);
     }
 }
+__device__ double rational_numerator_vjp(double q,double z,std::size_t k,double power) {
+    const double divided=power/q;
+    if(z!=0&&(fabs(power)<2.2250738585072014e-308||fabs(divided)<2.2250738585072014e-308)) {
+        const double magnitude=exp(static_cast<double>(k)*log(fabs(z))-log(fabs(q)));
+        return (q<0)!=(z<0&&k%2!=0)?-magnitude:magnitude;
+    }
+    return divided;
+}
+__device__ double rational_denominator_vjp(double p,double q,double z,std::size_t k,double power) {
+    const double r=p/q, divided=power/q, derivative=-r*divided;
+    if(p!=0&&z!=0&&(fabs(power)<2.2250738585072014e-308||fabs(divided)<2.2250738585072014e-308||fabs(r)<2.2250738585072014e-308)) {
+        const double magnitude=exp(log(fabs(p))+static_cast<double>(k)*log(fabs(z))-2*log(fabs(q)));
+        const bool negative=(p>0)!=(z<0&&k%2!=0);
+        return negative?-magnitude:magnitude;
+    }
+    return derivative;
+}
 // Distinct rational execution: caches are edge-major to expose contiguous
 // samples to nonlinear parameter reductions. All caches live in the arena.
 __global__ void rational_forward_kernel(const double* input,const double* a,const double* b,const double* bias,
-                                        double* values,double* inverse,double* derivatives,double* output,
+                                        double* values,double* denominator_values,double* derivatives,double* output,
                                         std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,
                                         RationalConfig config,int* status) {
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
@@ -280,19 +297,28 @@ __global__ void rational_forward_kernel(const double* input,const double* a,cons
                 dq=dq*z+q;q=q*z+1;mag=mag*fabs(z)+1;report(q,status);report(dq,status);report(mag,status);
             }
             if(isfinite(q)&&isfinite(mag)&&fabs(q)<=config.epsilon*mag) {
-                atomicOr(status,2);values[cache]=inverse[cache]=derivatives[cache]=0;continue;
+                atomicOr(status,2);values[cache]=denominator_values[cache]=derivatives[cache]=0;continue;
             }
-            const double inv=1/q,r=p/q,dx=(dp/q-r*(dq/q))/config.scale;
-            report(inv,status);report(r,status);report(dx,status);
+            const double r=p/q,numerator_term=dp/q,denominator_ratio=dq/q,denominator_term=r*denominator_ratio;
+            double dx=(numerator_term-denominator_term)/config.scale;
+            report(r,status);report(numerator_term,status);report(denominator_ratio,status);report(denominator_term,status);report(dx,status);
+            const bool tiny_numerator=dp!=0&&fabs(numerator_term)<2.2250738585072014e-308;
+            const bool tiny_denominator=p!=0&&dq!=0&&(fabs(r)<2.2250738585072014e-308||fabs(denominator_ratio)<2.2250738585072014e-308||fabs(denominator_term)<2.2250738585072014e-308);
+            if(tiny_numerator||tiny_denominator) {
+                const double lq=log(fabs(q)),ls=log(config.scale);
+                const double first=tiny_numerator?copysign(exp(log(fabs(dp))-lq-ls),(dp<0)!=(q<0)?-1.0:1.0):numerator_term/config.scale;
+                const double second=tiny_denominator?copysign(exp(log(fabs(p))+log(fabs(dq))-2*lq-ls),(p<0)!=(dq<0)?-1.0:1.0):denominator_term/config.scale;
+                report(first,status);report(second,status);dx=first-second;report(dx,status);
+            }
             // Derivative powers are part of the nonlinear contract, including
             // zero upstream. Detect unusable parameter VJPs during forward.
             double power=1;
             for(std::size_t k=0;k<=(m>n?m:n);++k) {
                 if(k){power*=z;report(power,status);}
-                if(k<=m)report(power/q,status);
-                if(k&&k<=n)report(-r*(power/q),status);
+                if(k<=m)report(rational_numerator_vjp(q,z,k,power),status);
+                if(k&&k<=n)report(rational_denominator_vjp(p,q,z,k,power),status);
             }
-            values[cache]=r;inverse[cache]=inv;derivatives[cache]=dx;sum+=r;report(sum,status);
+            values[cache]=p;denominator_values[cache]=q;derivatives[cache]=dx;sum+=r;report(sum,status);
         }
         output[index]=sum;report(sum,status);
     }
@@ -306,7 +332,7 @@ __global__ void rational_input_kernel(const double* derivatives,const double* up
         input_gradient[index]=sum;report(sum,status);
     }
 }
-__global__ void rational_parameter_kernel(const double* input,const double* values,const double* inverse,const double* upstream,
+__global__ void rational_parameter_kernel(const double* input,const double* values,const double* denominator_values,const double* upstream,
                                           const double* parameters,double* gradients,std::size_t batch,std::size_t capacity,
                                           std::size_t inputs,std::size_t outputs,RationalConfig config,double lambda,int* status) {
     const auto m=config.numerator_degree+1,n=config.denominator_degree,acount=inputs*outputs*m;
@@ -322,8 +348,8 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
             if(!bias) {
                 const double z=(input[sample*inputs+i]-config.center)/config.scale;double power=1;
                 for(std::size_t j=0;j<k;++j)power*=z;
-                derivative=power*inverse[edge*capacity+sample];
-                if(!numerator)derivative*=-values[edge*capacity+sample];
+                const auto cache=edge*capacity+sample;
+                derivative=numerator?rational_numerator_vjp(denominator_values[cache],z,k,power):rational_denominator_vjp(values[cache],denominator_values[cache],z,k,power);
             }
             const double term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
         }
@@ -337,7 +363,7 @@ struct Layout {
     bool trainable=false;
     unsigned partial_tiles=1;
     bool rational=false;
-    std::size_t denominator_count=0,inverse=0;
+    std::size_t denominator_count=0,denominator_values=0;
 };
 }
 
@@ -384,7 +410,7 @@ struct ResidentNetwork::Impl {
             upstream.push_back(reserve(product(capacity, layout.outputs)));
             if(layout.rational) {
                 const auto count=product(product(capacity,layout.inputs),layout.outputs);
-                layout.values=reserve(count);layout.derivatives=reserve(count);layout.inverse=reserve(count);
+                layout.values=reserve(count);layout.derivatives=reserve(count);layout.denominator_values=reserve(count);
                 continue;
             }
             layout.values = reserve(product(product(capacity, layout.inputs), layout.terms));
@@ -483,7 +509,7 @@ void ResidentNetwork::forward() {
         if(l.rational) {
             rational_forward_kernel<<<blocks(s.batch*l.outputs),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(s.parameters+l.parameter_offset),
                 s.ptr(s.parameters+l.parameter_offset+l.coefficients+l.outputs),s.ptr(s.parameters+l.parameter_offset+l.coefficients),
-                s.ptr(l.values),s.ptr(l.inverse),s.ptr(l.derivatives),s.ptr(s.activation[j+1]),
+                s.ptr(l.values),s.ptr(l.denominator_values),s.ptr(l.derivatives),s.ptr(s.activation[j+1]),
                 s.batch,s.capacity,l.inputs,l.outputs,s.model.layers()[j].rational_config(),s.status);
             check(cudaGetLastError(),"resident rational forward launch");continue;
         }
@@ -512,7 +538,7 @@ void ResidentNetwork::backward(double coefficient_l2) {
                     s.batch,s.capacity,l.inputs,l.outputs,s.status);
                 check(cudaGetLastError(),"resident rational input gradient launch");
             }
-            rational_parameter_kernel<<<blocks(l.coefficients+l.outputs+l.denominator_count),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(l.values),s.ptr(l.inverse),
+            rational_parameter_kernel<<<blocks(l.coefficients+l.outputs+l.denominator_count),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(l.values),s.ptr(l.denominator_values),
                 s.ptr(s.upstream[j+1]),s.ptr(s.parameters+l.parameter_offset),s.ptr(s.gradients+l.parameter_offset),s.batch,s.capacity,l.inputs,l.outputs,
                 s.model.layers()[j].rational_config(),coefficient_l2,s.status);
             check(cudaGetLastError(),"resident rational parameter gradient launch");continue;

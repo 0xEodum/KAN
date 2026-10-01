@@ -90,5 +90,14 @@ TEST(m4_resident_representable_extreme_denominator_derivatives) {
     kan::cuda::ResidentNetwork final(kan::Network({tiny}),1);final.upload_input(std::vector<double>{1e300},1);
     final.upload_output_gradient(std::vector<double>{1});final.forward();final.backward();
     test::near(final.download_gradients().layers[0].denominators[0]/-1e-60,1,1e-12);
+    r.denominator_degree=16;kan::Layer high(1,1,r);high.set_rational_parameters(std::vector<double>{1e300},std::vector<double>(16,0),std::vector<double>{0});
+    kan::cuda::ResidentNetwork subnormal(kan::Network({high}),1);subnormal.upload_input(std::vector<double>{-1e-20},1);
+    subnormal.upload_output_gradient(std::vector<double>{1});subnormal.forward();subnormal.backward();
+    const auto d16=subnormal.download_gradients().layers[0].denominators;test::near(d16[15]/-1e-20,1,1e-12);test::near(d16[14],1,1e-12);
+    r.denominator_degree=1;r.scale=1e-320;kan::Layer scaled(1,1,r);
+    scaled.set_rational_parameters(std::vector<double>{1e-300},std::vector<double>{1e-270},std::vector<double>{0});
+    kan::cuda::ResidentNetwork smallscale(kan::Network({scaled}),1);smallscale.upload_input(std::vector<double>{1e-20},1);
+    smallscale.upload_output_gradient(std::vector<double>{1});smallscale.forward();smallscale.backward();
+    test::near(smallscale.download_gradients().input[0]/(-r.scale*1e10),1,1e-8);
 }
 int main(){if(!kan::cuda::available())return 1;return test::run();}
