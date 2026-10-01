@@ -147,6 +147,10 @@ if(KAN_BUILD_PYTHON)
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME m3_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/m3_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(m3_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 
