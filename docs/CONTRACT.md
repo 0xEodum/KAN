@@ -1,6 +1,6 @@
 # KAN numerical contract (M1 through M4)
 
-An edge is a learned univariate expansion. A layer computes
+An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
 Arrays are contiguous, batch-major; coefficients use `(o * inputs + i) * basis.size + k`.
 All arithmetic and storage in M1 use `double`. Bias and coefficients initialize to zero.
