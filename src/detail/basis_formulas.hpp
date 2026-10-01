@@ -14,6 +14,10 @@
 
 namespace kan::detail {
 
+// Family tag for kernel dispatch. The public API selects a family by its
+// configuration type; trainable RBFs are GaussianRbf with BasisView::trainable.
+enum class BasisKind { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, BSpline, MexicanHat };
+
 inline constexpr std::size_t max_spline_degree = 16;
 
 // Non-owning view of one validated basis. Pointer fields are read only for the

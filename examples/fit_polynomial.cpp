@@ -4,7 +4,7 @@
 #include <iostream>
 
 int main() {
-    kan::BasisConfig basis; basis.size = 3;
+    kan::ChebyshevConfig basis{3};
     kan::Network network({kan::Layer(1, 1, basis)});
     std::vector<double> x(65), target(65);
     for (std::size_t i = 0; i < x.size(); ++i) {

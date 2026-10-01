@@ -35,7 +35,7 @@ TEST(m4_resident_independent_pade_identity_and_vjp) {
 }
 TEST(m4_resident_mixed_network_all_vjps_and_trajectory) {
     for(const auto orders:{std::pair<std::size_t,std::size_t>{0,0},{0,3},{4,1},{16,16}}) {
-        kan::Layer basis(3,2,{kan::BasisKind::Chebyshev,3});basis.set_parameters(std::vector<double>(18,0.02),std::vector<double>(2,0));
+        kan::Layer basis(3,2,kan::ChebyshevConfig{3});basis.set_parameters(std::vector<double>(18,0.02),std::vector<double>(2,0));
         kan::Network cpu({rational(2,3,orders.first,orders.second),basis,rational(2,1)});kan::cuda::ResidentNetwork gpu(cpu,8);
         const auto count=gpu.workspace_allocations();const std::vector<double>x{-0.5,0.2,0.8,-0.2,0.1,0.4},dy{0.2,-0.1,0.3};
         gpu.upload_input(x,3);gpu.upload_output_gradient(dy);

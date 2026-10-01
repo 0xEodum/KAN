@@ -53,6 +53,9 @@ private:
     struct RationalTag {};
     Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, RationalTag);
     void validate_state() const;
+    std::size_t terms() const noexcept; // coefficients per edge
+    TrainableRbfConfig* trainable_rbf() noexcept; // null unless a trainable RBF layer
+    const TrainableRbfConfig* trainable_rbf() const noexcept;
     std::size_t inputs_, outputs_;
     BasisConfig basis_;
     bool rational_ = false;

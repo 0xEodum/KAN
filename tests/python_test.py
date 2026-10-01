@@ -7,19 +7,17 @@ import numpy as np
 import kan
 
 
-def config(kind=kan.BasisKind.Chebyshev):
-    result = kan.BasisConfig()
-    result.kind = kind
-    result.size = 5
-    result.alpha = 0.3
-    result.beta = 0.7
-    result.frequency = 1.4
-    result.centers = [-1.0, -0.5, 0.0, 0.5, 1.0]
-    result.width = 0.8
-    return result
+def config(kind=kan.ChebyshevConfig):
+    if kind is kan.JacobiConfig:
+        return kan.JacobiConfig(size=5, alpha=0.3, beta=0.7)
+    if kind is kan.FourierConfig:
+        return kan.FourierConfig(size=5, frequency=1.4)
+    if kind is kan.GaussianRbfConfig:
+        return kan.GaussianRbfConfig(centers=[-1.0, -0.5, 0.0, 0.5, 1.0], width=0.8)
+    return kind(size=5)
 
 
-def layer(inputs, outputs, kind=kan.BasisKind.Chebyshev):
+def layer(inputs, outputs, kind=kan.ChebyshevConfig):
     result = kan.Layer(inputs, outputs, config(kind))
     count = outputs * inputs * 5
     coefficients = np.arange(count, dtype=np.float64).reshape(outputs, inputs, 5)
@@ -28,26 +26,46 @@ def layer(inputs, outputs, kind=kan.BasisKind.Chebyshev):
 
 
 class Bindings(unittest.TestCase):
+    def test_typed_basis_configurations(self):
+        self.assertEqual(kan.ChebyshevConfig().size, 4)
+        self.assertEqual(kan.basis_size(kan.FourierConfig(size=7, frequency=2.0)), 7)
+        spline = kan.BSplineConfig(degree=2, knots=[0., 0., 0., .5, 1., 1., 1.])
+        self.assertEqual(spline.size, 4)
+        self.assertEqual(kan.basis_size(kan.MexicanHatConfig(centers=[0.], scales=[1.])), 1)
+        self.assertEqual(kan.JacobiConfig(size=3, alpha=.5), kan.JacobiConfig(size=3, alpha=.5))
+        self.assertNotEqual(kan.JacobiConfig(size=3, alpha=.5), kan.JacobiConfig(size=3))
+        layer = kan.Layer(1, 1, spline)
+        self.assertIsInstance(layer.basis, kan.BSplineConfig)
+        self.assertEqual(layer.basis, spline)
+        layer.insert_knot(.25)
+        self.assertEqual(layer.basis.size, 5)
+        self.assertEqual(layer.coefficients.shape, (1, 1, 5))
+        self.assertIsInstance(kan.Layer(1, 1, kan.ChebyshevConfig()).basis, kan.ChebyshevConfig)
+        with self.assertRaises(ValueError):
+            kan.Layer(1, 1, kan.TrainableRbfConfig(centers=[0., 1.], log_widths=[0.]))
+        with self.assertRaises(ValueError):
+            kan.Layer(1, 1, kan.GaussianRbfConfig())
+
     def test_basis_independent_values_and_derivatives(self):
         x = 0.31
-        for kind in [kan.BasisKind.Chebyshev, kan.BasisKind.Legendre,
-                     kan.BasisKind.Jacobi, kan.BasisKind.Hermite,
-                     kan.BasisKind.Fourier, kan.BasisKind.GaussianRbf]:
+        for kind in [kan.ChebyshevConfig, kan.LegendreConfig,
+                     kan.JacobiConfig, kan.HermiteConfig,
+                     kan.FourierConfig, kan.GaussianRbfConfig]:
             cfg = config(kind)
             values, derivative = kan.evaluate_basis(cfg, x)
             h = 1e-6
             plus, _ = kan.evaluate_basis(cfg, x + h)
             minus, _ = kan.evaluate_basis(cfg, x - h)
             np.testing.assert_allclose(derivative, (plus - minus) / (2*h), atol=2e-9)
-            if kind == kan.BasisKind.Chebyshev:
+            if kind == kan.ChebyshevConfig:
                 expected = np.polynomial.chebyshev.chebvander(x, 4).reshape(5)
-            elif kind == kan.BasisKind.Legendre:
+            elif kind == kan.LegendreConfig:
                 expected = np.polynomial.legendre.legvander(x, 4).reshape(5)
-            elif kind == kan.BasisKind.Hermite:
+            elif kind == kan.HermiteConfig:
                 expected = np.polynomial.hermite.hermvander(x, 4).reshape(5)
-            elif kind == kan.BasisKind.Fourier:
+            elif kind == kan.FourierConfig:
                 expected = [1, np.cos(1.4*x), np.sin(1.4*x), np.cos(2.8*x), np.sin(2.8*x)]
-            elif kind == kan.BasisKind.GaussianRbf:
+            elif kind == kan.GaussianRbfConfig:
                 expected = np.exp(-((x - np.array(cfg.centers)) / cfg.width)**2)
             else:
                 # Independently evaluate Jacobi through the generalized binomial sum.
@@ -91,7 +109,7 @@ class Bindings(unittest.TestCase):
         np.testing.assert_allclose(model.coefficients, coefficients - 0.1*gradient.coefficients)
 
     def test_network_finite_difference_and_owned_snapshots(self):
-        model = kan.Network([layer(2, 3), layer(3, 1, kan.BasisKind.Legendre)])
+        model = kan.Network([layer(2, 3), layer(3, 1, kan.LegendreConfig)])
         x = np.array([[-0.4, 0.2], [0.7, -0.1]])
         upstream = np.array([[0.3], [-0.5]])
         gradient = model.backward(x, upstream, batch=2)
@@ -159,8 +177,8 @@ class Bindings(unittest.TestCase):
     def test_resident_all_families_training_and_validation(self):
         self.assertTrue(kan.cuda_enabled)
         self.assertTrue(kan.cuda_available())
-        kinds = [kan.BasisKind.Chebyshev, kan.BasisKind.Legendre, kan.BasisKind.Jacobi,
-                 kan.BasisKind.Hermite, kan.BasisKind.Fourier, kan.BasisKind.GaussianRbf]
+        kinds = [kan.ChebyshevConfig, kan.LegendreConfig, kan.JacobiConfig,
+                 kan.HermiteConfig, kan.FourierConfig, kan.GaussianRbfConfig]
         x = np.array([[-0.4, 0.2], [0.7, -0.1], [0.1, 0.3]])
         upstream = np.array([[0.3], [-0.5], [0.2]])
         for kind in kinds:

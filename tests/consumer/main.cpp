@@ -7,7 +7,7 @@
 #include <iostream>
 
 int main() {
-    kan::BasisConfig basis; basis.size = 3;
+    kan::ChebyshevConfig basis{3};
     kan::Layer layer(1, 1, basis);
     layer.set_parameters(std::vector<double>{0, 0.7, -0.2}, std::vector<double>{0});
     kan::Network net({layer});
@@ -15,18 +15,16 @@ int main() {
     const std::vector<double> expected{-0.9, 0.2, 0.5};
     for (std::size_t i = 0; i < expected.size(); ++i)
         if (std::abs(result[i] - expected[i]) > 1e-12) return 1;
-    kan::BasisConfig spline; spline.kind=kan::BasisKind::BSpline;
-    spline.size=4; spline.degree=3; spline.knots={0,0,0,0,1,1,1,1};
+    const kan::BSplineConfig spline{3,{0,0,0,0,1,1,1,1}};
     kan::Layer local(1,1,spline);
     local.set_parameters(std::vector<double>{0,0,1.0/3,1},std::vector<double>{0});
     local.insert_knot(0.4);local.adapt_grid(std::vector<double>{0.1,0.2,0.3});
     if(std::abs(local.forward(std::vector<double>{0.5},1)[0]-0.25)>1e-12)return 1;
-    kan::BasisConfig rbf;rbf.kind=kan::BasisKind::GaussianRbf;rbf.size=1;
-    rbf.centers={0};rbf.trainable_rbf=true;rbf.log_widths={0};
+    const kan::TrainableRbfConfig rbf{{0},{0}};
     kan::Layer nonlinear(1,1,rbf);nonlinear.set_parameters(std::vector<double>{0.2},std::vector<double>{0});
     nonlinear.set_rbf_parameters(std::vector<double>{0.1},std::vector<double>{-0.1});
     nonlinear.sgd(nonlinear.regularization(0.1).gradients,0.01);
-    kan::BasisConfig wave;wave.kind=kan::BasisKind::MexicanHat;wave.size=1;wave.centers={0};wave.scales={1};
+    const kan::MexicanHatConfig wave{{0},{1}};
     if(!std::isfinite(kan::evaluate_basis(wave,0).values[0]))return 1;
     kan::RationalConfig rational; rational.numerator_degree=1; rational.denominator_degree=1;
     kan::Layer pade(1,1,rational);
@@ -66,7 +64,7 @@ int main() {
     if(gradients.layers[1].centers.size()!=1)return 1;
     adaptive.sgd(0.01);
     const auto snapshot=adaptive.download_parameters();
-    if(snapshot.layers()[1].basis().centers==localized.layers()[1].basis().centers)return 1;
+    if(snapshot.layers()[1].basis()==localized.layers()[1].basis())return 1;
     std::cout << "Installed M3 localized/nonlinear CUDA consumer passed\n";
     kan::Network rational_network({pade});
     kan::cuda::ResidentNetwork rational_gpu(rational_network,3);

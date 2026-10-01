@@ -1,6 +1,6 @@
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
-#include "detail/basis_formulas.hpp"
+#include "detail/basis_view.hpp"
 #include "detail/rational_formulas.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
@@ -37,7 +37,7 @@ struct StatusGuard {
 struct CheckedEarlier {
     __device__ double operator()(double value) const { return value; }
 };
-template<BasisKind Kind>
+template<detail::BasisKind Kind>
 __global__ void basis_kernel(const double* input, double* values, double* derivatives, double* log_derivatives,
                              std::size_t count, detail::BasisView basis, int* status) {
     const StatusGuard guard{status};
@@ -247,15 +247,16 @@ struct ResidentNetwork::Impl {
         for (const auto& layer : model.layers()) {
             finite(layer.coefficients()); finite(layer.bias());
             const bool rational=layer.is_rational();
-            const auto terms=rational?layer.rational_config().numerator_degree+1:layer.basis().size;
-            const auto extra=rational?layer.denominators().size():layer.basis().trainable_rbf?product(terms,2):0;
+            const bool trainable=!rational&&std::holds_alternative<TrainableRbfConfig>(layer.basis());
+            const auto terms=rational?layer.rational_config().numerator_degree+1:basis_size(layer.basis());
+            const auto extra=rational?layer.denominators().size():trainable?product(terms,2):0;
             const auto count=layer.coefficients().size()+layer.outputs();
             if (count>std::vector<double>().max_size() || extra>std::vector<double>().max_size()-count || count+extra>std::vector<double>().max_size()-parameter_count)
                 throw std::overflow_error("resident parameter size overflow");
             layers.push_back({layer.inputs(), layer.outputs(), terms, layer.coefficients().size(), parameter_count, 0, 0, 0});
             layers.back().rational=rational;
             layers.back().denominator_count=rational?extra:0;
-            layers.back().trainable=!rational&&layer.basis().trainable_rbf;
+            layers.back().trainable=trainable;
             parameter_count += count+extra;
         }
         parameters = reserve(parameter_count); gradients = reserve(parameter_count); candidates = reserve(parameter_count);
@@ -272,8 +273,8 @@ struct ResidentNetwork::Impl {
             }
             layout.values = reserve(product(product(capacity, layout.inputs), layout.terms));
             layout.derivatives = reserve(product(product(capacity, layout.inputs), layout.terms));
-            const auto& basis=model.layers()[j].basis();
-            if ((basis.kind == BasisKind::GaussianRbf && !layout.trainable) || basis.kind==BasisKind::MexicanHat)
+            const auto basis=detail::basis_view(model.layers()[j].basis());
+            if ((basis.kind == detail::BasisKind::GaussianRbf && !layout.trainable) || basis.kind==detail::BasisKind::MexicanHat)
                 layout.centers = reserve(layout.terms);
             if(layout.trainable) {
                 layout.log_derivatives=reserve(product(product(capacity,layout.inputs),layout.terms));
@@ -281,8 +282,8 @@ struct ResidentNetwork::Impl {
                 layout.partial_tiles=static_cast<unsigned>(std::min<std::size_t>(nonlinear_tiles,count?((count-1)/256+1):1));
                 layout.nonlinear_partials=reserve(product(layout.terms,2*layout.partial_tiles));
             }
-            if(basis.kind==BasisKind::MexicanHat)layout.scales=reserve(layout.terms);
-            if(basis.kind==BasisKind::BSpline)layout.knots=reserve(basis.knots.size());
+            if(basis.kind==detail::BasisKind::MexicanHat)layout.scales=reserve(layout.terms);
+            if(basis.kind==detail::BasisKind::BSpline)layout.knots=reserve(layout.terms+basis.degree+1);
         }
         const auto bytes = product(total, sizeof(double));
         try {
@@ -298,13 +299,14 @@ struct ResidentNetwork::Impl {
                     upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs),layer.denominators());
                     continue;
                 }
-                const auto& basis=layer.basis();
+                const auto basis=detail::basis_view(layer.basis());
+                const std::span<const double> centers(basis.centers,basis.centers?layout.terms:0);
                 if(layout.trainable) {
-                    upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs),basis.centers);
-                    upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs+layout.terms),basis.log_widths);
-                } else if(basis.kind==BasisKind::GaussianRbf || basis.kind==BasisKind::MexicanHat)upload(ptr(layout.centers),basis.centers);
-                if(basis.kind==BasisKind::MexicanHat)upload(ptr(layout.scales),basis.scales);
-                if(basis.kind==BasisKind::BSpline)upload(ptr(layout.knots),basis.knots);
+                    upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs),centers);
+                    upload(ptr(parameters+layout.parameter_offset+layout.coefficients+layout.outputs+layout.terms),{basis.log_widths,layout.terms});
+                } else if(basis.kind==detail::BasisKind::GaussianRbf || basis.kind==detail::BasisKind::MexicanHat)upload(ptr(layout.centers),centers);
+                if(basis.kind==detail::BasisKind::MexicanHat)upload(ptr(layout.scales),{basis.scales,layout.terms});
+                if(basis.kind==detail::BasisKind::BSpline)upload(ptr(layout.knots),{basis.knots,layout.terms+basis.degree+1});
             }
             sync();
         } catch (...) { cleanup(); throw; }
@@ -370,12 +372,12 @@ void ResidentNetwork::forward() {
                 s.batch,s.capacity,l.inputs,l.outputs,s.model.layers()[j].rational_config(),s.status);
             check(cudaGetLastError(),"resident rational forward launch");continue;
         }
-        const auto& b = s.model.layers()[j].basis();
         const auto nonlinear=s.parameters+l.parameter_offset+l.coefficients+l.outputs;
-        const detail::BasisView basis{b.kind,b.size,b.alpha,b.beta,b.frequency,b.width,
-                                      s.ptr(l.trainable?nonlinear:l.centers),s.ptr(nonlinear+l.terms),
-                                      s.ptr(l.scales),s.ptr(l.knots),b.degree,l.trainable};
-        detail::visit_basis_family(b.kind, [&](auto family) {
+        // Same scalars as the host view; vectors point into device storage.
+        auto basis=detail::basis_view(s.model.layers()[j].basis());
+        basis.centers=s.ptr(l.trainable?nonlinear:l.centers);basis.log_widths=s.ptr(nonlinear+l.terms);
+        basis.scales=s.ptr(l.scales);basis.knots=s.ptr(l.knots);
+        detail::visit_basis_family(basis.kind, [&](auto family) {
             basis_kernel<decltype(family)::value><<<blocks(s.batch*l.inputs), 256, 0, s.stream>>>(
                 s.ptr(s.activation[j]), s.ptr(l.values), s.ptr(l.derivatives), s.ptr(l.log_derivatives), s.batch*l.inputs, basis, s.status);
         });

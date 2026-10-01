@@ -27,11 +27,11 @@ void result_finite(std::span<const double> values) {
         if (!std::isfinite(value)) throw std::overflow_error("nonfinite CUDA numerical result");
 }
 void validate_layer(const Layer& layer) {
-    if (layer.basis().kind != BasisKind::Chebyshev)
+    if (!std::holds_alternative<ChebyshevConfig>(layer.basis()))
         throw std::invalid_argument("CUDA M1 supports Chebyshev only");
     validate_basis(layer.basis());
     if (layer.inputs() == 0 || layer.outputs() == 0 ||
-        layer.coefficients().size() != checked_size(checked_size(layer.inputs(), layer.outputs()), layer.basis().size) ||
+        layer.coefficients().size() != checked_size(checked_size(layer.inputs(), layer.outputs()), basis_size(layer.basis())) ||
         layer.bias().size() != layer.outputs())
         throw std::invalid_argument("invalid CUDA layer shape");
     require_finite(layer.coefficients());
@@ -191,7 +191,7 @@ std::vector<double> forward(const Layer& layer, std::span<const double> input, s
     coefficients.upload(layer.coefficients(), stream.get());
     bias.upload(layer.bias(), stream.get());
     forward_kernel<<<blocks(output_size), 256, 0, stream.get()>>>(x.data(), coefficients.data(), bias.data(),
-        y.data(), output_size, layer.inputs(), layer.outputs(), layer.basis().size);
+        y.data(), output_size, layer.inputs(), layer.outputs(), basis_size(layer.basis()));
     check(cudaGetLastError(), "forward kernel launch");
     y.download(result, stream.get());
     stream.synchronize();
@@ -219,10 +219,10 @@ LayerGradients backward(const Layer& layer, std::span<const double> input, std::
     coefficients.upload(layer.coefficients(), stream.get());
     upstream.upload(output_gradient, stream.get());
     input_gradient_kernel<<<blocks(input_size), 256, 0, stream.get()>>>(x.data(), coefficients.data(),
-        upstream.data(), dx.data(), input_size, layer.inputs(), layer.outputs(), layer.basis().size);
+        upstream.data(), dx.data(), input_size, layer.inputs(), layer.outputs(), basis_size(layer.basis()));
     check(cudaGetLastError(), "input gradient kernel launch");
     coefficient_gradient_kernel<<<blocks(result.coefficients.size()), 256, 0, stream.get()>>>(x.data(),
-        upstream.data(), dc.data(), result.coefficients.size(), batch, layer.inputs(), layer.outputs(), layer.basis().size);
+        upstream.data(), dc.data(), result.coefficients.size(), batch, layer.inputs(), layer.outputs(), basis_size(layer.basis()));
     check(cudaGetLastError(), "coefficient gradient kernel launch");
     bias_gradient_kernel<<<blocks(layer.outputs()), 256, 0, stream.get()>>>(upstream.data(), db.data(), batch, layer.outputs());
     check(cudaGetLastError(), "bias gradient kernel launch");

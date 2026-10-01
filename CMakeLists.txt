@@ -58,7 +58,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(suite basis layer network m3_basis m3_layer m4_rational m4_layer m4_allocation)
+    foreach(suite basis basis_config layer network m3_basis m3_layer m4_rational m4_layer m4_allocation)
         add_executable(${suite}_test tests/${suite}_test.cpp)
         target_include_directories(${suite}_test PRIVATE tests)
         target_link_libraries(${suite}_test PRIVATE kan)

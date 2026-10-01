@@ -1,9 +1,12 @@
 #include "kan/layer.hpp"
 #include "rational_internal.hpp"
+#include "detail/basis_host.hpp"
+#include <variant>
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
 #include <numeric>
+#include <optional>
 
 namespace kan {
 const BasisConfig& Layer::basis() const {
@@ -30,6 +33,16 @@ void result_finite(std::span<const double> values) {
 }
 }
 
+TrainableRbfConfig* Layer::trainable_rbf() noexcept {
+    return rational_ ? nullptr : std::get_if<TrainableRbfConfig>(&basis_);
+}
+const TrainableRbfConfig* Layer::trainable_rbf() const noexcept {
+    return rational_ ? nullptr : std::get_if<TrainableRbfConfig>(&basis_);
+}
+std::size_t Layer::terms() const noexcept {
+    return rational_ ? rational_config_.numerator_degree+1 : basis_size(basis_);
+}
+
 Layer::Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, RationalTag)
     : inputs_(inputs), outputs_(outputs), rational_(true), rational_config_(config) {
     if(inputs==0 || outputs==0)throw std::invalid_argument("layer dimensions must be positive");
@@ -51,13 +64,12 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, BasisConfig basis)
     : inputs_(inputs), outputs_(outputs), basis_(std::move(basis)) {
     if (inputs == 0 || outputs == 0) throw std::invalid_argument("layer dimensions must be positive");
     validate_basis(basis_);
-    coefficients_.resize(checked_size(checked_size(inputs, outputs), basis_.size), 0.0);
+    coefficients_.resize(checked_size(checked_size(inputs, outputs), basis_size(basis_)), 0.0);
     bias_.resize(checked_size(outputs, 1), 0.0);
 }
 void Layer::validate_state() const {
-    const auto terms=rational_ ? rational_config_.numerator_degree+1 : basis_.size;
     if (inputs_ == 0 || outputs_ == 0 ||
-        coefficients_.size() != checked_size(checked_size(inputs_, outputs_), terms) ||
+        coefficients_.size() != checked_size(checked_size(inputs_, outputs_), terms()) ||
         bias_.size() != outputs_)
         throw std::invalid_argument("layer is uninitialized or moved from");
     if(rational_) {
@@ -82,6 +94,9 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
     if (input.size() != input_size) throw std::invalid_argument("input shape mismatch");
     require_finite(input);
     std::vector<double> output(output_size);
+    // Configuration and inputs are validated above; evaluate without revalidating.
+    std::optional<detail::TrustedBasis> basis;
+    if (!rational_) basis.emplace(basis_);
     for (std::size_t b = 0; b < batch; ++b) {
         for (std::size_t o = 0; o < outputs_; ++o) output[b * outputs_ + o] = bias_[o];
         for (std::size_t i = 0; i < inputs_; ++i) {
@@ -97,10 +112,11 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
                 }
                 continue;
             }
-            const auto basis = evaluate_basis(basis_, input[b * inputs_ + i]);
+            basis->evaluate(input[b * inputs_ + i]);
+            const auto size = basis->terms();
             for (std::size_t o = 0; o < outputs_; ++o)
-                for (std::size_t k = 0; k < basis_.size; ++k)
-                    output[b * outputs_ + o] += coefficients_[(o * inputs_ + i) * basis_.size + k] * basis.values[k];
+                for (std::size_t k = 0; k < size; ++k)
+                    output[b * outputs_ + o] += coefficients_[(o * inputs_ + i) * size + k] * basis->values[k];
         }
     }
     result_finite(output);
@@ -118,9 +134,11 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
                             std::vector<double>(coefficients_.size(), 0.0),
                             std::vector<double>(outputs_, 0.0), {}, {}, {}};
     if(rational_)gradient.denominators.resize(denominators_.size());
-    if (!rational_ && basis_.kind == BasisKind::GaussianRbf && basis_.trainable_rbf) {
-        gradient.centers.resize(basis_.size); gradient.log_widths.resize(basis_.size);
+    if (const auto* rbf = trainable_rbf()) {
+        gradient.centers.resize(rbf->centers.size()); gradient.log_widths.resize(rbf->centers.size());
     }
+    std::optional<detail::TrustedBasis> basis;
+    if (!rational_) basis.emplace(basis_);
     for (std::size_t b = 0; b < batch; ++b) {
         for (std::size_t o = 0; o < outputs_; ++o) gradient.bias[o] += output_gradient[b * outputs_ + o];
         for (std::size_t i = 0; i < inputs_; ++i) {
@@ -138,16 +156,17 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
                 }
                 continue;
             }
-            const auto basis = evaluate_basis(basis_, input[b * inputs_ + i]);
+            basis->evaluate(input[b * inputs_ + i]);
+            const auto size = basis->terms();
             for (std::size_t o = 0; o < outputs_; ++o) {
                 const auto upstream = output_gradient[b * outputs_ + o];
-                for (std::size_t k = 0; k < basis_.size; ++k) {
-                    const auto index = (o * inputs_ + i) * basis_.size + k;
-                    gradient.coefficients[index] += upstream * basis.values[k];
-                    gradient.input[b * inputs_ + i] += upstream * coefficients_[index] * basis.derivatives[k];
+                for (std::size_t k = 0; k < size; ++k) {
+                    const auto index = (o * inputs_ + i) * size + k;
+                    gradient.coefficients[index] += upstream * basis->values[k];
+                    gradient.input[b * inputs_ + i] += upstream * coefficients_[index] * basis->derivatives[k];
                     if (!gradient.centers.empty()) {
-                        gradient.centers[k] += upstream * coefficients_[index] * basis.center_derivatives[k];
-                        gradient.log_widths[k] += upstream * coefficients_[index] * basis.log_width_derivatives[k];
+                        gradient.centers[k] += upstream * coefficients_[index] * basis->center_derivatives[k];
+                        gradient.log_widths[k] += upstream * coefficients_[index] * basis->log_width_derivatives[k];
                     }
                 }
             }
@@ -168,19 +187,19 @@ void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
     require_finite(gradients.coefficients); require_finite(gradients.bias);
     if(gradients.denominators.size()!=denominators_.size())throw std::invalid_argument("denominator gradient shape mismatch");
     require_finite(gradients.denominators);
-    const bool trainable = !rational_ && basis_.kind == BasisKind::GaussianRbf && basis_.trainable_rbf;
-    const std::size_t nonlinear_size = trainable ? basis_.size : 0;
+    const auto* rbf = trainable_rbf();
+    const std::size_t nonlinear_size = rbf ? rbf->centers.size() : 0;
     if (gradients.centers.size() != nonlinear_size || gradients.log_widths.size() != nonlinear_size)
         throw std::invalid_argument("nonlinear gradient shape mismatch");
     require_finite(gradients.centers); require_finite(gradients.log_widths);
     auto next_basis = basis_;
-    if (trainable) {
-        for (std::size_t k=0;k<basis_.size;++k) {
-            next_basis.centers[k] -= learning_rate*gradients.centers[k];
-            next_basis.log_widths[k] -= learning_rate*gradients.log_widths[k];
+    if (auto* next = std::get_if<TrainableRbfConfig>(&next_basis); rbf && next) {
+        for (std::size_t k=0;k<nonlinear_size;++k) {
+            next->centers[k] -= learning_rate*gradients.centers[k];
+            next->log_widths[k] -= learning_rate*gradients.log_widths[k];
         }
-        result_finite(next_basis.centers); result_finite(next_basis.log_widths);
-        for(double w:next_basis.log_widths)
+        result_finite(next->centers); result_finite(next->log_widths);
+        for(double w:next->log_widths)
             if (!std::isfinite(std::exp(w)) || std::exp(w)<=0)
                 throw std::overflow_error("RBF candidate width is not finite and positive");
     }
@@ -197,28 +216,37 @@ void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
 
 void Layer::set_rbf_parameters(std::span<const double> centers, std::span<const double> log_widths) {
     validate_state();
-    if (rational_ || basis_.kind != BasisKind::GaussianRbf || !basis_.trainable_rbf)
-        throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");
-    auto next=basis_; next.centers.assign(centers.begin(),centers.end());
-    next.log_widths.assign(log_widths.begin(),log_widths.end()); validate_basis(next);
-    std::swap(basis_,next);
+    const auto* rbf = trainable_rbf();
+    if (!rbf) throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");
+    // The term count is derived from the centers; it must not change here.
+    if (centers.size() != rbf->centers.size() || log_widths.size() != rbf->centers.size())
+        throw std::invalid_argument("RBF parameter count must match the layer's basis size");
+    TrainableRbfConfig next{{centers.begin(),centers.end()},{log_widths.begin(),log_widths.end()}};
+    validate_basis(next);
+    basis_=std::move(next);
 }
 
 void Layer::insert_knot(double x) {
     validate_state();
-    if (rational_ || basis_.kind != BasisKind::BSpline || !std::isfinite(x) ||
-        x<=basis_.knots[basis_.degree] || x>=basis_.knots[basis_.size])
+    const auto* spline = rational_ ? nullptr : std::get_if<BSplineConfig>(&basis_);
+    if (!spline || !std::isfinite(x))
         throw std::invalid_argument("knot must be strictly inside a spline domain");
-    const auto& t=basis_.knots; const auto p=basis_.degree;
+    const auto size=basis_size(*spline);
+    const auto& t=spline->knots; const auto p=spline->degree;
+    if (x<=t[p] || x>=t[size])
+        throw std::invalid_argument("knot must be strictly inside a spline domain");
     const auto multiplicity=static_cast<std::size_t>(std::count(t.begin(),t.end(),x));
     if (multiplicity>=p+1) throw std::invalid_argument("knot multiplicity exceeds degree+1");
     const auto span=static_cast<std::size_t>(std::upper_bound(t.begin(),t.end(),x)-t.begin()-1);
-    auto next_basis=basis_; ++next_basis.size;
-    next_basis.knots.insert(next_basis.knots.begin()+span+1,x);validate_basis(next_basis);
-    std::vector<double> next(checked_size(checked_size(inputs_,outputs_),next_basis.size));
+    std::vector<double> knots;knots.reserve(t.size()+1);
+    knots.insert(knots.end(),t.begin(),t.begin()+static_cast<std::ptrdiff_t>(span+1));knots.push_back(x);
+    knots.insert(knots.end(),t.begin()+static_cast<std::ptrdiff_t>(span+1),t.end());
+    BSplineConfig next_basis{p,std::move(knots)};validate_basis(next_basis);
+    const auto next_size=basis_size(next_basis);
+    std::vector<double> next(checked_size(checked_size(inputs_,outputs_),next_size));
     for(std::size_t edge=0;edge<inputs_*outputs_;++edge) {
-        const auto* c=coefficients_.data()+edge*basis_.size;auto* q=next.data()+edge*next_basis.size;
-        for(std::size_t j=0;j<next_basis.size;++j) {
+        const auto* c=coefficients_.data()+edge*size;auto* q=next.data()+edge*next_size;
+        for(std::size_t j=0;j<next_size;++j) {
             if(j<=span-p) q[j]=c[j];
             else if(j>=span-multiplicity+1) q[j]=c[j-1];
             else {
@@ -229,22 +257,23 @@ void Layer::insert_knot(double x) {
             }
         }
     }
-    result_finite(next); coefficients_.swap(next);std::swap(basis_,next_basis);
+    result_finite(next); coefficients_.swap(next);basis_=std::move(next_basis);
 }
 
 double Layer::adapt_grid(std::span<const double> samples) {
     validate_state();require_finite(samples);
-    if(rational_ || basis_.kind!=BasisKind::BSpline)throw std::invalid_argument("adaptation requires splines");
-    const auto& t=basis_.knots;
-    std::vector<std::vector<double>> spans(basis_.size);
+    const auto* spline = rational_ ? nullptr : std::get_if<BSplineConfig>(&basis_);
+    if(!spline)throw std::invalid_argument("adaptation requires splines");
+    const auto& t=spline->knots;const auto size=basis_size(*spline);
+    std::vector<std::vector<double>> spans(size);
     for(double x:samples) {
-        if(x<t[basis_.degree] || x>t[basis_.size])continue;
-        auto index=x==t[basis_.size] ? basis_.size-1 :
+        if(x<t[spline->degree] || x>t[size])continue;
+        auto index=x==t[size] ? size-1 :
             static_cast<std::size_t>(std::upper_bound(t.begin(),t.end(),x)-t.begin()-1);
         spans[index].push_back(x);
     }
-    std::size_t best=basis_.degree;
-    for(std::size_t k=basis_.degree;k<basis_.size;++k)
+    std::size_t best=spline->degree;
+    for(std::size_t k=spline->degree;k<size;++k)
         if(spans[k].size()>spans[best].size())best=k;
     auto values=std::move(spans[best]);
     if(values.empty())throw std::invalid_argument("no in-domain samples to adapt");
@@ -262,8 +291,8 @@ RegularizationResult Layer::regularization(double lambda) const {
     RegularizationResult r; r.gradients.coefficients.resize(coefficients_.size());
     r.gradients.bias.resize(outputs_);
     r.gradients.denominators.resize(denominators_.size());
-    if(!rational_&&basis_.kind==BasisKind::GaussianRbf&&basis_.trainable_rbf) {
-        r.gradients.centers.resize(basis_.size); r.gradients.log_widths.resize(basis_.size);
+    if(const auto* rbf=trainable_rbf()) {
+        r.gradients.centers.resize(rbf->centers.size()); r.gradients.log_widths.resize(rbf->centers.size());
     }
     for(std::size_t j=0;j<coefficients_.size();++j) {
         const double g=lambda*coefficients_[j];r.gradients.coefficients[j]=g;

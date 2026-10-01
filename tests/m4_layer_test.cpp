@@ -49,7 +49,7 @@ TEST(rational_identity_shape_layout_and_empty_batch) {
 }
 TEST(layer_and_mixed_network_all_vjps) {
     check_fd(kan::Network({rational(2,1)}));
-    kan::BasisConfig c;c.size=3;kan::Layer b(2,1,c);b.set_parameters(std::vector<double>{0.1,0.2,-0.03,-0.2,0.15,0.07},std::vector<double>{0.04});
+    kan::ChebyshevConfig c{3};kan::Layer b(2,1,c);b.set_parameters(std::vector<double>{0.1,0.2,-0.03,-0.2,0.15,0.07},std::vector<double>{0.04});
     check_fd(kan::Network({rational(),b,rational(1,1)}));
 }
 TEST(invalid_setters_sgd_and_network_atomicity) {

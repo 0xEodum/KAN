@@ -25,7 +25,7 @@ TEST(zero_initialization) {
     for (double v : y) test::near(v, 0.0);
 }
 TEST(known_forward_layout_and_batch) {
-    kan::BasisConfig basis; basis.size = 3;
+    kan::ChebyshevConfig basis{3};
     kan::Layer layer(2, 2, basis);
     // y0 = 1 + 2*x0 + 3*T2(x1); y1 = -2 + 4*x1
     const std::vector<double> c{0,2,0, 0,0,3, 0,0,0, 0,4,0}, b{1,-2};
@@ -34,10 +34,10 @@ TEST(known_forward_layout_and_batch) {
     test::near(y[0],-1); test::near(y[1],-2); test::near(y[2],2); test::near(y[3],2);
 }
 TEST(all_basis_layer_gradients_match_finite_differences) {
-    for (auto kind : {kan::BasisKind::Chebyshev,kan::BasisKind::Legendre,kan::BasisKind::Jacobi,
-                      kan::BasisKind::Hermite,kan::BasisKind::Fourier,kan::BasisKind::GaussianRbf}) {
-        kan::BasisConfig config; config.kind=kind; config.size=5; config.alpha=0.3; config.beta=0.7;
-        config.frequency=1.7; config.width=0.8; config.centers={-1,-0.5,0,0.5,1};
+    for (const kan::BasisConfig& config : std::vector<kan::BasisConfig>{
+             kan::ChebyshevConfig{5}, kan::LegendreConfig{5}, kan::JacobiConfig{5, 0.3, 0.7},
+             kan::HermiteConfig{5}, kan::FourierConfig{5, 1.7},
+             kan::GaussianRbfConfig{{-1, -0.5, 0, 0.5, 1}, 0.8}}) {
         auto layer=fixture(config);
         std::vector<double> x{-0.6,0.2,0.7,-0.1}, g{0.4,-0.7,0.3,0.2,0.5,-0.2};
         const auto grad=layer.backward(x,2,g);
@@ -60,7 +60,7 @@ TEST(all_basis_layer_gradients_match_finite_differences) {
     }
 }
 TEST(backward_sums_without_averaging_or_mutation) {
-    kan::BasisConfig basis; basis.size=1; kan::Layer layer(1,1,basis);
+    kan::ChebyshevConfig basis{1}; kan::Layer layer(1,1,basis);
     const auto grad=layer.backward(std::vector<double>{0.2,0.4},2,std::vector<double>{2,3});
     test::near(grad.coefficients[0],5);test::near(grad.bias[0],5);
     for(double v:grad.input)test::near(v,0);
@@ -79,7 +79,7 @@ TEST(invalid_dimensions_and_shape_overflow) {
     auto layer=fixture();
     test::throws<std::overflow_error>([&]{layer.forward({},std::numeric_limits<std::size_t>::max());});
     test::throws<std::overflow_error>([&]{layer.backward({},std::numeric_limits<std::size_t>::max(),{});});
-    kan::BasisConfig bad;bad.size=0;
+    kan::ChebyshevConfig bad{0};
     test::throws<std::invalid_argument>([&]{kan::Layer layer(1,1,bad);});
 }
 TEST(invalid_shapes_and_nonfinite_data) {
@@ -126,7 +126,7 @@ TEST(sgd_invalid_update_is_atomic) {
     REQUIRE(std::vector<double>(layer.coefficients().begin(),layer.coefficients().end())==c);
 }
 TEST(nonfinite_contractions_raise_overflow) {
-    kan::BasisConfig config;config.size=1;kan::Layer layer(2,1,config);
+    kan::ChebyshevConfig config{1};kan::Layer layer(2,1,config);
     const double huge=std::numeric_limits<double>::max();
     layer.set_parameters(std::vector<double>{huge,huge},std::vector<double>{0});
     test::throws<std::overflow_error>([&]{layer.forward(std::vector<double>{0,0},1);});

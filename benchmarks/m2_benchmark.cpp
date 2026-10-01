@@ -18,18 +18,26 @@ using Clock = std::chrono::steady_clock;
 constexpr double learning_rate = 0.001;
 const char* names[] = {"chebyshev", "legendre", "jacobi", "hermite", "fourier", "gaussian_rbf"};
 struct Case { int id, family; std::vector<std::size_t> widths; std::size_t batch; };
+kan::BasisConfig family_basis(int family) {
+    const std::vector<double> centers{-1.0, -2.0/3.0, -1.0/3.0, 0.0, 1.0/3.0, 2.0/3.0, 1.0};
+    switch (family) {
+    case 0: return kan::ChebyshevConfig{7};
+    case 1: return kan::LegendreConfig{7};
+    case 2: return kan::JacobiConfig{7, 0.25, 0.5};
+    case 3: return kan::HermiteConfig{7};
+    case 4: return kan::FourierConfig{7, 1.25};
+    default: return kan::GaussianRbfConfig{centers, 0.65};
+    }
+}
 kan::Network network(const Case& c) {
-    kan::BasisConfig basis;
-    basis.kind = static_cast<kan::BasisKind>(c.family); basis.size = 7;
-    basis.alpha = 0.25; basis.beta = 0.5; basis.frequency = 1.25; basis.width = 0.65;
-    basis.centers = {-1.0, -2.0/3.0, -1.0/3.0, 0.0, 1.0/3.0, 2.0/3.0, 1.0};
+    const auto basis = family_basis(c.family);
     std::vector<kan::Layer> layers;
     for (std::size_t l = 1; l < c.widths.size(); ++l) {
         kan::Layer layer(c.widths[l-1], c.widths[l], basis);
         std::vector<double> coefficients(layer.coefficients().size()), bias(layer.outputs());
         for (std::size_t j = 0; j < coefficients.size(); ++j)
             coefficients[j] = 0.02 * std::sin(static_cast<double>((j + 1) * (l + 1))) /
-                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % basis.size));
+                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % kan::basis_size(basis)));
         for (std::size_t j = 0; j < bias.size(); ++j) bias[j] = 0.01 * std::cos(static_cast<double>(j + l));
         layer.set_parameters(coefficients, bias); layers.push_back(std::move(layer));
     }

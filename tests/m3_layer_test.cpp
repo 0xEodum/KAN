@@ -1,19 +1,21 @@
 #include "kan/network.hpp"
+#include "support/families.hpp"
 #include "support/test.hpp"
 #include <algorithm>
 #include <limits>
 #include <numeric>
 
 namespace {
-kan::BasisConfig spline(std::size_t degree=3) {
-    kan::BasisConfig b; b.kind=kan::BasisKind::BSpline; b.degree=degree; b.size=degree+2;
+kan::BSplineConfig spline(std::size_t degree=3) {
+    kan::BSplineConfig b{degree,{}};
     b.knots.assign(degree+1,-1); b.knots.push_back(0);
     b.knots.insert(b.knots.end(),degree+1,1); return b;
 }
-kan::BasisConfig rbf() {
-    kan::BasisConfig b; b.kind=kan::BasisKind::GaussianRbf; b.size=3;
-    b.centers={-0.6,0.1,0.8}; b.trainable_rbf=true; b.log_widths={-0.3,0.2,-0.1}; return b;
+kan::TrainableRbfConfig rbf() {
+    return {{-0.6,0.1,0.8},{-0.3,0.2,-0.1}};
 }
+const std::vector<double>& centers(const kan::Layer& l) { return test::trainable(l.basis()).centers; }
+const std::vector<double>& log_widths(const kan::Layer& l) { return test::trainable(l.basis()).log_widths; }
 kan::Layer fixture(kan::BasisConfig b) {
     kan::Layer l(2,2,b); std::vector<double> c(l.coefficients().size());
     for (std::size_t i=0;i<c.size();++i) c[i]=0.07*(static_cast<double>(i%9)-4);
@@ -24,25 +26,24 @@ double loss(const kan::Layer& l, const std::vector<double>& x, const std::vector
 }
 void unchanged(const kan::Layer& a,const kan::Layer& b) {
     REQUIRE(std::equal(a.coefficients().begin(),a.coefficients().end(),b.coefficients().begin(),b.coefficients().end()));
-    REQUIRE(a.basis().centers==b.basis().centers); REQUIRE(a.basis().log_widths==b.basis().log_widths);
-    REQUIRE(a.basis().knots==b.basis().knots);
+    REQUIRE(a.basis()==b.basis());
 }
 }
 TEST(trainable_shared_rbf_vjp_and_sgd) {
     auto l=fixture(rbf());const std::vector<double> x{-0.5,0.2,0.7,-0.1},u{0.4,-0.8,0.3,0.2};
     auto g=l.backward(x,2,u);REQUIRE(g.centers.size()==3);REQUIRE(g.log_widths.size()==3);
     for(std::size_t k=0;k<3;++k) {
-        auto p=l,m=l;auto pc=l.basis().centers,mc=pc,w=l.basis().log_widths;
+        auto p=l,m=l;auto pc=centers(l),mc=pc,w=log_widths(l);
         pc[k]+=1e-6;mc[k]-=1e-6;p.set_rbf_parameters(pc,w);m.set_rbf_parameters(mc,w);
         test::near(g.centers[k],(loss(p,x,u)-loss(m,x,u))/2e-6,2e-7);
         p=l;m=l;auto pw=w,mw=w;pw[k]+=1e-6;mw[k]-=1e-6;
-        p.set_rbf_parameters(l.basis().centers,pw);m.set_rbf_parameters(l.basis().centers,mw);
+        p.set_rbf_parameters(centers(l),pw);m.set_rbf_parameters(centers(l),mw);
         test::near(g.log_widths[k],(loss(p,x,u)-loss(m,x,u))/2e-6,2e-7);
     }
     auto before=l;l.sgd(g,0.03);
     for(std::size_t k=0;k<3;++k) {
-        test::near(l.basis().centers[k],before.basis().centers[k]-0.03*g.centers[k]);
-        test::near(l.basis().log_widths[k],before.basis().log_widths[k]-0.03*g.log_widths[k]);
+        test::near(centers(l)[k],centers(before)[k]-0.03*g.centers[k]);
+        test::near(log_widths(l)[k],log_widths(before)[k]-0.03*g.log_widths[k]);
     }
     auto z=l.backward({},0,{});for(double v:z.centers)test::near(v,0);for(double v:z.log_widths)test::near(v,0);
 }
@@ -61,7 +62,7 @@ TEST(rbf_invalid_updates_are_atomic_across_network) {
 TEST(exact_knot_insertion_preserves_values_and_derivatives) {
     for(std::size_t p=0;p<=4;++p) {
         auto l=fixture(spline(p)),before=l;
-        l.insert_knot(0.3); REQUIRE(l.basis().size==before.basis().size+1);
+        l.insert_knot(0.3); REQUIRE(kan::basis_size(l.basis())==kan::basis_size(before.basis())+1);
         for(double x:{-2.,-1.,-0.7,-0.001,0.,0.15,0.3,0.65,1.,2.}) {
             const std::vector<double> a{x,x};auto y=l.forward(a,1),ref=before.forward(a,1);
             for(std::size_t k=0;k<y.size();++k)test::near(y[k],ref[k],2e-12);

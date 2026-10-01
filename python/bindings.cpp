@@ -4,6 +4,7 @@
 #include "kan/cuda.hpp"
 #endif
 #include <pybind11/numpy.h>
+#include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <algorithm>
@@ -62,13 +63,26 @@ py::array_t<double> owned(std::span<const double> values, const Shape& shape) {
     return result;
 }
 
-Shape coefficient_shape(const kan::Layer& layer) {
-    return {axis(layer.outputs()), axis(layer.inputs()), axis(layer.is_rational() ?
-        layer.rational_config().numerator_degree+1 : layer.basis().size)};
+std::size_t numerator_size(const kan::Layer& layer) {
+    return layer.is_rational() ? layer.rational_config().numerator_degree+1 : kan::basis_size(layer.basis());
 }
 
-std::size_t numerator_size(const kan::Layer& layer) {
-    return layer.is_rational() ? layer.rational_config().numerator_degree+1 : layer.basis().size;
+Shape coefficient_shape(const kan::Layer& layer) {
+    return {axis(layer.outputs()), axis(layer.inputs()), axis(numerator_size(layer))};
+}
+
+// Value-semantics Python class for one basis configuration type.
+template <typename Config, typename... Extra>
+py::class_<Config> config_class(py::module_& module, const char* name, Extra&&... extra) {
+    py::class_<Config> result(module, name, std::forward<Extra>(extra)...);
+    result.def(py::self == py::self);
+    return result;
+}
+
+// Localized families derive their term count from their parameter vectors.
+template <typename Config>
+void derived_size(py::class_<Config>& config) {
+    config.def_property_readonly("size", [](const Config& c) { return kan::basis_size(c); });
 }
 Shape denominator_shape(const kan::Layer& layer) {
     if (!layer.is_rational()) return {0};
@@ -153,29 +167,62 @@ PYBIND11_MODULE(_kan, module) {
 #else
     module.attr("cuda_enabled") = false;
 #endif
-    py::enum_<kan::BasisKind>(module, "BasisKind")
-        .value("Chebyshev", kan::BasisKind::Chebyshev)
-        .value("Legendre", kan::BasisKind::Legendre)
-        .value("Jacobi", kan::BasisKind::Jacobi)
-        .value("Hermite", kan::BasisKind::Hermite)
-        .value("Fourier", kan::BasisKind::Fourier)
-        .value("GaussianRbf", kan::BasisKind::GaussianRbf)
-        .value("BSpline", kan::BasisKind::BSpline)
-        .value("MexicanHat", kan::BasisKind::MexicanHat);
-    py::class_<kan::BasisConfig>(module, "BasisConfig")
-        .def(py::init<>())
-        .def_readwrite("kind", &kan::BasisConfig::kind)
-        .def_readwrite("size", &kan::BasisConfig::size)
-        .def_readwrite("alpha", &kan::BasisConfig::alpha)
-        .def_readwrite("beta", &kan::BasisConfig::beta)
-        .def_readwrite("frequency", &kan::BasisConfig::frequency)
-        .def_readwrite("centers", &kan::BasisConfig::centers)
-        .def_readwrite("width", &kan::BasisConfig::width)
-        .def_readwrite("degree", &kan::BasisConfig::degree)
-        .def_readwrite("knots", &kan::BasisConfig::knots)
-        .def_readwrite("scales", &kan::BasisConfig::scales)
-        .def_readwrite("trainable_rbf", &kan::BasisConfig::trainable_rbf)
-        .def_readwrite("log_widths", &kan::BasisConfig::log_widths);
+    // One class per family: each holds only its own parameters. Global
+    // families have an explicit size; localized families derive it.
+    config_class<kan::ChebyshevConfig>(module, "ChebyshevConfig")
+        .def(py::init([](std::size_t size) { return kan::ChebyshevConfig{size}; }), py::arg("size") = 4)
+        .def_readwrite("size", &kan::ChebyshevConfig::size);
+    config_class<kan::LegendreConfig>(module, "LegendreConfig")
+        .def(py::init([](std::size_t size) { return kan::LegendreConfig{size}; }), py::arg("size") = 4)
+        .def_readwrite("size", &kan::LegendreConfig::size);
+    config_class<kan::HermiteConfig>(module, "HermiteConfig")
+        .def(py::init([](std::size_t size) { return kan::HermiteConfig{size}; }), py::arg("size") = 4)
+        .def_readwrite("size", &kan::HermiteConfig::size);
+    config_class<kan::JacobiConfig>(module, "JacobiConfig")
+        .def(py::init([](std::size_t size, double alpha, double beta) { return kan::JacobiConfig{size, alpha, beta}; }),
+             py::arg("size") = 4, py::arg("alpha") = 0.0, py::arg("beta") = 0.0)
+        .def_readwrite("size", &kan::JacobiConfig::size)
+        .def_readwrite("alpha", &kan::JacobiConfig::alpha)
+        .def_readwrite("beta", &kan::JacobiConfig::beta);
+    config_class<kan::FourierConfig>(module, "FourierConfig")
+        .def(py::init([](std::size_t size, double frequency) { return kan::FourierConfig{size, frequency}; }),
+             py::arg("size") = 3, py::arg("frequency") = 1.0)
+        .def_readwrite("size", &kan::FourierConfig::size)
+        .def_readwrite("frequency", &kan::FourierConfig::frequency);
+    auto gaussian = config_class<kan::GaussianRbfConfig>(module, "GaussianRbfConfig");
+    derived_size(gaussian);
+    gaussian
+        .def(py::init([](std::vector<double> centers, double width) {
+            return kan::GaussianRbfConfig{std::move(centers), width}; }),
+             py::arg("centers") = std::vector<double>{}, py::arg("width") = 1.0)
+        .def_readwrite("centers", &kan::GaussianRbfConfig::centers)
+        .def_readwrite("width", &kan::GaussianRbfConfig::width);
+    auto trainable = config_class<kan::TrainableRbfConfig>(module, "TrainableRbfConfig");
+    derived_size(trainable);
+    trainable
+        .def(py::init([](std::vector<double> centers, std::vector<double> log_widths) {
+            return kan::TrainableRbfConfig{std::move(centers), std::move(log_widths)}; }),
+             py::arg("centers") = std::vector<double>{}, py::arg("log_widths") = std::vector<double>{})
+        .def_readwrite("centers", &kan::TrainableRbfConfig::centers)
+        .def_readwrite("log_widths", &kan::TrainableRbfConfig::log_widths);
+    auto spline = config_class<kan::BSplineConfig>(module, "BSplineConfig");
+    derived_size(spline);
+    spline
+        .def(py::init([](std::size_t degree, std::vector<double> knots) {
+            return kan::BSplineConfig{degree, std::move(knots)}; }),
+             py::arg("degree") = 3, py::arg("knots") = std::vector<double>{})
+        .def_readwrite("degree", &kan::BSplineConfig::degree)
+        .def_readwrite("knots", &kan::BSplineConfig::knots);
+    auto wavelet = config_class<kan::MexicanHatConfig>(module, "MexicanHatConfig");
+    derived_size(wavelet);
+    wavelet
+        .def(py::init([](std::vector<double> centers, std::vector<double> scales) {
+            return kan::MexicanHatConfig{std::move(centers), std::move(scales)}; }),
+             py::arg("centers") = std::vector<double>{}, py::arg("scales") = std::vector<double>{})
+        .def_readwrite("centers", &kan::MexicanHatConfig::centers)
+        .def_readwrite("scales", &kan::MexicanHatConfig::scales);
+    module.def("basis_size", [](const kan::BasisConfig& config) { return kan::basis_size(config); },
+               py::arg("config"));
     module.def("cuda_available", [] {
 #ifdef KAN_PYTHON_CUDA
         return kan::cuda::available();
@@ -265,8 +312,9 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release; layer.set_rational_parameters(c, d, b);
         }, py::arg("coefficients").noconvert(), py::arg("denominators").noconvert(), py::arg("bias").noconvert())
         .def("set_rbf_parameters", [](kan::Layer& layer, py::array centers, py::array log_widths) {
-            const auto c=shaped(centers,{axis(layer.basis().size)});
-            const auto w=shaped(log_widths,{axis(layer.basis().size)});
+            const auto terms=kan::basis_size(layer.basis()); // rejects rational layers first
+            const auto c=shaped(centers,{axis(terms)});
+            const auto w=shaped(log_widths,{axis(terms)});
             py::gil_scoped_release release;layer.set_rbf_parameters(c,w);
         }, py::arg("centers").noconvert(), py::arg("log_widths").noconvert())
         .def("insert_knot", &kan::Layer::insert_knot, py::arg("x"), py::call_guard<py::gil_scoped_release>())

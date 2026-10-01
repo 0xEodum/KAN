@@ -1,14 +1,15 @@
 #include "kan/cuda.hpp"
 #include "kan/resident.hpp"
+#include "support/families.hpp"
 #include "support/test.hpp"
 #include <limits>
 
 namespace {
-kan::Layer layer(kan::BasisKind kind) {
-    kan::BasisConfig basis{kind, 5};
+kan::Layer layer(test::Family kind) {
+    test::FamilyParameters basis{5};
     basis.alpha = -0.4; basis.beta = 0.9; basis.frequency = 2.3;
     basis.centers = {-0.7, -0.2, 0.1, 0.4, 0.8}; basis.width = 0.6;
-    kan::Layer result(2, 2, basis);
+    kan::Layer result(2, 2, test::basis(kind, basis));
     std::vector<double> c(result.coefficients().size());
     for (std::size_t j = 0; j < c.size(); ++j)
         c[j] = (static_cast<double>(j % 9) - 4.0) / 37.0;
@@ -26,9 +27,9 @@ double objective(kan::cuda::ResidentNetwork& gpu, const std::vector<double>& x,
 }
 
 TEST(resident_input_and_parameter_gradients_match_independent_finite_differences) {
-    for (auto kind : {kan::BasisKind::Chebyshev, kan::BasisKind::Legendre,
-                      kan::BasisKind::Jacobi, kan::BasisKind::Hermite,
-                      kan::BasisKind::Fourier, kan::BasisKind::GaussianRbf}) {
+    for (auto kind : {test::Family::Chebyshev, test::Family::Legendre,
+                      test::Family::Jacobi, test::Family::Hermite,
+                      test::Family::Fourier, test::Family::GaussianRbf}) {
         const auto model = layer(kind);
         const std::vector<double> x{-0.63, 0.19, 0.72, -0.28}, dy{0.3, -0.7, 0.9, 0.2};
         kan::cuda::ResidentNetwork gpu(kan::Network({model}), 2);
@@ -53,7 +54,7 @@ TEST(resident_input_and_parameter_gradients_match_independent_finite_differences
 }
 
 TEST(resident_failed_uploads_preserve_current_results_and_gradients) {
-    kan::cuda::ResidentNetwork gpu(kan::Network({layer(kan::BasisKind::Fourier)}), 2);
+    kan::cuda::ResidentNetwork gpu(kan::Network({layer(test::Family::Fourier)}), 2);
     gpu.upload_input(std::vector<double>{0.1, 0.2}, 1);
     gpu.upload_output_gradient(std::vector<double>{0.3, 0.4}); gpu.forward(); gpu.backward();
     const auto output = gpu.download_output(), gradient = gpu.download_gradients().input;
@@ -78,8 +79,7 @@ TEST(resident_failed_uploads_preserve_current_results_and_gradients) {
 }
 
 TEST(resident_gaussian_underflow_tail_has_relative_accuracy) {
-    kan::BasisConfig basis{kan::BasisKind::GaussianRbf, 1};
-    basis.centers = {0}; basis.width = 1e-300;
+    const kan::GaussianRbfConfig basis{{0}, 1e-300};
     kan::Layer model(1, 1, basis);
     model.set_parameters(std::vector<double>{1}, std::vector<double>{0});
     kan::cuda::ResidentNetwork gpu(kan::Network({model}), 1);
@@ -91,7 +91,7 @@ TEST(resident_gaussian_underflow_tail_has_relative_accuracy) {
 }
 
 TEST(resident_move_assignment_and_moved_cpu_rejection) {
-    auto cpu = kan::Network({layer(kan::BasisKind::Legendre)});
+    auto cpu = kan::Network({layer(test::Family::Legendre)});
     kan::cuda::ResidentNetwork first(cpu, 2), second(cpu, 1);
     first.upload_input(std::vector<double>{0.1, 0.2}, 1); first.forward();
     const auto expected = first.download_output();
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--expect-no-device") {
         if (kan::cuda::available()) return 1;
         test::throws<std::runtime_error>([] {
-            kan::cuda::ResidentNetwork gpu(kan::Network({layer(kan::BasisKind::Legendre)}), 1);
+            kan::cuda::ResidentNetwork gpu(kan::Network({layer(test::Family::Legendre)}), 1);
         });
         std::cout << "PASS resident construction without device fails explicitly\n";
         return 0;

@@ -6,33 +6,19 @@
 #include <numeric>
 
 namespace {
-kan::BasisConfig spline(std::size_t degree, std::vector<double> knots) {
-    kan::BasisConfig c;
-    c.kind = kan::BasisKind::BSpline;
-    c.degree = degree;
-    c.size = knots.size()-degree-1;
-    c.knots = std::move(knots);
-    return c;
+kan::BSplineConfig spline(std::size_t degree, std::vector<double> knots) {
+    return {degree, std::move(knots)};
 }
-kan::BasisConfig wavelet() {
-    kan::BasisConfig c;
-    c.kind = kan::BasisKind::MexicanHat;
-    c.size = 3;
-    c.centers = {-0.7, 0.2, 1.1};
-    c.scales = {0.4, 0.8, 1.3};
-    return c;
+kan::MexicanHatConfig wavelet() {
+    return {{-0.7, 0.2, 1.1}, {0.4, 0.8, 1.3}};
 }
-kan::BasisConfig rbf() {
-    auto c = wavelet();
-    c.kind = kan::BasisKind::GaussianRbf;
-    c.trainable_rbf = true;
-    c.log_widths = {std::log(0.4), std::log(0.8), std::log(1.3)};
-    return c;
+kan::TrainableRbfConfig rbf() {
+    return {{-0.7, 0.2, 1.1}, {std::log(0.4), std::log(0.8), std::log(1.3)}};
 }
 void input_differences(const kan::BasisConfig& c, double x) {
     constexpr double h = 1e-6;
     auto a = kan::evaluate_basis(c, x), p = kan::evaluate_basis(c, x+h), m = kan::evaluate_basis(c, x-h);
-    for (std::size_t k=0; k<c.size; ++k)
+    for (std::size_t k=0; k<kan::basis_size(c); ++k)
         test::near(a.derivatives[k], (p.values[k]-m.values[k])/(2*h), 2e-7);
 }
 }
@@ -92,9 +78,12 @@ TEST(spline_contract_validation) {
     kan::validate_basis(good);
     auto bad=good; bad.degree=17;
     test::throws<std::invalid_argument>([&]{kan::validate_basis(bad);});
-    bad=good; bad.size=2;
+    bad=good; bad.knots.resize(5); // two terms, fewer than degree+1
     test::throws<std::invalid_argument>([&]{kan::validate_basis(bad);});
-    for(auto knots : {std::vector<double>{0,0,0,1,1,1}, std::vector<double>{0,0,0,0.8,0.7,1,1},
+    // The term count is derived from the knots, so a count mismatch cannot be
+    // expressed; {0,0,0,1,1,1} is a valid quadratic Bezier basis.
+    kan::validate_basis(spline(2,{0,0,0,1,1,1}));
+    for(auto knots : {std::vector<double>{0,0,0,0.8,0.7,1,1},
                       std::vector<double>{0,0,0,0,1,1,1}, std::vector<double>{0,0,0,1,1,1,1},
                       std::vector<double>{0,0,0,0,0,0,0},
                       std::vector<double>{0,0,0,std::numeric_limits<double>::quiet_NaN(),1,1,1}}) {
@@ -121,7 +110,7 @@ TEST(wavelet_closed_forms_and_translation_scale_convention) {
     const double norm=2/(std::sqrt(3.)*std::pow(std::acos(-1.),0.25));
     for(double x:{-1.3,0.2,1.1,2.3}) {
         auto a=kan::evaluate_basis(c,x);
-        for(std::size_t k=0;k<c.size;++k) {
+        for(std::size_t k=0;k<c.centers.size();++k) {
             const double q=(x-c.centers[k])/c.scales[k];
             const double n=norm/std::sqrt(c.scales[k]),e=std::exp(-q*q/2);
             test::near(a.values[k],n*(1-q*q)*e);
@@ -133,7 +122,7 @@ TEST(wavelet_closed_forms_and_translation_scale_convention) {
 }
 
 TEST(wavelet_unit_energy_and_zero_mean) {
-    auto c=wavelet();c.size=1;c.centers={0};c.scales={1};
+    const kan::MexicanHatConfig c{{0},{1}};
     // Composite Simpson quadrature independently checks the normalization.
     constexpr std::size_t intervals=12000;
     constexpr double lo=-12,step=24./intervals;
@@ -147,11 +136,11 @@ TEST(wavelet_unit_energy_and_zero_mean) {
 }
 
 TEST(trainable_rbf_input_and_parameter_derivatives) {
-    auto c=rbf(); c.width=-1; // Scalar width is irrelevant in the opt-in mode.
+    auto c=rbf();
     for(double x:{-1.2,0.2,1.7}) {
         auto a=kan::evaluate_basis(c,x);
-        REQUIRE(a.center_derivatives.size()==c.size);REQUIRE(a.log_width_derivatives.size()==c.size);
-        for(std::size_t k=0;k<c.size;++k) {
+        REQUIRE(a.center_derivatives.size()==c.centers.size());REQUIRE(a.log_width_derivatives.size()==c.centers.size());
+        for(std::size_t k=0;k<c.centers.size();++k) {
             const double width=std::exp(c.log_widths[k]),q=(x-c.centers[k])/width;
             test::near(a.values[k],std::exp(-q*q));
             test::near(a.center_derivatives[k],2*q*a.values[k]/width);
@@ -164,40 +153,37 @@ TEST(trainable_rbf_input_and_parameter_derivatives) {
         }
         input_differences(c,x);
     }
-    c.trainable_rbf=false;c.width=1;
-    auto fixed=kan::evaluate_basis(c,0.3);
+    auto fixed=kan::evaluate_basis(kan::GaussianRbfConfig{c.centers,1},0.3);
     REQUIRE(fixed.center_derivatives.empty());REQUIRE(fixed.log_width_derivatives.empty());
 }
 
 TEST(localized_parameter_and_input_validation) {
-    for(auto good:{wavelet(),rbf()}) {
-        kan::validate_basis(good);
-        auto bad=good;bad.centers.pop_back();
-        test::throws<std::invalid_argument>([&]{kan::validate_basis(bad);});
-        bad=good;bad.centers[0]=std::numeric_limits<double>::infinity();
-        test::throws<std::invalid_argument>([&]{kan::validate_basis(bad);});
+    const auto rejects=[](const kan::BasisConfig& c){test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});};
+    const auto nonfinite_input=[](const kan::BasisConfig& c){
         for(double x:{std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity()})
-            test::throws<std::invalid_argument>([&]{kan::evaluate_basis(good,x);});
-    }
-    auto c=wavelet();c.scales.pop_back();
-    test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});
+            test::throws<std::invalid_argument>([&]{kan::evaluate_basis(c,x);});
+    };
+    auto w=wavelet();
+    kan::validate_basis(w);nonfinite_input(w);
+    w.centers.pop_back();rejects(w);
+    w=wavelet();w.centers[0]=std::numeric_limits<double>::infinity();rejects(w);
+    w=wavelet();w.scales.pop_back();rejects(w);
     for(double scale:{0.,-1.,std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity()}) {
-        c=wavelet();c.scales[0]=scale;
-        test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});
+        w=wavelet();w.scales[0]=scale;rejects(w);
     }
-    c=rbf();c.log_widths.pop_back();
-    test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});
+    auto r=rbf();
+    kan::validate_basis(r);nonfinite_input(r);
+    r.centers.pop_back();rejects(r);
+    r=rbf();r.centers[0]=std::numeric_limits<double>::infinity();rejects(r);
+    r=rbf();r.log_widths.pop_back();rejects(r);
     for(double log_width:{-1000.,1000.,std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity()}) {
-        c=rbf();c.log_widths[0]=log_width;
-        test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});
+        r=rbf();r.log_widths[0]=log_width;rejects(r);
     }
-    c=wavelet();c.trainable_rbf=true;
-    test::throws<std::invalid_argument>([&]{kan::validate_basis(c);});
 }
 
 TEST(localized_extreme_tails_and_explicit_overflow) {
     const double max=std::numeric_limits<double>::max(),tiny=std::numeric_limits<double>::denorm_min();
-    auto c=rbf();c.size=1;c.centers={-max};c.log_widths={std::log(max)};
+    kan::TrainableRbfConfig c{{-max},{std::log(max)}};
     auto a=kan::evaluate_basis(c,max);
     const double width=std::exp(c.log_widths[0]),q=max/width+max/width;
     test::near(a.values[0],std::exp(-q*q));
@@ -210,17 +196,17 @@ TEST(localized_extreme_tails_and_explicit_overflow) {
     REQUIRE(a.derivatives[0]!=0);test::near(a.derivatives[0]/oracle,1,1e-12);
     test::near(a.center_derivatives[0]/-oracle,1,1e-12);
     test::throws<std::overflow_error>([&]{kan::evaluate_basis(c,tiny);});
-    c=wavelet();c.size=1;c.centers={-max};c.scales={1};
-    a=kan::evaluate_basis(c,max);test::near(a.values[0],0);test::near(a.derivatives[0],0);
-    c.centers={0};c.scales={tiny};
-    a=kan::evaluate_basis(c,1);test::near(a.values[0],0);test::near(a.derivatives[0],0);
-    a=kan::evaluate_basis(c,0);REQUIRE(std::isfinite(a.values[0]));test::near(a.derivatives[0],0);
-    a=kan::evaluate_basis(c,55*tiny);
+    kan::MexicanHatConfig w{{-max},{1}};
+    a=kan::evaluate_basis(w,max);test::near(a.values[0],0);test::near(a.derivatives[0],0);
+    w.centers={0};w.scales={tiny};
+    a=kan::evaluate_basis(w,1);test::near(a.values[0],0);test::near(a.derivatives[0],0);
+    a=kan::evaluate_basis(w,0);REQUIRE(std::isfinite(a.values[0]));test::near(a.derivatives[0],0);
+    a=kan::evaluate_basis(w,55*tiny);
     // Python Decimal, 100 digits; value is -1.59025760021617e-492.
     constexpr double wavelet_oracle=1.76912363925034805752500849835501785e-167;
     test::near(a.values[0],0);REQUIRE(a.derivatives[0]!=0);
     test::near(a.derivatives[0]/wavelet_oracle,1,2e-12);
-    test::throws<std::overflow_error>([&]{kan::evaluate_basis(c,tiny);});
+    test::throws<std::overflow_error>([&]{kan::evaluate_basis(w,tiny);});
 }
 
 int main(){return test::run();}

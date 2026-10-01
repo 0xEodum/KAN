@@ -5,7 +5,7 @@
 
 namespace {
 kan::Layer make_layer(std::size_t inputs, std::size_t outputs, std::size_t terms) {
-    kan::Layer layer(inputs, outputs, {kan::BasisKind::Chebyshev, terms});
+    kan::Layer layer(inputs, outputs, kan::ChebyshevConfig{terms});
     std::vector<double> coefficients(layer.coefficients().size()), bias(outputs);
     for (std::size_t j = 0; j < coefficients.size(); ++j)
         coefficients[j] = static_cast<double>(static_cast<int>(j % 13) - 6) / 31.0;
@@ -42,7 +42,7 @@ TEST(cuda_forward_and_backward_match_cpu_across_shapes) {
 }
 
 TEST(cuda_endpoint_derivatives_and_unclipped_values) {
-    kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 9});
+    kan::Layer layer(1, 1, kan::ChebyshevConfig{9});
     std::vector<double> coefficients(9, 0.0);
     coefficients[8] = 1.0;
     layer.set_parameters(coefficients, std::vector<double>{0.0});
@@ -89,23 +89,23 @@ TEST(cuda_checks_dimension_multiplication_before_allocation) {
 }
 
 TEST(cuda_rejects_unsupported_families) {
-    const kan::Layer layer(1, 1, {kan::BasisKind::Legendre, 3});
+    const kan::Layer layer(1, 1, kan::LegendreConfig{3});
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
     test::throws<std::invalid_argument>([&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, {}, 0); });
 }
 
 TEST(cuda_reports_nonfinite_computed_results) {
-    kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 4});
+    kan::Layer layer(1, 1, kan::ChebyshevConfig{4});
     layer.set_parameters(std::vector<double>{1.0, 1.0, 1.0, 1.0}, std::vector<double>{0.0});
     const std::vector<double> input{1e200}, upstream{1.0};
     test::throws<std::overflow_error>([&] { kan::cuda::forward(layer, input, 1); });
     test::throws<std::overflow_error>([&] { kan::cuda::backward(layer, input, 1, upstream); });
-    kan::Layer linear(1, 1, {kan::BasisKind::Chebyshev, 2});
+    kan::Layer linear(1, 1, kan::ChebyshevConfig{2});
     linear.set_parameters(std::vector<double>{0.0, 1e308}, std::vector<double>{0.0});
     test::throws<std::overflow_error>([&] { kan::cuda::forward(linear, std::vector<double>{2.0}, 1); });
     test::throws<std::overflow_error>([&] { kan::cuda::backward(linear, std::vector<double>{0.0}, 1, std::vector<double>{2.0}); });
-    kan::Layer zero(1, 1, {kan::BasisKind::Chebyshev, 2});
+    kan::Layer zero(1, 1, kan::ChebyshevConfig{2});
     test::throws<std::overflow_error>([&] {
         kan::cuda::backward(zero, std::vector<double>{2.0}, 1, std::vector<double>{1e308});
     });
@@ -114,7 +114,7 @@ TEST(cuda_reports_nonfinite_computed_results) {
     });
     // At x=2 these terms have finite values but high-order derivatives
     // overflow. Forward must retain the CPU evaluator's derivative checks.
-    const kan::Layer high_degree(1, 1, {kan::BasisKind::Chebyshev, 539});
+    const kan::Layer high_degree(1, 1, kan::ChebyshevConfig{539});
     test::throws<std::overflow_error>([&] { high_degree.forward(std::vector<double>{2.0}, 1); });
     test::throws<std::overflow_error>([&] { kan::cuda::forward(high_degree, std::vector<double>{2.0}, 1); });
 }
@@ -128,7 +128,7 @@ TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
 }
 
 TEST(cuda_preserves_unfused_intermediate_overflow_contract) {
-    kan::Layer layer(1, 1, {kan::BasisKind::Chebyshev, 2});
+    kan::Layer layer(1, 1, kan::ChebyshevConfig{2});
     const auto maximum = std::numeric_limits<double>::max();
     layer.set_parameters(std::vector<double>{-maximum, maximum}, std::vector<double>{0.0});
     const std::vector<double> input{2.0};

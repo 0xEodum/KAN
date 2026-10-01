@@ -12,28 +12,40 @@
 #include <numeric>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr double learning_rate = 0.001;
 const char* names[] = {"bspline", "mexican_hat", "trainable_rbf"};
 struct Case { int id, family; std::vector<std::size_t> widths; std::size_t batch; };
+kan::BasisConfig family_basis(int family) {
+    if (family == 0) return kan::BSplineConfig{3, {-1,-1,-1,-1,-0.5,0,0.5,1,1,1,1}};
+    const std::vector<double> centers{-1.0, -2.0/3.0, -1.0/3.0, 0.0, 1.0/3.0, 2.0/3.0, 1.0};
+    if (family == 1) return kan::MexicanHatConfig{centers, {0.35,0.45,0.55,0.65,0.75,0.85,0.95}};
+    return kan::TrainableRbfConfig{centers, {-0.8,-0.6,-0.4,-0.2,0,0.2,0.4}};
+}
+// Configured centers / trainable log widths (empty where the family has none).
+const std::vector<double>& centers(const kan::Layer& l) {
+    static const std::vector<double> none;
+    if (const auto* m = std::get_if<kan::MexicanHatConfig>(&l.basis())) return m->centers;
+    if (const auto* t = std::get_if<kan::TrainableRbfConfig>(&l.basis())) return t->centers;
+    return none;
+}
+const std::vector<double>& log_widths(const kan::Layer& l) {
+    static const std::vector<double> none;
+    if (const auto* t = std::get_if<kan::TrainableRbfConfig>(&l.basis())) return t->log_widths;
+    return none;
+}
 kan::Network network(const Case& c) {
-    kan::BasisConfig basis;
-    basis.kind = c.family == 0 ? kan::BasisKind::BSpline : c.family == 1 ? kan::BasisKind::MexicanHat : kan::BasisKind::GaussianRbf; basis.size = 7;
-    basis.alpha = 0.25; basis.beta = 0.5; basis.frequency = 1.25; basis.width = 0.65;
-    basis.centers = {-1.0, -2.0/3.0, -1.0/3.0, 0.0, 1.0/3.0, 2.0/3.0, 1.0};
-    basis.degree = 3; basis.knots = {-1,-1,-1,-1,-0.5,0,0.5,1,1,1,1};
-    basis.scales = {0.35,0.45,0.55,0.65,0.75,0.85,0.95};
-    basis.trainable_rbf = c.family == 2;
-    basis.log_widths = {-0.8,-0.6,-0.4,-0.2,0,0.2,0.4};
+    const auto basis = family_basis(c.family);
     std::vector<kan::Layer> layers;
     for (std::size_t l = 1; l < c.widths.size(); ++l) {
         kan::Layer layer(c.widths[l-1], c.widths[l], basis);
         std::vector<double> coefficients(layer.coefficients().size()), bias(layer.outputs());
         for (std::size_t j = 0; j < coefficients.size(); ++j)
             coefficients[j] = 0.02 * std::sin(static_cast<double>((j + 1) * (l + 1))) /
-                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % basis.size));
+                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % kan::basis_size(basis)));
         for (std::size_t j = 0; j < bias.size(); ++j) bias[j] = 0.01 * std::cos(static_cast<double>(j + l));
         layer.set_parameters(coefficients, bias); layers.push_back(std::move(layer));
     }
@@ -63,7 +75,7 @@ double checksum(const kan::NetworkGradients& g) {
 }
 double checksum(const kan::Network& n) {
     double result = 0;
-    for (const auto& l : n.layers()) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(l.basis().centers) + checksum(l.basis().log_widths);
+    for (const auto& l : n.layers()) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(centers(l)) + checksum(log_widths(l));
     return result;
 }
 struct Result {
@@ -148,7 +160,7 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
             const auto actual = replay_parameters.layers()[l];
             if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
                 !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()) ||
-                expected.basis().centers != actual.basis().centers || expected.basis().log_widths != actual.basis().log_widths)
+                centers(expected) != centers(actual) || log_widths(expected) != log_widths(actual))
                 throw std::runtime_error("resident verification replay changed parameters");
         }
     }
@@ -174,8 +186,8 @@ double verify(const Result& expected, const Result& actual) {
         error = std::max(error, compare(expected.gradients.layers[l].bias, actual.gradients.layers[l].bias));
         error = std::max(error, compare(expected.gradients.layers[l].centers, actual.gradients.layers[l].centers));
         error = std::max(error, compare(expected.gradients.layers[l].log_widths, actual.gradients.layers[l].log_widths));
-        error = std::max(error, compare(expected.parameters.layers()[l].basis().centers, actual.parameters.layers()[l].basis().centers));
-        error = std::max(error, compare(expected.parameters.layers()[l].basis().log_widths, actual.parameters.layers()[l].basis().log_widths));
+        error = std::max(error, compare(centers(expected.parameters.layers()[l]), centers(actual.parameters.layers()[l])));
+        error = std::max(error, compare(log_widths(expected.parameters.layers()[l]), log_widths(actual.parameters.layers()[l])));
         error = std::max(error, compare(expected.parameters.layers()[l].coefficients(), actual.parameters.layers()[l].coefficients()));
         error = std::max(error, compare(expected.parameters.layers()[l].bias(), actual.parameters.layers()[l].bias()));
     }

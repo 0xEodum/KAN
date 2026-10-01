@@ -63,7 +63,7 @@ class M4(unittest.TestCase):
         z = kan.Layer(1, 1, rational(0, 0))
         z.set_rational_parameters(np.array([[[.3]]]), np.empty((1,1,0)), np.zeros(1))
         self.assertEqual(z.backward(x, u).denominators.shape, (1,1,0))
-        b = kan.Layer(1,1,kan.BasisConfig())
+        b = kan.Layer(1,1,kan.ChebyshevConfig())
         self.assertEqual(b.denominators.shape, (0,))
 
     def test_learning_with_independent_holdout_and_mixed_network(self):
@@ -78,7 +78,7 @@ class M4(unittest.TestCase):
         h = (hold-.2)/1.5
         self.assertLess(float(np.mean((l.forward(hold)-(.3+.8*h)/(1+.4*h))**2)), 1e-6)
         self.assertGreater(float(np.abs(l.denominators-.05).max()), .05)
-        basis = kan.BasisConfig(); basis.size = 2
+        basis = kan.ChebyshevConfig(size=2)
         b = kan.Layer(1,1,basis); b.set_parameters(np.array([[[.1,.7]]]), np.array([.02]))
         n = kan.Network([l,b]); ng = n.backward(hold,np.ones_like(hold)); n.sgd(ng,.001)
         self.assertEqual(ng.layers[0].denominators.shape,(1,1,1))

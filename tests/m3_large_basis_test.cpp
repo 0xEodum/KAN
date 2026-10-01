@@ -15,8 +15,7 @@ int main() {
         if(cudaMemGetInfo(&free_bytes,&total_bytes)!=cudaSuccess || free_bytes<2ULL*1024*1024*1024)
             throw std::runtime_error("large-basis regression requires 2 GiB free GPU memory");
         constexpr std::size_t terms=65535ULL*256/2+1;
-        kan::BasisConfig b; b.kind=kan::BasisKind::GaussianRbf; b.size=terms;
-        b.trainable_rbf=true; b.centers.assign(terms,1);b.log_widths.assign(terms,0);
+        kan::TrainableRbfConfig b{std::vector<double>(terms,1),std::vector<double>(terms,0)};
         kan::Layer layer(1,1,std::move(b));
         layer.set_parameters(std::vector<double>(terms,0.1),std::vector<double>{0});
         kan::cuda::ResidentNetwork gpu(kan::Network({std::move(layer)}),1);

@@ -68,9 +68,9 @@ explicitly when unavailable. `-DBUILD_TESTING=OFF` disables tests, and
 ```cpp
 #include <kan/network.hpp>
 
-kan::BasisConfig basis;
-basis.kind = kan::BasisKind::Chebyshev;
-basis.size = 3; // three terms: T0, T1, T2 (degree two)
+// Each family has its own configuration type holding only its parameters;
+// kan::BasisConfig is a std::variant of them.
+const kan::ChebyshevConfig basis{3}; // three terms: T0, T1, T2 (degree two)
 kan::Layer layer(1, 1, basis);
 const std::vector<double> coefficients{0.0, 0.7, -0.2}, bias{0.0};
 layer.set_parameters(coefficients, bias);
@@ -119,21 +119,19 @@ exceptions, finite-data requirements and atomic optimizer updates.
 ## Localized and adaptive use
 
 ```cpp
-kan::BasisConfig spline;
-spline.kind = kan::BasisKind::BSpline;
-spline.degree = 3; spline.size = 4;
-spline.knots = {0,0,0,0,1,1,1,1};
+// Localized families derive their term count: knots.size() - degree - 1 = 4.
+const kan::BSplineConfig spline{3, {0,0,0,0,1,1,1,1}};
 kan::Layer localized(1,1,spline);
 localized.set_parameters(std::vector<double>{0,0,1.0/3,1}, std::vector<double>{0});
 localized.insert_knot(0.4); // preserves the existing x^2 edge
 localized.adapt_grid(std::vector<double>{0.1,0.2,0.3}); // sample-driven refinement
 auto penalty = localized.regularization(0.01); // value and coefficient VJP
 
-kan::BasisConfig radial;
-radial.kind = kan::BasisKind::GaussianRbf; radial.size = 2;
-radial.centers = {-0.5,0.5}; radial.trainable_rbf = true;
-radial.log_widths = {std::log(0.4),std::log(0.6)}; // include <cmath>
+// Trainable RBF: shared centers and log widths are nonlinear parameters.
+const kan::TrainableRbfConfig radial{{-0.5,0.5}, {std::log(0.4),std::log(0.6)}}; // include <cmath>
 kan::Layer learnable(1,1,radial); // explicitly initialize coefficients for training
+// Read a layer's configuration back with std::get / std::get_if:
+const auto& knots = std::get<kan::BSplineConfig>(localized.basis()).knots;
 // backward supplies centers/log_widths VJPs; sgd updates them atomically.
 ```
 

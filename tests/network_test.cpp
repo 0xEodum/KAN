@@ -5,8 +5,8 @@
 
 namespace {
 kan::Network fixture() {
-    kan::BasisConfig c;c.size=3;kan::Layer first(2,3,c);
-    c.kind=kan::BasisKind::Legendre;kan::Layer second(3,1,c);
+    kan::Layer first(2,3,kan::ChebyshevConfig{3});
+    kan::Layer second(3,1,kan::LegendreConfig{3});
     for(auto* layer:{&first,&second}) {
         std::vector<double> p(layer->coefficients().size()),b(layer->bias().size(),0.05);
         for(std::size_t i=0;i<p.size();++i)p[i]=0.04*(static_cast<double>(i%5)-2);
@@ -59,7 +59,7 @@ TEST(single_layer_network_matches_layer) {
     REQUIRE(net.forward(x,2)==layer.forward(x,2));REQUIRE(net.backward(x,2,g).layers[0].coefficients==layer.backward(x,2,g).coefficients);
 }
 TEST(sgd_training_fits_polynomial) {
-    kan::BasisConfig config;config.size=3;kan::Network net({kan::Layer(1,1,config)});std::vector<double>x(33),target(33);
+    kan::ChebyshevConfig config{3};kan::Network net({kan::Layer(1,1,config)});std::vector<double>x(33),target(33);
     for(std::size_t i=0;i<x.size();++i){x[i]=-1+2*static_cast<double>(i)/32;target[i]=0.2+0.7*x[i]-0.4*x[i]*x[i];}
     for(int epoch=0;epoch<400;++epoch){auto g=net.forward(x,x.size());for(std::size_t i=0;i<g.size();++i)g[i]=2*(g[i]-target[i])/static_cast<double>(g.size());net.sgd(net.backward(x,x.size(),g),0.1);}
     const auto y=net.forward(x,x.size());double mse=0;for(std::size_t i=0;i<y.size();++i)mse+=(y[i]-target[i])*(y[i]-target[i]);REQUIRE(mse/y.size()<1e-12);

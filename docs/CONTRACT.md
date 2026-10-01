@@ -2,20 +2,27 @@
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
-Arrays are contiguous, batch-major; coefficients use `(o * inputs + i) * basis.size + k`.
+Arrays are contiguous, batch-major; coefficients use `(o * inputs + i) * basis_size(basis) + k`.
 All arithmetic and storage in M1 use `double`. Bias and coefficients initialize to zero.
 Topology and parameters are owned values, never global state. Initialization for training
 is explicit: zero initialization is useful for a single linear-in-coefficients layer, but
 multilayer training needs nonzero parameters to propagate gradients.
 
-`BasisConfig::size` is the number of terms, never a polynomial degree. Chebyshev
+`BasisConfig` is a `std::variant` of one configuration type per family
+(`ChebyshevConfig`, `LegendreConfig`, `JacobiConfig`, `HermiteConfig`, `FourierConfig`,
+`GaussianRbfConfig`, `TrainableRbfConfig`, `BSplineConfig`, `MexicanHatConfig`); each
+holds only its family's parameters, and a value-initialized `BasisConfig` is
+`ChebyshevConfig{4}`. `basis_size(config)` is the number of terms, never a polynomial
+degree: explicit `size` for polynomial and Fourier families, derived for localized
+families (one term per center; `knots.size()-degree-1` for splines). Chebyshev
 uses T_n, Legendre uses P_n, Jacobi uses P_n^(alpha,beta), Hermite uses physicists'
 H_n. Polynomials are evaluated by recurrence, including endpoints and outside [-1,1].
 There is no implicit clipping, normalization, tanh, or extrapolation policy.
 Fourier is `[1, cos(w*x), sin(w*x), cos(2*w*x), sin(2*w*x), ...]` and size is odd.
 Gaussian RBF is `exp(-((x-center)/width)^2)` with explicit finite centers and width > 0.
 Jacobi alpha and beta are finite and greater than -1; angular frequency is finite and positive.
-Only parameters relevant to the selected family participate in validation/evaluation.
+Irrelevant parameters cannot be expressed: each configuration type has only its own.
+Localized configurations need at least one term and equal-length parameter vectors.
 Each evaluator returns values and derivatives with respect to x.
 
 Layer backward is a vector-Jacobian product, summing parameter gradients over the batch.
@@ -90,8 +97,8 @@ and model serialization remain outside M2.
 
 ## Localized and adaptive bases (M3)
 
-`BSpline` uses explicit clamped nondecreasing finite knots, length
-`size+degree+1`, degree 0..16 and size at least degree+1. Endpoints have exactly
+`BSplineConfig` uses explicit clamped nondecreasing finite knots and degree 0..16;
+it has `knots.size()-degree-1` terms, at least degree+1. Endpoints have exactly
 degree+1 repetitions and a positive domain `[knots[degree],knots[size]]`.
 Interior multiplicity is at most degree+1; full multiplicity permits a jump.
 Values and input derivatives are zero outside the domain. Interior knots use
@@ -100,22 +107,23 @@ convention. Degree-zero derivatives are zero, including at jumps (a convention,
 not a claim of differentiability there). Cox-de Boor terms with zero denominators
 are zero. No implicit extrapolation or clipping occurs.
 
-`MexicanHat` has explicit translations `centers` and positive `scales`, each
-length size. For `q=(x-center)/scale`, each term is
+`MexicanHatConfig` has explicit translations `centers` and positive `scales` of
+equal length, one term each. For `q=(x-center)/scale`, each term is
 `A*(1-q*q)*exp(-q*q/2)`, where `A=2/(sqrt(3)*pi^(1/4)*sqrt(scale))`.
 Its derivative is `A/scale*q*(q*q-3)*exp(-q*q/2)`. These are L2-normalized
 continuous wavelets; configuration is fixed, with learned edge coefficients.
 Extreme representable tails use log-space evaluation to preserve derivatives
 even when the basis value underflows. Nonfinite mathematical results fail.
 
-Gaussian configuration remains fixed by default, using scalar width. With
-`trainable_rbf=true`, `log_widths` has length size and each exponent must be
-finite and positive; the scalar width is unused. Centers/log widths are shared
+`GaussianRbfConfig` is fixed, using a scalar width. `TrainableRbfConfig` makes the
+centers and `log_widths` (equal length, each exponent finite and positive) nonlinear
+trainable parameters. Centers/log widths are shared
 across a layer's edges, not per edge. At each term, the center derivative is the
 negative input derivative, and log-width derivative is `2*q*q*exp(-q*q)`.
 `BasisValues` returns these vectors only for trainable RBFs. `LayerGradients`
 returns their VJPs, summing over batches and edges; fixed families return empty
-vectors. `set_rbf_parameters` validates and atomically replaces both vectors.
+vectors. `set_rbf_parameters` requires a `TrainableRbfConfig` layer and vectors of
+its current term count, validates and atomically replaces both.
 SGD validates finite candidate vectors and finite positive exponentiated widths
 before committing any parameter; candidate width overflow/underflow raises
 `overflow_error`, while invalid user configuration/gradients raises
@@ -151,7 +159,7 @@ accessible through layer/network backward.
 ## Rational edges (M4)
 
 A typed `RationalConfig` selects a nonlinear rational Layer, separately from
-`BasisKind`. Each edge is `r(x)=P(z)/Q(z)`, `z=(x-center)/scale`,
+`BasisConfig`. Each edge is `r(x)=P(z)/Q(z)`, `z=(x-center)/scale`,
 `P=sum(a[k]*z^k,k=0..m)`, `Q=1+sum(b[k-1]*z^k,k=1..n)`.
 Degrees m,n are independently 0..16, default 3,2. Center is finite (default zero),
 scale finite and positive (default one). Fixing Q's constant to one removes common
@@ -198,6 +206,11 @@ calls do not allocate GPU storage or fall back to CPU evaluation. CPU/GPU parity
 remains tolerance-based. The original synchronous Chebyshev CUDA API rejects
 rational layers.
 
+Python exposes one class per basis configuration type (`kan.ChebyshevConfig(size=...)`,
+`kan.BSplineConfig(degree=..., knots=...)`, ...; each has a `size` property and value
+equality; being mutable, they are unhashable), `kan.basis_size`, and `Layer.basis` returns
+a copy of the layer's configuration. Vector attributes are copies as well: assign a whole
+list (`cfg.knots = [...]`) rather than mutating the returned list in place.
 Python exposes `RationalConfig`, the rational Layer constructor, owned config,
 parameter and gradient snapshots, and `set_rational_parameters`. Rational
 denominator arrays have shape `(outputs,inputs,n)`, even for n=0; basis-layer
