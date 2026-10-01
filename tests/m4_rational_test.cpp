@@ -45,6 +45,13 @@ TEST(relative_guard_boundary_poles_and_conditioning) {
     auto well=kan::evaluate_rational(c,1,std::vector<double>{1,0},std::vector<double>{1e9,-1e9+100});
     test::near(well.value,1.0/101.0);
 }
+TEST(large_finite_denominator_preserves_small_nonlinear_vjp) {
+    kan::RationalConfig c;c.numerator_degree=0;c.denominator_degree=1;
+    auto r=kan::evaluate_rational(c,1,std::vector<double>{1e300},std::vector<double>{1e200});
+    test::near(r.value/1e100,1);test::near(r.input_derivative/(-1e100),1);
+    test::near(r.denominator_derivatives[0]/(-1e-100),1);
+    test::near(r.numerator_derivatives[0]/1e-200,1);
+}
 TEST(invalid_configuration_shapes_data_and_intermediates) {
     kan::RationalConfig c;
     for(double v:{0.0,-1.0,std::numeric_limits<double>::infinity()}) {auto bad=c;bad.scale=v;test::throws<std::invalid_argument>([&]{kan::validate_rational(bad);});}

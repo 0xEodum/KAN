@@ -83,6 +83,32 @@ TEST(pole_guards_even_zero_upstream_and_explicit_update) {
     auto g=l.backward(std::vector<double>{0.4},1,std::vector<double>{0.3});l.sgd(g,0.1);
     test::near(l.coefficients()[0],2-0.1*g.coefficients[0]);test::near(l.denominators()[0],0.2-0.1*g.denominators[0]);
     test::near(l.bias()[0],0.1-0.1*g.bias[0]);
+    // SGD admits finite coefficients; safety is checked on subsequent execution.
+    auto candidate=l.regularization(0).gradients;candidate.denominators[0]=l.denominators()[0]+1;
+    l.sgd(candidate,1);
+    test::throws<std::domain_error>([&]{l.forward(std::vector<double>{1},1);});
+}
+TEST(rational_dimensions_shapes_nonfinite_and_moved_state) {
+    kan::RationalConfig c;c.numerator_degree=0;c.denominator_degree=0;
+    test::throws<std::invalid_argument>([&]{kan::Layer l(0,1,c);});
+    test::throws<std::invalid_argument>([&]{kan::Layer l(1,0,c);});
+    test::throws<std::overflow_error>([&]{kan::Layer l(std::numeric_limits<size_t>::max(),2,c);});
+    kan::Layer l(1,1,c);l.set_rational_parameters(std::vector<double>{2},{},std::vector<double>{1});
+    test::near(l.forward(std::vector<double>{3},1)[0],3);
+    test::near(l.backward(std::vector<double>{3},1,std::vector<double>{4}).input[0],0);
+    test::throws<std::invalid_argument>([&]{l.forward({},1);});
+    test::throws<std::invalid_argument>([&]{l.backward(std::vector<double>{0},1,{});});
+    test::throws<std::invalid_argument>([&]{l.forward(std::vector<double>{std::numeric_limits<double>::infinity()},1);});
+    test::throws<std::invalid_argument>([&]{l.backward(std::vector<double>{0},1,std::vector<double>{std::numeric_limits<double>::quiet_NaN()});});
+    test::throws<std::invalid_argument>([&]{l.set_rational_parameters(std::vector<double>{2},{},{});});
+    test::throws<std::invalid_argument>([&]{l.set_rational_parameters(std::vector<double>{2},{},std::vector<double>{std::numeric_limits<double>::quiet_NaN()});});
+    auto moved=std::move(l);test::near(moved.forward(std::vector<double>{0},1)[0],3);
+    test::throws<std::invalid_argument>([&]{l.forward(std::vector<double>{0},1);});
+    kan::Layer basis(1,1,{});test::throws<std::invalid_argument>([&]{basis.set_rational_parameters(std::vector<double>{2},{},std::vector<double>{1});});
+    kan::Layer huge(2,1,c);const auto max=std::numeric_limits<double>::max();
+    huge.set_rational_parameters(std::vector<double>{max,max},{},std::vector<double>{0});
+    test::throws<std::overflow_error>([&]{huge.forward(std::vector<double>{0,0},1);});
+    test::throws<std::overflow_error>([&]{huge.backward(std::vector<double>{0,0,0,0},2,std::vector<double>{max,max});});
 }
 TEST(deterministic_rational_learning_with_independent_holdout) {
     kan::RationalConfig c;c.numerator_degree=1;c.denominator_degree=1;kan::Network n({kan::Layer(1,1,c)});
