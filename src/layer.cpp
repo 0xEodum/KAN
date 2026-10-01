@@ -72,7 +72,7 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
     require_finite(input); require_finite(output_gradient);
     LayerGradients gradient{std::vector<double>(input_size, 0.0),
                             std::vector<double>(coefficients_.size(), 0.0),
-                            std::vector<double>(outputs_, 0.0)};
+                            std::vector<double>(outputs_, 0.0), {}, {}};
     if (basis_.kind == BasisKind::GaussianRbf && basis_.trainable_rbf) {
         gradient.centers.resize(basis_.size); gradient.log_widths.resize(basis_.size);
     }
