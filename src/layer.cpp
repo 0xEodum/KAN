@@ -5,6 +5,21 @@
 #include <numeric>
 
 namespace kan {
+Layer::Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, RationalTag)
+    : inputs_(inputs), outputs_(outputs), rational_(true), rational_config_(config) {
+    throw std::logic_error("M4 RED: rational layer pending");
+}
+const BasisConfig& Layer::basis() const {
+    if (rational_) throw std::invalid_argument("rational layers have no basis");
+    return basis_;
+}
+const RationalConfig& Layer::rational_config() const {
+    if (!rational_) throw std::invalid_argument("basis layers have no rational configuration");
+    return rational_config_;
+}
+void Layer::set_rational_parameters(std::span<const double>, std::span<const double>, std::span<const double>) {
+    throw std::logic_error("M4 RED: rational setter pending");
+}
 namespace {
 std::size_t checked_size(std::size_t left, std::size_t right) {
     const auto max = std::vector<double>().max_size();
