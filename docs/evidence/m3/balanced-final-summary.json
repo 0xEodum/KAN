@@ -1,0 +1,28 @@
+{
+  "m3_resident_full": {
+    "preopt": {
+      "samples": 14,
+      "median_ms": 1222.5448999999999,
+      "iqr_ms": 14.883049999999912
+    },
+    "final": {
+      "samples": 14,
+      "median_ms": 4.5011,
+      "iqr_ms": 0.786575
+    },
+    "median_reduction_percent": 99.63182538326404
+  },
+  "m3_transfer_full": {
+    "preopt": {
+      "samples": 14,
+      "median_ms": 1220.2137,
+      "iqr_ms": 14.764149999999972
+    },
+    "final": {
+      "samples": 14,
+      "median_ms": 6.6203,
+      "iqr_ms": 1.0080999999999998
+    },
+    "median_reduction_percent": 99.45744749464787
+  }
+}

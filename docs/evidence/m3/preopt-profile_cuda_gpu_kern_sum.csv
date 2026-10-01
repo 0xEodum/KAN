@@ -1,0 +1,8 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+99.8,34053058062,81,420408124.2,342635260.0,62968869,1159322086,326816292.5,"kan::cuda::<unnamed>::nonlinear_kernel(const double *, const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, int *)"
+0.1,20469282,81,252707.2,214304.0,55168,892994,189308.4,"kan::cuda::<unnamed>::input_kernel(const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, int *)"
+0.1,18786284,81,231929.4,162689.0,160673,652801,108406.0,"kan::cuda::<unnamed>::parameter_kernel(const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, double, int *)"
+0.1,17853086,81,220408.5,239488.0,120384,1155074,133792.4,"kan::cuda::<unnamed>::basis_kernel(const double *, double *, double *, double *, unsigned long long, kan::cuda::<unnamed>::Basis, int *)"
+0.0,15668483,81,193438.1,141985.0,43392,1128066,187766.3,"kan::cuda::<unnamed>::forward_kernel(const double *, const double *, const double *, double *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, int *)"
+0.0,138304,81,1707.5,1696.0,1568,1888,124.0,"kan::cuda::<unnamed>::validate_width_kernel(const double *, unsigned long long, int *)"
+0.0,68288,27,2529.2,2496.0,2336,2880,133.3,"kan::cuda::<unnamed>::candidate_kernel(const double *, const double *, double *, unsigned long long, double, int *)"

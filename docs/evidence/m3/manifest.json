@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-01",
+  "protocol_revision": "4a5bf87",
+  "preopt_resident_revision": "e07bf09",
+  "final_resident_revision": "f36d22d",
+  "benchmark_source_revision": "e07bf09",
+  "build": "Release MSVC 19.50.35724.0 / CUDA 13.1.115 / architecture 86 / --fmad=false / explicit --allow-unsupported-compiler",
+  "hardware": "Intel i5-12400, 6 cores/12 logical; NVIDIA RTX 3090 24576 MiB, driver591.86, Windows WDDM, unlocked clocks/active display",
+  "profilers": "Nsight Systems2025.5.2; Nsight Compute2025.4.1 ERR_NVGPUCTRPERM",
+  "artifacts": {
+    ".gitattributes": {
+      "bytes": 8,
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
+    },
+    "balanced-final-rbf.csv": {
+      "bytes": 2803,
+      "sha256": "ab95056f319b84c348206ba9ef4f33885ba6ebd7d862727ca628b49f847346fc"
+    },
+    "balanced-final-summary.json": {
+      "bytes": 616,
+      "sha256": "5cea3eb6e3b221a6e778c78dc8a4ecafcce49a4d04dff774ffb18682058ff455"
+    },
+    "balanced-rbf.csv": {
+      "bytes": 2770,
+      "sha256": "e5f76c4fe471df922cdb9ec93e743b6c0f3f593d3bd14e7d4398ebb90c073b54"
+    },
+    "final-m2-regression.csv": {
+      "bytes": 22566,
+      "sha256": "c641562537597d5fead567806913b570d3b14a36f3afdb3bbc8bf5c2a9672dd5"
+    },
+    "final-m3.csv": {
+      "bytes": 10610,
+      "sha256": "a897511d72a54d4471ad7603fa9739efc068cc2de2b811b6cae0e8774d1a4046"
+    },
+    "final-profile_cuda_api_sum.csv": {
+      "bytes": 1061,
+      "sha256": "7f16a9a3b1bc9172b8c7bf5a848ce67bdfecbd1e68ab4a17aedbb2cd935f5274"
+    },
+    "final-profile_cuda_gpu_kern_sum.csv": {
+      "bytes": 1762,
+      "sha256": "10af79e6c13b9c6639182eeee4b0c4c590090fce3735a13373c2fc4881793d4f"
+    },
+    "final-profile_cuda_gpu_mem_time_sum.csv": {
+      "bytes": 307,
+      "sha256": "efe4a49636fab3a146b2a30bf83f5102cf3ea8409925f3b42cb77ce6d3b59099"
+    },
+    "large-basis-green.txt": {
+      "bytes": 122,
+      "sha256": "5b3ce64ef58459729a7f83e22ae55c5f4e4cb58c0febca26038d2674231c3bb1"
+    },
+    "ncu-preopt.txt": {
+      "bytes": 1962,
+      "sha256": "b5bba07de59d91971e9e6639eaeb8870f884eb16b92797a756d2a89afd98732c"
+    },
+    "preopt-profile_cuda_api_sum.csv": {
+      "bytes": 1080,
+      "sha256": "1afe27145ea705a975c33b1ca8170a9e1c27861aa370fc8111ecdd5e70fb1a59"
+    },
+    "preopt-profile_cuda_gpu_kern_sum.csv": {
+      "bytes": 1595,
+      "sha256": "81286634b7f691345d19a4ca4a91c201c725cbbc94e589225f3b0da923c37aa9"
+    },
+    "preopt-profile_cuda_gpu_mem_time_sum.csv": {
+      "bytes": 307,
+      "sha256": "2350ddd95bbfdae8da5065ca1f85eb8a6c412585018e686b1ee2397f35223283"
+    },
+    "resident-green.txt": {
+      "bytes": 1172,
+      "sha256": "70010fde08cc92fde4dd89e19dfc9526bd371d65807ac68228079c1caffb660f"
+    },
+    "resident-memcheck.txt": {
+      "bytes": 956,
+      "sha256": "5371337e95b75a3c888eab85fbf2298187cfb82caf25bf4220d3a61a5a39a30d"
+    },
+    "resident-red.txt": {
+      "bytes": 846,
+      "sha256": "179caf77b8872808b48c9e7fdb45159cc7326efefd3e8a8f2532a3120e9ec9f6"
+    },
+    "resident-tuned-memcheck.txt": {
+      "bytes": 956,
+      "sha256": "5371337e95b75a3c888eab85fbf2298187cfb82caf25bf4220d3a61a5a39a30d"
+    }
+  },
+  "reproducible_local_binaries": {
+    "build-m3-cuda\\m3-benchmark-preopt.exe": {
+      "bytes": 289792,
+      "sha256": "6be2bfc2ef48c540ee5bcc26f705738c7d20434ee0a5f9f815b7e836b03cd470"
+    },
+    "build-m3-cuda\\m3_benchmark.exe": {
+      "bytes": 298496,
+      "sha256": "cb1758c0d56981c60a16b27afc929066d0cc46791ccb8c96b62182dc01ada600"
+    },
+    "build-m3-cuda\\m2_benchmark.exe": {
+      "bytes": 296960,
+      "sha256": "05262818586be7341795004ef3dac24611a1dcbefdb991eec175199e3a3c28ec"
+    },
+    "build-m3-cuda\\m3-preopt-profile.nsys-rep": {
+      "bytes": 104442,
+      "sha256": "d63a1120fc4472e1ded430a9e0b105ca53113cce5d7e5d012efaeab3a9a6ce35"
+    },
+    "build-m3-cuda\\m3-final-profile.nsys-rep": {
+      "bytes": 109294,
+      "sha256": "7d7d8a90bc3f6c81aee87c72d6dfa444bf9f7fa276ca67db74fd06a87ea5c1bb"
+    }
+  }
+}
