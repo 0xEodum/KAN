@@ -1,4 +1,5 @@
 #include "kan/rational.hpp"
+#include "rational_internal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -22,11 +23,7 @@ void validate_rational(const RationalConfig& c) {
        !std::isfinite(c.scale) || c.scale<=0 || !std::isfinite(c.epsilon) || c.epsilon<=0 || c.epsilon>=1)
         throw std::invalid_argument("invalid rational configuration");
 }
-RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::span<const double> a, std::span<const double> b) {
-    validate_rational(c);
-    if(a.size()!=c.numerator_degree+1 || b.size()!=c.denominator_degree || !std::isfinite(x))
-        throw std::invalid_argument("rational shape or input mismatch");
-    data_finite(a);data_finite(b);
+detail::RationalTerms detail::evaluate_rational_trusted(const RationalConfig& c, double x, std::span<const double> a, std::span<const double> b) {
     const double z=finite(finite(x-c.center)/c.scale);
     double p=a.back(),dp=0;
     for(std::size_t k=c.numerator_degree;k>0;--k) {
@@ -42,7 +39,7 @@ RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::spa
         bound=finite(finite(bound*std::abs(z))+std::abs(next));
     }
     if(std::abs(q)<=finite(c.epsilon*bound))throw std::domain_error("unsafe rational denominator");
-    RationalEvaluation r;r.value=finite(p/q);
+    RationalTerms r{};r.value=finite(p/q);
     const double numerator_term=finite(dp/q),denominator_ratio=finite(dq/q);
     const double denominator_term=finite(r.value*denominator_ratio);
     r.input_derivative=finite(finite(numerator_term-denominator_term)/c.scale);
@@ -59,7 +56,6 @@ RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::spa
             std::signbit(p)!=std::signbit(dq)) : finite(denominator_term/c.scale);
         r.input_derivative=finite(first-second);
     }
-    r.numerator_derivatives.resize(a.size());r.denominator_derivatives.resize(b.size());
     double power=1;
     const auto degree=std::max(c.numerator_degree,c.denominator_degree);
     for(std::size_t k=0;k<=degree;++k) {
@@ -79,5 +75,16 @@ RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::spa
         if(k<degree)power=finite(power*z);
     }
     return r;
+}
+RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::span<const double> a, std::span<const double> b) {
+    validate_rational(c);
+    if(a.size()!=c.numerator_degree+1 || b.size()!=c.denominator_degree || !std::isfinite(x))
+        throw std::invalid_argument("rational shape or input mismatch");
+    data_finite(a);data_finite(b);
+    const auto terms=detail::evaluate_rational_trusted(c,x,a,b);
+    RationalEvaluation result;result.value=terms.value;result.input_derivative=terms.input_derivative;
+    result.numerator_derivatives.assign(terms.numerator_derivatives.begin(),terms.numerator_derivatives.begin()+a.size());
+    result.denominator_derivatives.assign(terms.denominator_derivatives.begin(),terms.denominator_derivatives.begin()+b.size());
+    return result;
 }
 }

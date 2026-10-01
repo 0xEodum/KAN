@@ -1,4 +1,5 @@
 #include "kan/layer.hpp"
+#include "rational_internal.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -88,7 +89,7 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
                 const auto m=rational_config_.numerator_degree+1,n=rational_config_.denominator_degree;
                 for(std::size_t o=0;o<outputs_;++o) {
                     const auto edge=o*inputs_+i;
-                    const auto r=evaluate_rational(rational_config_,input[b*inputs_+i],
+                    const auto r=detail::evaluate_rational_trusted(rational_config_,input[b*inputs_+i],
                         std::span<const double>(coefficients_).subspan(edge*m,m),
                         std::span<const double>(denominators_).subspan(edge*n,n));
                     output[b*outputs_+o]+=r.value;
@@ -127,7 +128,7 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
                 const auto m=rational_config_.numerator_degree+1,n=rational_config_.denominator_degree;
                 for(std::size_t o=0;o<outputs_;++o) {
                     const auto edge=o*inputs_+i;
-                    const auto r=evaluate_rational(rational_config_,input[b*inputs_+i],
+                    const auto r=detail::evaluate_rational_trusted(rational_config_,input[b*inputs_+i],
                         std::span<const double>(coefficients_).subspan(edge*m,m),
                         std::span<const double>(denominators_).subspan(edge*n,n));
                     const auto upstream=output_gradient[b*outputs_+o];
