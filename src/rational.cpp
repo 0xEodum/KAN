@@ -1,6 +1,7 @@
 #include "kan/rational.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 namespace kan {
 namespace {
@@ -10,6 +11,10 @@ double finite(double value) {
 }
 void data_finite(std::span<const double> values) {
     for(double v:values)if(!std::isfinite(v))throw std::invalid_argument("rational data must be finite");
+}
+bool tiny(double value) { return std::abs(value)<std::numeric_limits<double>::min(); }
+double signed_exp(double exponent, bool negative) {
+    return std::copysign(finite(std::exp(exponent)),negative ? -1.0 : 1.0);
 }
 }
 void validate_rational(const RationalConfig& c) {
@@ -38,14 +43,39 @@ RationalEvaluation evaluate_rational(const RationalConfig& c, double x, std::spa
     }
     if(std::abs(q)<=finite(c.epsilon*bound))throw std::domain_error("unsafe rational denominator");
     RationalEvaluation r;r.value=finite(p/q);
-    r.input_derivative=finite(finite(finite(dp/q)-finite(r.value*finite(dq/q)))/c.scale);
+    const double numerator_term=finite(dp/q),denominator_ratio=finite(dq/q);
+    const double denominator_term=finite(r.value*denominator_ratio);
+    r.input_derivative=finite(finite(numerator_term-denominator_term)/c.scale);
+    // Restore representable final derivatives when an intermediate quotient or
+    // product has underflowed. The ordinary Horner/quotient path is unchanged.
+    const bool tiny_numerator=dp!=0 && tiny(numerator_term);
+    const bool tiny_denominator=p!=0 && dq!=0 &&
+        (tiny(r.value) || tiny(denominator_ratio) || tiny(denominator_term));
+    if(tiny_numerator || tiny_denominator) {
+        const double lq=std::log(std::abs(q)),ls=std::log(c.scale);
+        const double first=tiny_numerator ? signed_exp(std::log(std::abs(dp))-lq-ls,
+            std::signbit(dp)!=std::signbit(q)) : finite(numerator_term/c.scale);
+        const double second=tiny_denominator ? signed_exp(std::log(std::abs(p))+std::log(std::abs(dq))-2*lq-ls,
+            std::signbit(p)!=std::signbit(dq)) : finite(denominator_term/c.scale);
+        r.input_derivative=finite(first-second);
+    }
     r.numerator_derivatives.resize(a.size());r.denominator_derivatives.resize(b.size());
     double power=1;
     const auto degree=std::max(c.numerator_degree,c.denominator_degree);
     for(std::size_t k=0;k<=degree;++k) {
         const double divided=finite(power/q);
-        if(k<a.size())r.numerator_derivatives[k]=divided;
-        if(k>0 && k<=b.size())r.denominator_derivatives[k-1]=finite(-r.value*divided);
+        if(k<a.size()) {
+            r.numerator_derivatives[k]=divided;
+            if(z!=0 && (tiny(power) || tiny(divided)))
+                r.numerator_derivatives[k]=signed_exp(k*std::log(std::abs(z))-std::log(std::abs(q)),
+                    std::signbit(q)!=(std::signbit(z) && k%2!=0));
+        }
+        if(k>0 && k<=b.size()) {
+            r.denominator_derivatives[k-1]=finite(-r.value*divided);
+            if(p!=0 && z!=0 && (tiny(power) || tiny(divided) || tiny(r.value)))
+                r.denominator_derivatives[k-1]=signed_exp(std::log(std::abs(p))+k*std::log(std::abs(z))-2*std::log(std::abs(q)),
+                    !(std::signbit(p)!=(std::signbit(z) && k%2!=0)));
+        }
         if(k<degree)power=finite(power*z);
     }
     return r;

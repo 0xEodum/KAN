@@ -64,6 +64,9 @@ TEST(representable_vjp_survives_underflowing_power_and_quotient) {
     c.denominator_degree=1;
     r=kan::evaluate_rational(c,1e300,std::vector<double>{1e-300},std::vector<double>{1e-270});
     test::near(r.denominator_derivatives[0]/(-1e-60),1);
+    c.scale=1e-320;
+    r=kan::evaluate_rational(c,1e-20,std::vector<double>{1e-300},std::vector<double>{1e-270});
+    test::near(r.input_derivative/(-c.scale*1e10),1,1e-8);
 }
 TEST(invalid_configuration_shapes_data_and_intermediates) {
     kan::RationalConfig c;
