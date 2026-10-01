@@ -52,6 +52,19 @@ TEST(large_finite_denominator_preserves_small_nonlinear_vjp) {
     test::near(r.denominator_derivatives[0]/(-1e-100),1);
     test::near(r.numerator_derivatives[0]/1e-200,1);
 }
+TEST(representable_vjp_survives_underflowing_power_and_quotient) {
+    kan::RationalConfig c;c.numerator_degree=0;c.denominator_degree=2;
+    auto r=kan::evaluate_rational(c,1e-200,std::vector<double>{1e300},std::vector<double>{0,0});
+    test::near(r.denominator_derivatives[0]/(-1e100),1);
+    test::near(r.denominator_derivatives[1]/(-1e-100),1);
+    c.denominator_degree=16;
+    r=kan::evaluate_rational(c,1e-20,std::vector<double>{1e300},std::vector<double>(16));
+    test::near(r.denominator_derivatives[15]/(-1e-20),1,1e-10);
+    // P/Q itself is below binary64 range, yet P*z/Q^2 is representable.
+    c.denominator_degree=1;
+    r=kan::evaluate_rational(c,1e300,std::vector<double>{1e-300},std::vector<double>{1e-270});
+    test::near(r.denominator_derivatives[0]/(-1e-60),1);
+}
 TEST(invalid_configuration_shapes_data_and_intermediates) {
     kan::RationalConfig c;
     for(double v:{0.0,-1.0,std::numeric_limits<double>::infinity()}) {auto bad=c;bad.scale=v;test::throws<std::invalid_argument>([&]{kan::validate_rational(bad);});}
