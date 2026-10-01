@@ -89,9 +89,11 @@ TEST(resident_zero_batch_and_independent_instances) {
 TEST(resident_numerical_overflow_and_atomic_network_sgd) {
     const auto maximum = std::numeric_limits<double>::max();
     kan::Layer first(1, 1, {kan::BasisKind::Chebyshev, 1});
-    kan::Layer second(1, 1, {kan::BasisKind::Chebyshev, 1});
+    kan::Layer second(1, 1, {kan::BasisKind::Chebyshev, 2});
     first.set_parameters(std::vector<double>{0.1}, std::vector<double>{0});
-    second.set_parameters(std::vector<double>{maximum}, std::vector<double>{0});
+    // The nonzero linear edge sends a real gradient into the earlier layer.
+    // Its finite candidate must remain hidden when the later constant overflows.
+    second.set_parameters(std::vector<double>{maximum, 1}, std::vector<double>{0});
     kan::cuda::ResidentNetwork gpu(kan::Network({first, second}), 1);
     gpu.upload_input(std::vector<double>{0}, 1); gpu.upload_output_gradient(std::vector<double>{-1});
     gpu.forward(); gpu.backward();
@@ -100,6 +102,7 @@ TEST(resident_numerical_overflow_and_atomic_network_sgd) {
     compare(unchanged.layers()[0].coefficients(), first.coefficients());
     compare(unchanged.layers()[1].coefficients(), second.coefficients());
     gpu.sgd(0.01); // failed candidate validation must retain usable gradients
+    test::near(gpu.download_parameters().layers()[0].coefficients()[0], 0.11);
     kan::Layer high_degree(1, 1, {kan::BasisKind::Chebyshev, 539});
     kan::cuda::ResidentNetwork high(kan::Network({high_degree}), 1);
     high.upload_input(std::vector<double>{2}, 1);
