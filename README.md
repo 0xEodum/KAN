@@ -4,19 +4,19 @@ An original implementation of learned univariate edge expansions, built from
 [the project brief](introduction.md). C++20 owns mathematics, parameters, forward,
 backward and training; optional Python bindings expose the same implementation.
 
-## Current scope (M1 and M2)
+## Current scope (M1 through M3)
 
 | Category | Available | Planned |
 |---|---|---|
 | Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite | Normalization and additional families |
-| Harmonic / wave | Fourier | Wavelets |
-| Radial / rational | Fixed-center Gaussian RBF | Trainable centers/widths, Padé/rational edges |
-| Local / adaptive | — | B-splines, adaptive knots |
+| Harmonic / wave | Fourier, normalized Mexican-hat wavelets | Additional wavelets |
+| Radial / rational | Fixed or trainable Gaussian RBF centers/widths | Padé/rational edges |
+| Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
 | Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
 
-CPU supports all six available families and compatible networks of any depth.
+CPU supports all eight available families and compatible networks of any depth.
 The optional CUDA target provides both the original synchronous Chebyshev layer
-API and a resident executor supporting all six families, mixed networks, reusable
+API and a resident executor supporting all eight families, mixed networks, reusable
 workspaces, and GPU SGD. Optional NumPy bindings support CPU and resident CUDA use.
 Performance conclusions require the frozen, matched full-call benchmark; see
 [M2 benchmark evidence](docs/evidence/M2-benchmark.md).
@@ -115,6 +115,37 @@ order `[1, cos(wx), sin(wx), ...]`. RBF width is the denominator in
 See [the numerical contract](docs/CONTRACT.md) for layouts, derivatives,
 exceptions, finite-data requirements and atomic optimizer updates.
 
+## Localized and adaptive use
+
+```cpp
+kan::BasisConfig spline;
+spline.kind = kan::BasisKind::BSpline;
+spline.degree = 3; spline.size = 4;
+spline.knots = {0,0,0,0,1,1,1,1};
+kan::Layer localized(1,1,spline);
+localized.set_parameters(std::vector<double>{0,0,1.0/3,1}, std::vector<double>{0});
+localized.insert_knot(0.4); // preserves the existing x^2 edge
+localized.adapt_grid(std::vector<double>{0.1,0.2,0.3}); // sample-driven refinement
+auto penalty = localized.regularization(0.01); // value and coefficient VJP
+
+kan::BasisConfig radial;
+radial.kind = kan::BasisKind::GaussianRbf; radial.size = 2;
+radial.centers = {-0.5,0.5}; radial.trainable_rbf = true;
+radial.log_widths = {std::log(0.4),std::log(0.6)}; // include <cmath>
+kan::Layer learnable(1,1,radial); // explicitly initialize coefficients for training
+// backward supplies centers/log_widths VJPs; sgd updates them atomically.
+```
+
+Splines are zero outside their explicit domain; repeated interior knots permit
+reduced continuity. Mexican-hat terms use explicit translations (`centers`) and
+positive `scales`, with continuous L2 normalization. RBF centers/widths are shared
+per layer and widths use log parameters. Refinement changes coefficient shapes,
+so compute new gradients afterward. For a resident model, download its snapshot,
+refine explicitly, then construct a new executor. `gpu.backward(0.01)` adds
+coefficient L2 gradients on the GPU; CPU callers explicitly add the regularization
+VJP to their loss gradients. Python exposes the same methods; see
+[localized Python examples](tests/m3_python_test.py).
+
 ## Install / consume
 
 The build produces static libraries and an exported CMake package:
@@ -167,6 +198,7 @@ gradients, training, and resident uploads/downloads.
 ```powershell
 ./scripts/build.ps1 -Cuda -AllowUnsupportedCudaCompiler -Benchmarks -BuildDirectory build-m2-bench
 ./build-m2-bench/m2_benchmark.exe
+./build-m2-bench/m3_benchmark.exe
 ```
 
 The benchmark freezes deterministic inputs and parameter initialization, verifies
@@ -194,8 +226,9 @@ through CPU parity and Compute Sanitizer. See [the roadmap](docs/ROADMAP.md)
 and [M1 evidence](docs/evidence/M1.md) for status and exact validation. M2's
 [acceptance plan](docs/evidence/M2-plan.md) links execution scope to its tests;
 its final evidence records closure only after all gates pass.
-M2 is complete; [final M2 evidence](docs/evidence/M2.md) records the acceptance
-results and measured limits. M3 is the next stage.
+M2 is complete; [final M2 evidence](docs/evidence/M2.md) records its acceptance
+results and measured limits. [M3 acceptance plan](docs/evidence/M3-plan.md)
+defines the localized/adaptive stage and its validation gates.
 
 The original [KAN paper](https://arxiv.org/abs/2404.19756) motivates the edge-function
 architecture; [NIST DLMF](https://dlmf.nist.gov/18.9) specifies polynomial conventions.

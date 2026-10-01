@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 and M2)
+# KAN numerical contract (M1, M2 and M3)
 
 An edge is a learned univariate expansion. A layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -88,6 +88,66 @@ Building CPU
 static libraries needs neither Python nor pybind11. Python package/wheel distribution
 and model serialization remain outside M2.
 
+## Localized and adaptive bases (M3)
+
+`BSpline` uses explicit clamped nondecreasing finite knots, length
+`size+degree+1`, degree 0..16 and size at least degree+1. Endpoints have exactly
+degree+1 repetitions and a positive domain `[knots[degree],knots[size]]`.
+Interior multiplicity is at most degree+1; full multiplicity permits a jump.
+Values and input derivatives are zero outside the domain. Interior knots use
+right-hand values/derivatives; the upper endpoint uses the inward left-hand
+convention. Degree-zero derivatives are zero, including at jumps (a convention,
+not a claim of differentiability there). Cox-de Boor terms with zero denominators
+are zero. No implicit extrapolation or clipping occurs.
+
+`MexicanHat` has explicit translations `centers` and positive `scales`, each
+length size. For `q=(x-center)/scale`, each term is
+`A*(1-q*q)*exp(-q*q/2)`, where `A=2/(sqrt(3)*pi^(1/4)*sqrt(scale))`.
+Its derivative is `A/scale*q*(q*q-3)*exp(-q*q/2)`. These are L2-normalized
+continuous wavelets; configuration is fixed, with learned edge coefficients.
+Extreme representable tails use log-space evaluation to preserve derivatives
+even when the basis value underflows. Nonfinite mathematical results fail.
+
+Gaussian configuration remains fixed by default, using scalar width. With
+`trainable_rbf=true`, `log_widths` has length size and each exponent must be
+finite and positive; the scalar width is unused. Centers/log widths are shared
+across a layer's edges, not per edge. At each term, the center derivative is the
+negative input derivative, and log-width derivative is `2*q*q*exp(-q*q)`.
+`BasisValues` returns these vectors only for trainable RBFs. `LayerGradients`
+returns their VJPs, summing over batches and edges; fixed families return empty
+vectors. `set_rbf_parameters` validates and atomically replaces both vectors.
+SGD validates finite candidate vectors and finite positive exponentiated widths
+before committing any parameter; candidate width overflow/underflow raises
+`overflow_error`, while invalid user configuration/gradients raises
+`invalid_argument`. Network SGD retains whole-network atomicity.
+
+`Layer::insert_knot(x)` accepts a strictly interior spline knot whose new
+multiplicity is allowed. Boehm insertion adds one term and transforms every edge's
+coefficients, preserving the represented function and its derivatives wherever
+the declared derivative convention applies, within floating-point tolerance.
+`adapt_grid(samples)` validates all samples, counts in-domain samples per nonzero
+span (upper endpoint belongs to the final span), chooses the most populated span
+(ties choose the lowest), and inserts the median (mean of middle pair for even
+count) if strictly inside that span, otherwise its midpoint. Empty/outside-only
+samples or a span without a representable interior value fail explicitly.
+Updates are atomic; stale gradient shapes are rejected after refinement. Network
+methods accept an explicit layer index and samples in that layer's input domain.
+Samples do not implicitly propagate through preceding layers.
+
+`regularization(lambda)` returns the coefficient L2 penalty
+`lambda/2*sum(coefficients^2)` and its parameter VJP `lambda*coefficients`.
+Lambda is finite and nonnegative. Input gradients are empty; bias and trainable
+RBF gradients are correctly shaped zero vectors. Network penalties sum layers.
+Add this VJP to a loss VJP explicitly before CPU SGD. Resident `backward(lambda=0)`
+adds coefficient L2 gradients on GPU. Resident execution supports all eight
+families, nonlinear VJPs and candidate width validation with persistent storage.
+Grid refinement changes storage shape: explicitly download a model, refine it,
+and reconstruct the resident executor. Numerical execution never reallocates or
+silently falls back to the host. Python exposes these operations and snapshots;
+`regularization` returns `(value, gradients)`. Its compatible `evaluate_basis`
+continues returning `(values,input_derivatives)`; nonlinear gradients are
+accessible through layer/network backward.
+
 ## Extension boundaries
 
 Basis mathematics lives in `include/kan/basis.hpp` and `src/basis.cpp`; CPU edge
@@ -100,5 +160,8 @@ and pole policy; quantum carriers need separate physical/measurement contracts.
 
 - [Original KAN paper](https://arxiv.org/abs/2404.19756): learned univariate edge functions.
 - [NIST DLMF 18.9](https://dlmf.nist.gov/18.9): polynomial recurrence and derivative conventions.
+- [SciPy BSpline mathematical notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.html): spline recurrence and partition of unity.
+- [Boehm insertion references](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.insert_knot.html): exact spline refinement.
+- [Ricker definition](https://docs.scipy.org/doc/scipy-1.12.0/reference/generated/scipy.signal.ricker.html): continuous Mexican-hat normalization.
 - [Awesome KAN](https://github.com/mintisan/awesome-kan): variant discovery only.
 - [Quantum-KAN](https://github.com/wtroy2/Quantum-KAN): referenced by the brief; no code reused.
