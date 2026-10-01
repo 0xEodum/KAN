@@ -20,12 +20,18 @@ networks, reusable storage, atomic GPU SGD, optional NumPy bindings, real-hardwa
 parity/sanitizer/installation checks, matched full-call profiling and independent
 implementation/evidence review. See [M2 evidence](evidence/M2.md).
 
-## M3: localized and adaptive bases — NEXT
+## M3: localized and adaptive bases — DONE
 
 B-splines with knot/domain contracts, wavelets with scale/translation conventions,
 learnable RBF centers/widths, adaptive grids and regularization.
+Completed 2026-10-01: explicit clamped splines and normalized Mexican-hat wavelets,
+shared trainable RBF centers/log widths, exact sample-driven knot refinement,
+coefficient L2, persistent CUDA and NumPy interfaces. All gates passed: integrated
+14/14, sanitizers, 98.5% CPU coverage, installed consumers, matched full-call
+profiling and independent acceptance review. The reviewed large-launch reduction
+defect is resolved. See [M3 evidence](evidence/M3.md) and [scope/defaults](evidence/M3-plan.md).
 
-## M4: rational edges — PLANNED
+## M4: rational edges — NEXT
 
 Padé/rational parameterization, singularity policy, conditioning and nonlinear
 parameter derivatives. Do not disguise rational edges as fixed linear basis terms.

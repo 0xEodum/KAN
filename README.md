@@ -229,6 +229,9 @@ its final evidence records closure only after all gates pass.
 M2 is complete; [final M2 evidence](docs/evidence/M2.md) records its acceptance
 results and measured limits. [M3 acceptance plan](docs/evidence/M3-plan.md)
 defines the localized/adaptive stage and its validation gates.
+M3 is complete; [M3 final evidence](docs/evidence/M3.md) records numerical,
+installation, sanitizer, independent review and hardware-scoped performance
+results. M4 rational edges are next.
 
 The original [KAN paper](https://arxiv.org/abs/2404.19756) motivates the edge-function
 architecture; [NIST DLMF](https://dlmf.nist.gov/18.9) specifies polynomial conventions.
