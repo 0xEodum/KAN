@@ -4,20 +4,21 @@ An original implementation of learned univariate edge expansions, built from
 [the project brief](introduction.md). C++20 owns mathematics, parameters, forward,
 backward and training; optional Python bindings expose the same implementation.
 
-## Current scope (M1 through M3)
+## Current scope (M1 through M4)
 
 | Category | Available | Planned |
 |---|---|---|
 | Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite | Normalization and additional families |
 | Harmonic / wave | Fourier, normalized Mexican-hat wavelets | Additional wavelets |
-| Radial / rational | Fixed or trainable Gaussian RBF centers/widths | Padé/rational edges |
+| Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
 | Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
 | Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
 
 CPU supports all eight available families and compatible networks of any depth.
 The optional CUDA target provides both the original synchronous Chebyshev layer
 API and a resident executor supporting all eight families, mixed networks, reusable
-workspaces, and GPU SGD. Optional NumPy bindings support CPU and resident CUDA use.
+workspaces, and GPU SGD. CPU and resident execution also support rational layers
+and mixed rational/basis networks. Optional NumPy bindings expose both.
 Performance conclusions require the frozen, matched full-call benchmark; see
 [M2 benchmark evidence](docs/evidence/M2-benchmark.md).
 
@@ -146,6 +147,32 @@ coefficient L2 gradients on the GPU; CPU callers explicitly add the regularizati
 VJP to their loss gradients. Python exposes the same methods; see
 [localized Python examples](tests/m3_python_test.py).
 
+## Rational use
+
+```cpp
+kan::RationalConfig rational;
+rational.numerator_degree = 1; rational.denominator_degree = 1;
+kan::Layer pade(1,1,rational);
+pade.set_rational_parameters(std::vector<double>{1,0.5},
+                            std::vector<double>{-0.5}, std::vector<double>{0});
+auto y = pade.forward(std::vector<double>{-0.5,0,0.5},3);
+auto g = pade.backward(std::vector<double>{-0.5,0,0.5},3,
+                       std::vector<double>{0.1,-0.2,0.1});
+pade.sgd(g,0.001); // learns both numerator and denominator
+```
+
+An edge computes `P(z)/Q(z)`, with `z=(x-center)/scale` and fixed `Q(0)=1`.
+Degrees range independently from zero to sixteen. Explicit center/scale and a
+relative denominator guard control conditioning: unsafe denominators raise
+`domain_error`, including removable poles. The guard checks evaluated samples;
+choose an input domain and validate it for your application. Numerator parameters
+use `coefficients`; denominator parameters/VJPs use `denominators`. Python exposes
+the same typed constructor and strict float64 arrays; see
+[rational Python examples](tests/m4_python_test.py). Resident CUDA accepts rational
+layers in any compatible network without host numerical fallback. The original
+synchronous CUDA layer API remains Chebyshev-only. See the
+[rational numerical contract](docs/CONTRACT.md#rational-edges-m4).
+
 ## Install / consume
 
 The build produces static libraries and an exported CMake package:
@@ -231,7 +258,8 @@ results and measured limits. [M3 acceptance plan](docs/evidence/M3-plan.md)
 defines the localized/adaptive stage and its validation gates.
 M3 is complete; [M3 final evidence](docs/evidence/M3.md) records numerical,
 installation, sanitizer, independent review and hardware-scoped performance
-results. M4 rational edges are next.
+results. [M4 acceptance plan](docs/evidence/M4-plan.md) defines the rational
+contracts and validation gates; M4 closure is recorded only after acceptance.
 
 The original [KAN paper](https://arxiv.org/abs/2404.19756) motivates the edge-function
 architecture; [NIST DLMF](https://dlmf.nist.gov/18.9) specifies polynomial conventions.

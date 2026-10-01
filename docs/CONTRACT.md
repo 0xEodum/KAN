@@ -1,4 +1,4 @@
-# KAN numerical contract (M1, M2 and M3)
+# KAN numerical contract (M1 through M4)
 
 An edge is a learned univariate expansion. A layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -148,18 +148,79 @@ silently falls back to the host. Python exposes these operations and snapshots;
 continues returning `(values,input_derivatives)`; nonlinear gradients are
 accessible through layer/network backward.
 
+## Rational edges (M4)
+
+A typed `RationalConfig` selects a nonlinear rational Layer, separately from
+`BasisKind`. Each edge is `r(x)=P(z)/Q(z)`, `z=(x-center)/scale`,
+`P=sum(a[k]*z^k,k=0..m)`, `Q=1+sum(b[k-1]*z^k,k=1..n)`.
+Degrees m,n are independently 0..16, default 3,2. Center is finite (default zero),
+scale finite and positive (default one). Fixing Q's constant to one removes common
+scale ambiguity. All a/b values are trainable per edge. Zero initialization gives
+P=0,Q=1. This Padé-compatible parameterization does not automatically construct a
+Taylor-series approximant. Supplied [1/1] exponential coefficients, for example,
+are `a={1,0.5}, b={-0.5}`. Horner evaluation and explicit scaling condition the
+polynomial evaluation; inputs are not clipped.
+
+`RationalEvaluation` exposes value, input derivative, and numerator/denominator
+partial derivatives. With primes denoting derivatives with respect to z:
+`dr/dx=(P'/Q-r*Q'/Q)/scale`, `dr/da[k]=z^k/Q`,
+`dr/db[k-1]=-r*z^k/Q`. Layer backward contracts these partials with upstream
+gradients and sums over the batch. Center/scale/epsilon are fixed configuration.
+Rare log-space paths preserve representable parameter/input derivatives when
+powers or intermediate quotients become zero or subnormal; the ordinary Horner
+path handles normal values. These paths do not hide overflowing intermediates.
+
+For every executed sample/edge, require
+`abs(Q)>epsilon*(1+sum(abs(b[k-1]*z^k)))`, epsilon finite and strictly between zero
+and one (default 1e-8). A finite denominator failing this relative cancellation
+guard raises `std::domain_error`, including exact or removable poles, zero
+numerators and zero upstreams. Nonfinite intermediates/results raise
+`std::overflow_error`. No clipping or pole removal changes the represented
+function. The guard checks executed samples; it does not prove pole freedom
+between them. Finite setters/SGD candidates can therefore fail later execution.
+
+Numerator layout is `(outputs,inputs,m+1)` and denominator layout is
+`(outputs,inputs,n)`; bias is per output. `coefficients()` exposes numerator a.
+`denominators()` exposes b (empty for basis layers). `set_rational_parameters`
+atomically replaces a,b,bias. `set_parameters`, RBF setters and spline operations
+reject rational layers. `is_rational()` identifies layer type; `basis()` rejects
+rational layers and `rational_config()` rejects basis layers. The constrained
+rational constructor preserves existing `Layer(inputs,outputs,{})` basis usage.
+LayerGradients appends `denominators`, empty for basis layers and correctly shaped
+for rational layers, including zero batch. SGD validates shapes/data and all
+finite candidate vectors before network-wide commit. Numerator coefficient L2
+keeps its existing definition; denominators and bias are unpenalized.
+
+Resident CUDA executes mixed rational/basis networks with persistent a/b storage,
+analytic VJPs and atomic GPU SGD. Unsafe denominators are reported to the host as
+domain_error; a failed execution invalidates its output/gradient state. Numerical
+calls do not allocate GPU storage or fall back to CPU evaluation. CPU/GPU parity
+remains tolerance-based. The original synchronous Chebyshev CUDA API rejects
+rational layers.
+
+Python exposes `RationalConfig`, the rational Layer constructor, owned config,
+parameter and gradient snapshots, and `set_rational_parameters`. Rational
+denominator arrays have shape `(outputs,inputs,n)`, even for n=0; basis-layer
+denominator arrays have shape `(0,)`. `evaluate_rational(config,x,a,b)` accepts
+strict one-dimensional float64 arrays and returns `(value,input_derivative,da,db)`.
+`domain_error` maps to Python ValueError. All existing strict array/layout and
+owned-snapshot rules apply.
+
 ## Extension boundaries
 
 Basis mathematics lives in `include/kan/basis.hpp` and `src/basis.cpp`; CPU edge
 contraction lives in `src/layer.cpp`; topology in `src/network.cpp`; kernels in
 `src/cuda.cu`. No symbolic parser, Eigen, Torch, Python runtime or imported KAN
-implementation is required. Rational edges will need nonlinear parameter gradients
-and pole policy; quantum carriers need separate physical/measurement contracts.
+implementation is required. Rational mathematics lives in `include/kan/rational.hpp`
+and `src/rational.cpp`, with nonlinear edge contraction in Layer and persistent
+kernels in `src/resident.cu`. Quantum carriers need separate physical/measurement
+contracts at M5.
 
 ## Mathematical sources
 
 - [Original KAN paper](https://arxiv.org/abs/2404.19756): learned univariate edge functions.
 - [NIST DLMF 18.9](https://dlmf.nist.gov/18.9): polynomial recurrence and derivative conventions.
+- [NIST DLMF 3.11](https://dlmf.nist.gov/3.11): rational and Padé approximation definitions.
 - [SciPy BSpline mathematical notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.html): spline recurrence and partition of unity.
 - [Boehm insertion references](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.insert_knot.html): exact spline refinement.
 - [Ricker definition](https://docs.scipy.org/doc/scipy-1.12.0/reference/generated/scipy.signal.ricker.html): continuous Mexican-hat normalization.
