@@ -3,6 +3,10 @@
 #include <stdexcept>
 
 namespace kan {
+void Layer::set_rbf_parameters(std::span<const double>, std::span<const double>) { throw std::logic_error("M3 pending"); }
+void Layer::insert_knot(double) { throw std::logic_error("M3 pending"); }
+double Layer::adapt_grid(std::span<const double>) { throw std::logic_error("M3 pending"); }
+RegularizationResult Layer::regularization(double) const { throw std::logic_error("M3 pending"); }
 namespace {
 std::size_t checked_size(std::size_t left, std::size_t right) {
     const auto max = std::vector<double>().max_size();

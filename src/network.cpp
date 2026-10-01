@@ -1,6 +1,9 @@
 #include "kan/network.hpp"
 #include <stdexcept>
 namespace kan {
+void Network::insert_knot(std::size_t, double) { throw std::logic_error("M3 pending"); }
+double Network::adapt_grid(std::size_t, std::span<const double>) { throw std::logic_error("M3 pending"); }
+NetworkRegularizationResult Network::regularization(double) const { throw std::logic_error("M3 pending"); }
 Network::Network(std::vector<Layer> layers) : layers_(std::move(layers)) {
     validate_state();
     for (const auto& layer : layers_) layer.validate_state();

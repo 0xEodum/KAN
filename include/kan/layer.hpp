@@ -9,6 +9,13 @@ struct LayerGradients {
     std::vector<double> input;
     std::vector<double> coefficients;
     std::vector<double> bias;
+    std::vector<double> centers; // shared trainable RBF basis parameters
+    std::vector<double> log_widths;
+};
+
+struct RegularizationResult {
+    double value = 0;
+    LayerGradients gradients;
 };
 
 class Layer {
@@ -24,6 +31,10 @@ public:
     LayerGradients backward(std::span<const double> input, std::size_t batch,
                             std::span<const double> output_gradient) const;
     void sgd(const LayerGradients& gradients, double learning_rate);
+    void set_rbf_parameters(std::span<const double> centers, std::span<const double> log_widths);
+    void insert_knot(double x);
+    double adapt_grid(std::span<const double> samples);
+    RegularizationResult regularization(double coefficient_l2) const;
 
 private:
     friend class Network;
