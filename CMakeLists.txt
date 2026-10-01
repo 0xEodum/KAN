@@ -103,6 +103,10 @@ if(BUILD_TESTING)
         target_link_libraries(m3_resident_test PRIVATE kan::cuda)
         add_test(NAME m3_resident COMMAND m3_resident_test)
         set_tests_properties(m3_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Explicit manual large-launch regression; minimum-memory requirement is
+        # outside the ordinary CTest hardware contract.
+        add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
+        target_link_libraries(m3_large_basis_test PRIVATE kan::cuda CUDA::cudart)
     endif()
 endif()
 

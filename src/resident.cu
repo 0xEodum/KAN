@@ -208,21 +208,36 @@ __global__ void parameter_kernel(const double* v, const double* upstream, const 
         gradient[index] = sum; report(sum, status);
     }
 }
-__global__ void nonlinear_kernel(const double* dx, const double* dw, const double* c, const double* upstream,
-                                 double* gradient, std::size_t batch, std::size_t inputs,
-                                 std::size_t outputs, std::size_t terms, int* status) {
-    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for(auto k=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;k<terms;k+=stride) {
-        double center=0,width=0;
-        for(std::size_t b=0;b<batch;++b)
-            for(std::size_t o=0;o<outputs;++o)
-                for(std::size_t i=0;i<inputs;++i) {
-                    const double factor=upstream[b*outputs+o]*c[(o*inputs+i)*terms+k];
-                    center+=factor*(-dx[(b*inputs+i)*terms+k]);
-                    width+=factor*dw[(b*inputs+i)*terms+k];
-                }
-        gradient[k]=center;gradient[terms+k]=width;report(center,status);report(width,status);
+constexpr unsigned nonlinear_tiles=64;
+__global__ void nonlinear_partial_kernel(const double* dx, const double* dw, const double* c, const double* upstream,
+                                         double* partial, std::size_t count, std::size_t inputs,
+                                         std::size_t outputs, std::size_t terms, unsigned tiles, int* status) {
+    __shared__ double centers[256], widths[256];
+    const auto k=static_cast<std::size_t>(blockIdx.x)/tiles;
+    const auto tile=blockIdx.x%tiles, lane=threadIdx.x;
+    double center=0,width=0;
+    const auto stride=static_cast<std::size_t>(tiles)*blockDim.x;
+    for(auto index=static_cast<std::size_t>(tile)*blockDim.x+lane;index<count;index+=stride) {
+        const auto i=index%inputs, o=(index/inputs)%outputs, b=index/(inputs*outputs);
+        const double factor=upstream[b*outputs+o]*c[(o*inputs+i)*terms+k];
+        center+=factor*(-dx[(b*inputs+i)*terms+k]);width+=factor*dw[(b*inputs+i)*terms+k];
     }
+    report(center,status);report(width,status);
+    centers[lane]=center;widths[lane]=width;__syncthreads();
+    for(unsigned step=blockDim.x/2;step;step/=2) {
+        if(lane<step) {centers[lane]+=centers[lane+step];widths[lane]+=widths[lane+step];}
+        __syncthreads();
+    }
+    if(lane==0) {
+        partial[k*tiles+tile]=centers[0];partial[(terms+k)*tiles+tile]=widths[0];
+        report(centers[0],status);report(widths[0],status);
+    }
+}
+__global__ void nonlinear_finish_kernel(const double* partial, double* gradient, std::size_t terms, unsigned tiles, int* status) {
+    const auto k=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+    if(k>=2*terms)return;
+    double sum=0;for(unsigned tile=0;tile<tiles;++tile)sum+=partial[k*tiles+tile];
+    gradient[k]=sum;report(sum,status);
 }
 __global__ void validate_width_kernel(const double* next, std::size_t count, int* status) {
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
@@ -239,7 +254,7 @@ __global__ void candidate_kernel(const double* parameters, const double* gradien
 }
 struct Layout {
     std::size_t inputs, outputs, terms, coefficients, parameter_offset;
-    std::size_t values, derivatives, centers, log_derivatives=0, scales=0, knots=0;
+    std::size_t values, derivatives, centers, log_derivatives=0, scales=0, knots=0, nonlinear_partials=0;
     bool trainable=false;
 };
 }
@@ -286,7 +301,10 @@ struct ResidentNetwork::Impl {
             const auto& basis=model.layers()[j].basis();
             if ((basis.kind == BasisKind::GaussianRbf && !layout.trainable) || basis.kind==BasisKind::MexicanHat)
                 layout.centers = reserve(layout.terms);
-            if(layout.trainable)layout.log_derivatives=reserve(product(product(capacity,layout.inputs),layout.terms));
+            if(layout.trainable) {
+                layout.log_derivatives=reserve(product(product(capacity,layout.inputs),layout.terms));
+                layout.nonlinear_partials=reserve(product(layout.terms,2*nonlinear_tiles));
+            }
             if(basis.kind==BasisKind::MexicanHat)layout.scales=reserve(layout.terms);
             if(basis.kind==BasisKind::BSpline)layout.knots=reserve(basis.knots.size());
         }
@@ -389,9 +407,15 @@ void ResidentNetwork::backward(double coefficient_l2) {
         parameter_kernel<<<blocks(l.coefficients+l.outputs), 256, 0, s.stream>>>(s.ptr(l.values), s.ptr(s.upstream[j+1]), s.ptr(s.parameters+l.parameter_offset), s.ptr(s.gradients+l.parameter_offset), s.batch, l.inputs, l.outputs, l.terms, coefficient_l2, s.status);
         check(cudaGetLastError(), "resident parameter gradient launch");
         if(l.trainable) {
-            nonlinear_kernel<<<blocks(l.terms),256,0,s.stream>>>(s.ptr(l.derivatives),s.ptr(l.log_derivatives),s.ptr(s.parameters+l.parameter_offset),
-                s.ptr(s.upstream[j+1]),s.ptr(s.gradients+l.parameter_offset+l.coefficients+l.outputs),s.batch,l.inputs,l.outputs,l.terms,s.status);
-            check(cudaGetLastError(),"resident nonlinear gradient launch");
+            const auto count=product(product(s.batch,l.inputs),l.outputs);
+            const auto tiles=static_cast<unsigned>(std::min<std::size_t>(nonlinear_tiles,std::max<std::size_t>(1,(count+255)/256)));
+            // Bound the launch dimension even for large valid basis term counts.
+            if(l.terms>std::numeric_limits<unsigned>::max()/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
+            nonlinear_partial_kernel<<<static_cast<unsigned>(l.terms)*tiles,256,0,s.stream>>>(s.ptr(l.derivatives),s.ptr(l.log_derivatives),s.ptr(s.parameters+l.parameter_offset),
+                s.ptr(s.upstream[j+1]),s.ptr(l.nonlinear_partials),count,l.inputs,l.outputs,l.terms,tiles,s.status);
+            check(cudaGetLastError(),"resident nonlinear partial launch");
+            nonlinear_finish_kernel<<<blocks(2*l.terms),256,0,s.stream>>>(s.ptr(l.nonlinear_partials),s.ptr(s.gradients+l.parameter_offset+l.coefficients+l.outputs),l.terms,tiles,s.status);
+            check(cudaGetLastError(),"resident nonlinear reduction launch");
         }
     }
     s.result(); s.has_backward = true;
