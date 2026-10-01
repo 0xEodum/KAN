@@ -32,7 +32,7 @@
 |---|---|---|---|
 | R1 | P0 | Заменить плоский `BasisConfig` на `std::variant<ChebyshevConfig, …, BSplineConfig>` (pybind11 поддерживает variant) | `include/kan/basis.hpp:10-23` — все поля всех семейств в одной структуре |
 | R2 | P0 | Убрать флаг `rational_` и ветвления из `Layer`: разделить носители, **линейные по параметрам** (общий движок «раскладка + GEMM»), и **нелинейные** (rational, обучаемые RBF, будущий PQC) со своими VJP. Семейно-специфичные методы (`insert_knot`, `adapt_grid`, `set_rbf_parameters`) вынести с общего класса | `src/layer.cpp:88`, `:127`, sgd/validate; M5 иначе добавит третью ветку |
-| R3 | P0 | Единственный источник формулы семейства: `__host__ __device__` header-функции, общие для CPU и CUDA | Сейчас дублируются: `src/basis.cpp` ↔ `src/resident.cu:48-172`, `src/rational.cpp` ↔ `src/resident.cu:258-327` (Якоби, log-space Гаусс/Mexican hat, Cox–de Boor, Горнер) |
+| R3 | P0 | (ГОТОВО, [evidence](evidence/backlog/R3.md)) Единственный источник формулы семейства: `__host__ __device__` header-функции, общие для CPU и CUDA | Сейчас дублируются: `src/basis.cpp` ↔ `src/resident.cu:48-172`, `src/rational.cpp` ↔ `src/resident.cu:258-327` (Якоби, log-space Гаусс/Mexican hat, Cox–de Boor, Горнер) |
 | R4 | P1 | Раскладка каталогов: `carriers/{polynomial,trigonometric,local,rational,quantum}`, `backends/{cpu,cuda}`, `core/` (Layer, Network, ошибки, формы) | Предложение ревью; `local/` = B-сплайн, RBF, Mexican hat |
 | R5 | P1 | Переименовать тесты и бенчмарки по фичам, зеркально `carriers/` | Сейчас `m3_layer_test`, `m4_resident_test` и т.п. — названы по вехам |
 | R6 | P2 | Добавить `.clang-format` и привести код M3/M4 к нему | Плотные строки с несколькими операторами, напр. `src/resident.cu:520-523`, `src/rational.cpp` |
@@ -83,7 +83,7 @@ PyTorch FP64 упирается в пик). Сверх этого FP32 даёт 
 | C1 | P0 | Политика точности: шаблон по `Scalar`; FP32 (опц. TF32/BF16) для обучения, FP64 — эталон паритета | Самый крупный множитель на GeForce |
 | C2 | P0 | Свести свёртку к GEMM (cuBLAS/cuBLASLt, bias через epilogue): `Y = Φ·Cᵀ + b`, `dC = Uᵀ·Φ`, `dX = Σ_k (U·C)⊙Φ'` | `src/resident.cu:174-212` — наивные GEMM без тайлинга, некоалесцированный доступ к коэффициентам |
 | C3 | P1 | Fused-ядро: вычислять базис в shared memory при загрузке тайла X; в backward пересчитывать Φ', а не хранить | Сейчас пишутся тензоры V и D размером B·I·K в глобальную память (для 1024-wide, B=4096 — ~235 МБ каждый на слой) |
-| C4 | P1 | Шаблонизировать `basis_kernel` по семейству | `src/resident.cu:48`, скретч `double lower[18], next[18]` (`:67`) задаёт регистры/local memory для всех семейств |
+| C4 | P1 | (ГОТОВО вместе с R3, [evidence](evidence/backlog/R3.md)) Шаблонизировать `basis_kernel` по семейству | `src/resident.cu:48`, скретч `double lower[18], next[18]` (`:67`) задаёт регистры/local memory для всех семейств |
 | C5 | P1 | Разреженный путь B-сплайна: хранить `(span, p+1 значений)` | Ненулевых p+1, а хранится и умножается все K; после `adapt_grid` K растёт |
 | C6 | P1 | Rational forward: sample — быстрый индекс | `rational_forward_kernel`, `index%outputs` (`:283-286`) → запись кэшей с шагом I·capacity |
 | C7 | P1 | Rational forward: убрать вычисление всех VJP ради проверки конечности | `:317-322`, лишние FP64-деления (очень дороги на GA102) |
@@ -113,3 +113,5 @@ cmd /c docs\evidence\review-2026-10-01\build_resident_bench.cmd build-m4-cuda
 | 2026-10-01 | Бэклог создан по итогам ревью M1–M4; все пункты открыты |
 | 2026-10-01 | C11 закрыт владельцем (счётчики Nsight Compute доступны) |
 | 2026-10-01 | Бэклог стал стадией B в ROADMAP; M5 стартует только после закрытия всех пунктов ([решение](evidence/backlog-gate.md)). Первый проход: R3, R1 |
+| 2026-10-01 | R3 закрыт: формулы базисов и rational — общие `KAN_HOST_DEVICE`-шаблоны в `src/detail/`; golden-дамп CPU+CUDA побитово идентичен, 19/19 CTest, GCC 11/11. Профилирование выявило и устранило три регрессии ([evidence](evidence/backlog/R3.md)) |
+| 2026-10-01 | C4 закрыт вместе с R3: `basis_kernel` инстанцируется по семейству (66 → 36–62 регистров, скретч сплайна только у B-сплайна), время ядра −0.2…−12.6% ([evidence](evidence/backlog/R3.md)). Проход 1: R3, C4, R1 |

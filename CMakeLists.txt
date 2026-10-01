@@ -20,7 +20,9 @@ target_include_directories(kan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_D
 if(MSVC)
     target_compile_options(kan PRIVATE /W4 /permissive-)
 else()
-    target_compile_options(kan PRIVATE -Wall -Wextra -Wpedantic)
+    # No contraction into FMA: CPU results must match the --fmad=false CUDA
+    # build and the guarded intermediates of the shared formulas.
+    target_compile_options(kan PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off)
 endif()
 if(KAN_ENABLE_COVERAGE)
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR KAN_ENABLE_CUDA)

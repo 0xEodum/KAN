@@ -208,13 +208,16 @@ owned-snapshot rules apply.
 
 ## Extension boundaries
 
-Basis mathematics lives in `include/kan/basis.hpp` and `src/basis.cpp`; CPU edge
-contraction lives in `src/layer.cpp`; topology in `src/network.cpp`; kernels in
-`src/cuda.cu`. No symbolic parser, Eigen, Torch, Python runtime or imported KAN
-implementation is required. Rational mathematics lives in `include/kan/rational.hpp`
-and `src/rational.cpp`, with nonlinear edge contraction in Layer and persistent
-kernels in `src/resident.cu`. Quantum carriers need separate physical/measurement
-contracts at M5.
+Basis and rational formulas have a single source shared by the CPU backend and
+the resident CUDA kernels: `KAN_HOST_DEVICE` templates in `src/detail/basis_formulas.hpp`
+and `src/detail/rational_formulas.hpp`, parameterized by a finiteness guard (CPU throws,
+device records status). Public declarations and validation live in
+`include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
+CPU edge contraction lives in `src/layer.cpp`; topology in `src/network.cpp`; persistent
+kernels in `src/resident.cu`, with one basis kernel instantiation per family; the
+legacy M1 Chebyshev kernels in `src/cuda.cu`. No symbolic parser, Eigen, Torch,
+Python runtime or imported KAN implementation is required. Quantum carriers need
+separate physical/measurement contracts at M5.
 
 ## Mathematical sources
 

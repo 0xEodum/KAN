@@ -1,5 +1,7 @@
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
+#include "detail/basis_formulas.hpp"
+#include "detail/rational_formulas.hpp"
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <cmath>
@@ -23,152 +25,27 @@ void finite(std::span<const double> values) {
 unsigned blocks(std::size_t count,std::size_t work_per_block=256) {
     return static_cast<unsigned>(std::min<std::size_t>((count-1)/work_per_block+1,65535));
 }
-struct Basis {
-    BasisKind kind;
-    std::size_t terms;
-    double alpha, beta, frequency, width;
-    const double* centers;
-    const double* log_widths;
-    const double* scales;
-    const double* knots;
-    std::size_t degree;
-    bool trainable;
-};
 __device__ void report(double value, int* status) { if (!isfinite(value)) atomicOr(status, 1); }
-__device__ double interval_ratio(double nr, double nl, double right, double left) {
-    const double denominator = right-left;
-    if (denominator == 0) return 0;
-    return isfinite(denominator) ? (nr-nl)/denominator : (0.5*nr-0.5*nl)/(0.5*right-0.5*left);
-}
-__device__ double slope_term(double value, std::size_t degree, double right, double left) {
-    if (value == 0 || right == left) return 0;
-    const double denominator = right-left, p = static_cast<double>(degree);
-    return isfinite(denominator) ? (p*value)/denominator : (0.5*p*value)/(0.5*right-0.5*left);
-}
+// Device guard for the shared formulas: record a nonfinite status bit and
+// continue; the host raises after the launch sequence completes.
+struct StatusGuard {
+    int* status;
+    __device__ double operator()(double value) const { report(value, status); return value; }
+};
+// Identity guard for recomputing values that an earlier kernel of the same
+// step already checked with StatusGuard (keeps hot reduction loops lean).
+struct CheckedEarlier {
+    __device__ double operator()(double value) const { return value; }
+};
+template<BasisKind Kind>
 __global__ void basis_kernel(const double* input, double* values, double* derivatives, double* log_derivatives,
-                             std::size_t count, Basis basis, int* status) {
+                             std::size_t count, detail::BasisView basis, int* status) {
+    const StatusGuard guard{status};
     const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
     for (auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; index < count; index += stride) {
-        const double x = input[index];
-        auto* v = values + index * basis.terms;
-        auto* d = derivatives + index * basis.terms;
-        if (basis.kind == BasisKind::BSpline) {
-            for (std::size_t k=0;k<basis.terms;++k) {v[k]=0;d[k]=0;}
-            const auto* t=basis.knots;
-            if (x<t[basis.degree] || x>t[basis.terms]) continue;
-            std::size_t span=basis.terms-1;
-            if (x!=t[basis.terms]) {
-                std::size_t lo=basis.degree, hi=basis.terms;
-                while(lo<hi) {const auto mid=lo+(hi-lo)/2;if(t[mid]<=x)lo=mid+1;else hi=mid;}
-                span=lo-1;
-            }
-            // Only degree+1 terms can be nonzero. Fixed local scratch has no
-            // size-dependent device allocation, including repeated knots.
-            double lower[18]={}, next[18]={};lower[basis.degree]=1;
-            const auto start=span-basis.degree;
-            for(std::size_t p=1;p<=basis.degree;++p) {
-                for(std::size_t r=basis.degree-p;r<=basis.degree;++r) {
-                    const auto i=start+r;
-                    double value=0;
-                    if(lower[r]!=0)value+=interval_ratio(x,t[i],t[i+p],t[i])*lower[r];
-                    if(lower[r+1]!=0)value+=interval_ratio(t[i+p+1],x,t[i+p+1],t[i+1])*lower[r+1];
-                    next[r]=value;report(value,status);
-                    if(p==basis.degree) {
-                        d[i]=slope_term(lower[r],p,t[i+p],t[i])-slope_term(lower[r+1],p,t[i+p+1],t[i+1]);
-                        report(d[i],status);
-                    }
-                }
-                for(std::size_t r=basis.degree-p;r<=basis.degree;++r)lower[r]=next[r];
-            }
-            for(std::size_t r=0;r<=basis.degree;++r)v[start+r]=lower[r];
-            continue;
-        }
-        if (basis.kind == BasisKind::MexicanHat) {
-            const double log_normalization=log(2.0/sqrt(3.0))-0.25*log(acos(-1.0));
-            for(std::size_t k=0;k<basis.terms;++k) {
-                const double scale=basis.scales[k], distance=x-basis.centers[k];
-                const double q=isfinite(distance)?distance/scale:x/scale-basis.centers[k]/scale, q2=q*q;
-                v[k]=0;d[k]=0;
-                if(!isfinite(q2))continue;
-                const double log_scale=log(scale), envelope=log_normalization-0.5*log_scale-0.5*q2;
-                if(q2!=1)v[k]=copysign(exp(envelope+log(fabs(1-q2))),1-q2);
-                if(q!=0 && q2!=3)d[k]=copysign(exp(envelope+log(fabs(q))+log(fabs(q2-3))-log_scale),q*(q2>3?1:-1));
-                report(v[k],status);report(d[k],status);
-            }
-            continue;
-        }
-        if (basis.kind == BasisKind::GaussianRbf) {
-            for (std::size_t k = 0; k < basis.terms; ++k) {
-                const double width=basis.trainable?exp(basis.log_widths[k]):basis.width;
-                const double distance = x - basis.centers[k];
-                const double q = isfinite(distance) ? distance / width : x / width - basis.centers[k] / width;
-                v[k] = exp(-q*q);
-                d[k] = 0;
-                if (q != 0 && isfinite(q)) {
-                    if (v[k] < 2.2250738585072014e-308) {
-                        const double log_magnitude = log(2.0) + log(fabs(q)) - q*q - log(width);
-                        d[k] = -copysign(exp(log_magnitude), q);
-                    } else d[k] = (-2*q*v[k]) / width;
-                }
-                report(d[k], status);
-                if(basis.trainable) {
-                    const double dw=q!=0 && isfinite(q)?exp(log(2.0)+2*log(fabs(q))-q*q):0;
-                    log_derivatives[index*basis.terms+k]=dw;report(dw,status);
-                }
-            }
-            continue;
-        }
-        v[0] = 1; d[0] = 0;
-        if (basis.kind == BasisKind::Fourier) {
-            for (std::size_t k = 1; k <= basis.terms / 2; ++k) {
-                const double angular = static_cast<double>(k) * basis.frequency;
-                const double phase = angular*x;
-                report(angular, status); report(phase, status);
-                v[2*k-1] = cos(phase); v[2*k] = sin(phase);
-                d[2*k-1] = -angular*v[2*k]; d[2*k] = angular*v[2*k-1];
-                report(d[2*k-1], status); report(d[2*k], status);
-            }
-            continue;
-        }
-        if (basis.terms == 1) continue;
-        const double half_sum = 0.5*basis.alpha + 0.5*basis.beta;
-        const double shifted_half_sum = 0.5*(basis.alpha+1) + 0.5*(basis.beta+1);
-        const double half_difference = 0.5*basis.alpha - 0.5*basis.beta;
-        if (basis.kind == BasisKind::Jacobi && (x == -1 || x == 1)) {
-            const double parameter = x == 1 ? basis.alpha : basis.beta;
-            double endpoint = 1, shifted = 1;
-            for (std::size_t k = 1; k < basis.terms; ++k) {
-                const double n = static_cast<double>(k);
-                endpoint *= (parameter+n)/n;
-                v[k] = x < 0 && k % 2 ? -endpoint : endpoint;
-                if (k > 1) shifted *= (parameter+n)/(n-1);
-                const double derivative = (shifted_half_sum+0.5*(n-1))*shifted;
-                d[k] = x < 0 && k % 2 == 0 ? -derivative : derivative;
-                report(v[k], status); report(shifted, status); report(d[k], status);
-            }
-            continue;
-        }
-        double slope = basis.kind == BasisKind::Hermite ? 2 : 1;
-        double offset = 0;
-        if (basis.kind == BasisKind::Jacobi) { slope = shifted_half_sum; offset = half_difference; }
-        v[1] = slope*x + offset; d[1] = slope;
-        report(v[1], status); report(d[1], status);
-        for (std::size_t k = 1; k < basis.terms - 1; ++k) {
-            const double n = static_cast<double>(k);
-            double a = 2, b = 0, c = 1;
-            if (basis.kind == BasisKind::Legendre) { a = (2*n+1)/(n+1); c = n/(n+1); }
-            if (basis.kind == BasisKind::Hermite) c = 2*n;
-            if (basis.kind == BasisKind::Jacobi) {
-                const double t = shifted_half_sum+(n-1), denominator = shifted_half_sum+0.5*(n-1);
-                a = ((t+0.5)/(n+1))*((t+1)/denominator);
-                b = (half_difference/(n+1))*(half_sum/t)*((t+0.5)/denominator);
-                c = 0.5*((n+basis.alpha)/(n+1))*((n+basis.beta)/t)*((t+1)/denominator);
-            }
-            const double factor = a*x+b;
-            v[k+1] = factor*v[k] - c*v[k-1];
-            d[k+1] = a*v[k] + factor*d[k] - c*d[k-1];
-            report(v[k+1], status); report(d[k+1], status);
-        }
+        const auto row = index * basis.terms;
+        detail::basis_terms_for<Kind>(basis, input[index],
+                                      {values + row, derivatives + row, nullptr, basis.trainable ? log_derivatives + row : nullptr}, guard);
     }
 }
 __global__ void forward_kernel(const double* v, const double* c, const double* bias, double* output,
@@ -255,72 +132,34 @@ __global__ void candidate_kernel(const double* parameters, const double* gradien
         next[i] = parameters[i] - rate*gradients[i]; report(next[i], status);
     }
 }
-__device__ double rational_numerator_vjp(double q,double z,std::size_t k,double power) {
-    const double divided=power/q;
-    if(z!=0&&(fabs(power)<2.2250738585072014e-308||fabs(divided)<2.2250738585072014e-308)) {
-        const double magnitude=exp(static_cast<double>(k)*log(fabs(z))-log(fabs(q)));
-        return (q<0)!=(z<0&&k%2!=0)?-magnitude:magnitude;
-    }
-    return divided;
-}
-__device__ double rational_denominator_vjp(double p,double q,double z,std::size_t k,double power) {
-    const double r=p/q, divided=power/q, derivative=-r*divided;
-    if(p!=0&&z!=0&&(fabs(power)<2.2250738585072014e-308||fabs(divided)<2.2250738585072014e-308||fabs(r)<2.2250738585072014e-308)) {
-        const double magnitude=exp(log(fabs(p))+static_cast<double>(k)*log(fabs(z))-2*log(fabs(q)));
-        const bool negative=(p>0)!=(z<0&&k%2!=0);
-        return negative?-magnitude:magnitude;
-    }
-    return derivative;
-}
 // Distinct rational execution: caches are edge-major to expose contiguous
 // samples to nonlinear parameter reductions. All caches live in the arena.
 __global__ void rational_forward_kernel(const double* input,const double* a,const double* b,const double* bias,
                                         double* values,double* denominator_values,double* derivatives,double* output,
                                         std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,
                                         RationalConfig config,int* status) {
+    const StatusGuard guard{status};
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
     const auto m=config.numerator_degree,n=config.denominator_degree;
     for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<batch*outputs;index+=stride) {
         const auto sample=index/outputs,o=index%outputs;double sum=bias[o];
         for(std::size_t i=0;i<inputs;++i) {
             const auto edge=o*inputs+i,cache=edge*capacity+sample;
-            const double distance=input[sample*inputs+i]-config.center,z=distance/config.scale;
-            report(distance,status);report(z,status);
-            double p=a[edge*(m+1)+m],dp=0,q=1,dq=0,mag=1;
-            for(std::size_t k=m;k>0;--k) {
-                dp=dp*z+p;p=p*z+a[edge*(m+1)+k-1];report(dp,status);report(p,status);
-            }
-            if(n) {
-                q=b[edge*n+n-1];mag=fabs(q);
-                for(std::size_t k=n;k>1;--k) {
-                    dq=dq*z+q;q=q*z+b[edge*n+k-2];mag=mag*fabs(z)+fabs(b[edge*n+k-2]);
-                    report(q,status);report(dq,status);report(mag,status);
-                }
-                dq=dq*z+q;q=q*z+1;mag=mag*fabs(z)+1;report(q,status);report(dq,status);report(mag,status);
-            }
-            if(isfinite(q)&&isfinite(mag)&&fabs(q)<=config.epsilon*mag) {
+            const auto h=detail::rational_horner(config,input[sample*inputs+i],a+edge*(m+1),b+edge*n,guard);
+            if(detail::rational_pole(config,h)) {
                 atomicOr(status,2);values[cache]=denominator_values[cache]=derivatives[cache]=0;continue;
             }
-            const double r=p/q,numerator_term=dp/q,denominator_ratio=dq/q,denominator_term=r*denominator_ratio;
-            double dx=(numerator_term-denominator_term)/config.scale;
-            report(r,status);report(numerator_term,status);report(denominator_ratio,status);report(denominator_term,status);report(dx,status);
-            const bool tiny_numerator=dp!=0&&fabs(numerator_term)<2.2250738585072014e-308;
-            const bool tiny_denominator=p!=0&&dq!=0&&(fabs(r)<2.2250738585072014e-308||fabs(denominator_ratio)<2.2250738585072014e-308||fabs(denominator_term)<2.2250738585072014e-308);
-            if(tiny_numerator||tiny_denominator) {
-                const double lq=log(fabs(q)),ls=log(config.scale);
-                const double first=tiny_numerator?copysign(exp(log(fabs(dp))-lq-ls),(dp<0)!=(q<0)?-1.0:1.0):numerator_term/config.scale;
-                const double second=tiny_denominator?copysign(exp(log(fabs(p))+log(fabs(dq))-2*lq-ls),(p<0)!=(dq<0)?-1.0:1.0):denominator_term/config.scale;
-                report(first,status);report(second,status);dx=first-second;report(dx,status);
-            }
+            const auto e=detail::rational_edge(config,h,guard);
             // Derivative powers are part of the nonlinear contract, including
             // zero upstream. Detect unusable parameter VJPs during forward.
             double power=1;
             for(std::size_t k=0;k<=(m>n?m:n);++k) {
-                if(k){power*=z;report(power,status);}
-                if(k<=m)report(rational_numerator_vjp(q,z,k,power),status);
-                if(k&&k<=n)report(rational_denominator_vjp(p,q,z,k,power),status);
+                if(k)power=guard(power*h.z);
+                const double divided=guard(power/h.q);
+                if(k<=m)detail::rational_numerator_vjp(h.q,h.z,k,power,divided,guard);
+                if(k&&k<=n)detail::rational_denominator_vjp(h.p,h.q,e.value,h.z,k,power,divided,guard);
             }
-            values[cache]=p;denominator_values[cache]=q;derivatives[cache]=dx;sum+=r;report(sum,status);
+            values[cache]=h.p;denominator_values[cache]=h.q;derivatives[cache]=e.input_derivative;sum+=e.value;report(sum,status);
         }
         output[index]=sum;report(sum,status);
     }
@@ -337,6 +176,9 @@ __global__ void rational_input_kernel(const double* derivatives,const double* up
 __global__ void rational_parameter_kernel(const double* input,const double* values,const double* denominator_values,const double* upstream,
                                           const double* parameters,double* gradients,std::size_t batch,std::size_t capacity,
                                           std::size_t inputs,std::size_t outputs,RationalConfig config,double lambda,int* status) {
+    // Forward validated z and every parameter VJP of these cached samples with
+    // bit-identical operations; backward runs only after a successful forward.
+    const CheckedEarlier guard;
     const auto m=config.numerator_degree+1,n=config.denominator_degree,acount=inputs*outputs*m;
     const auto total=acount+outputs+inputs*outputs*n;
     // A full warp owns each parameter and scans contiguous edge-major
@@ -352,10 +194,15 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
         for(std::size_t sample=lane;sample<batch;sample+=32) {
             double derivative=1;
             if(!bias) {
-                const double z=(input[sample*inputs+i]-config.center)/config.scale;double power=1;
+                const double z=detail::rational_argument(config,input[sample*inputs+i],guard);double power=1;
                 for(std::size_t j=0;j<k;++j)power*=z;
                 const auto cache=edge*capacity+sample;
-                derivative=numerator?rational_numerator_vjp(denominator_values[cache],z,k,power):rational_denominator_vjp(values[cache],denominator_values[cache],z,k,power);
+                const double q=denominator_values[cache],divided=power/q;
+                if(numerator)derivative=detail::rational_numerator_vjp(q,z,k,power,divided,guard);
+                else {
+                    const double p=values[cache];
+                    derivative=detail::rational_denominator_vjp(p,q,p/q,z,k,power,divided,guard);
+                }
             }
             const double term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
         }
@@ -525,10 +372,13 @@ void ResidentNetwork::forward() {
         }
         const auto& b = s.model.layers()[j].basis();
         const auto nonlinear=s.parameters+l.parameter_offset+l.coefficients+l.outputs;
-        Basis basis{b.kind,b.size,b.alpha,b.beta,b.frequency,b.width,
-                    s.ptr(l.trainable?nonlinear:l.centers),s.ptr(nonlinear+l.terms),
-                    s.ptr(l.scales),s.ptr(l.knots),b.degree,l.trainable};
-        basis_kernel<<<blocks(s.batch*l.inputs), 256, 0, s.stream>>>(s.ptr(s.activation[j]), s.ptr(l.values), s.ptr(l.derivatives), s.ptr(l.log_derivatives), s.batch*l.inputs, basis, s.status);
+        const detail::BasisView basis{b.kind,b.size,b.alpha,b.beta,b.frequency,b.width,
+                                      s.ptr(l.trainable?nonlinear:l.centers),s.ptr(nonlinear+l.terms),
+                                      s.ptr(l.scales),s.ptr(l.knots),b.degree,l.trainable};
+        detail::visit_basis_family(b.kind, [&](auto family) {
+            basis_kernel<decltype(family)::value><<<blocks(s.batch*l.inputs), 256, 0, s.stream>>>(
+                s.ptr(s.activation[j]), s.ptr(l.values), s.ptr(l.derivatives), s.ptr(l.log_derivatives), s.batch*l.inputs, basis, s.status);
+        });
         check(cudaGetLastError(), "resident basis launch");
         forward_kernel<<<blocks(s.batch*l.outputs), 256, 0, s.stream>>>(s.ptr(l.values), s.ptr(s.parameters+l.parameter_offset), s.ptr(s.parameters+l.parameter_offset+l.coefficients), s.ptr(s.activation[j+1]), s.batch*l.outputs, l.inputs, l.outputs, l.terms, s.status);
         check(cudaGetLastError(), "resident forward launch");
