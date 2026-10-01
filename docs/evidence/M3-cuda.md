@@ -13,3 +13,28 @@ Tests cover independent spline hat values, mixed-family CPU/device VJPs and
 repeated SGD, learned snapshots, zero-batch L2, invalid lambda, log-width
 underflow rejection before any network mutation, reusable failed gradients,
 and explicit CPU snapshot/refine/device reconstruction.
+
+## Resident implementation GREEN
+
+The device arena adds immutable spline knots/wavelet scales, persistent RBF
+log-width derivative workspaces, and centers/log widths inside the two existing
+parameter/candidate regions. Every SGD candidate is checked for finite parameters
+and finite positive exponentiated widths before the single whole-network region
+swap. Snapshots download current nonlinear parameters. New basis evaluation and
+shared-parameter VJPs execute on device; L2 is added only to coefficient gradients.
+Grid changes remain explicit snapshot/refine/reconstruction setup operations.
+
+Release real-hardware tests now pass **7/7**, including independent linear spline
+hat values, degree 0/16, repeated full-multiplicity interior knots, domain outside
+zeros, huge knot-domain ratios, MexicanHat subnormal-scale representable tail
+derivatives, mixed topologies, learned snapshots, zero and nonzero batch L2,
+invalid lambda, candidate underflow atomicity and repeated SGD. Existing CUDA,
+resident and resident-review targets plus M3 resident pass **4/4** in
+[resident-green.txt](m3/resident-green.txt). Compute Sanitizer
+`--tool memcheck --error-exitcode 9 build-m3-cuda/m3_resident_test.exe`
+returned exit 0 with **0 errors**, retained in
+[resident-memcheck.txt](m3/resident-memcheck.txt). Workspace allocations remain two.
+
+Profiling and complete-call performance acceptance are recorded separately in
+[M3-benchmark.md](M3-benchmark.md); the initial scalar shared-parameter reduction
+is a numerical baseline, not an accepted performance claim.

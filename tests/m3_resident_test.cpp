@@ -59,6 +59,34 @@ TEST(m3_resident_spline_independent_hat_values) {
 TEST(m3_resident_mixed_families_and_learned_parameter_snapshots) {
     for(auto kind:{kan::BasisKind::BSpline,kan::BasisKind::MexicanHat,kan::BasisKind::GaussianRbf}) parity(kind);
 }
+TEST(m3_resident_localized_extreme_tails_and_spline_contracts) {
+    const double maximum=std::numeric_limits<double>::max();
+    kan::BasisConfig huge{kan::BasisKind::BSpline,2};huge.degree=1;huge.knots={-maximum,-maximum,maximum,maximum};
+    kan::BasisConfig repeated{kan::BasisKind::BSpline,6};repeated.degree=2;repeated.knots={-1,-1,-1,0,0,0,1,1,1};
+    kan::BasisConfig constant{kan::BasisKind::BSpline,3};constant.degree=0;constant.knots={-1,-0.2,0.4,1};
+    kan::BasisConfig high{kan::BasisKind::BSpline,17};high.degree=16;high.knots=std::vector<double>(17,-1);high.knots.insert(high.knots.end(),17,1);
+    for(const auto& b:{huge,repeated,constant,high}) {
+        kan::Layer l(1,1,b);std::vector<double> c(b.size);for(std::size_t k=0;k<c.size();++k)c[k]=0.1*static_cast<double>(k+1);
+        l.set_parameters(c,std::vector<double>{0});kan::cuda::ResidentNetwork gpu(kan::Network({l}),5);
+        const std::vector<double> x{-1,0,1,-0.2,0.4};gpu.upload_input(x,5);gpu.upload_output_gradient(std::vector<double>(5,1));gpu.forward();gpu.backward();
+        compare(gpu.download_output(),l.forward(x,5));compare(gpu.download_gradients().input,l.backward(x,5,std::vector<double>(5,1)).input);
+    }
+    kan::BasisConfig tail{kan::BasisKind::MexicanHat,1};tail.centers={0};tail.scales={std::numeric_limits<double>::denorm_min()};
+    kan::Layer l(1,1,tail);l.set_parameters(std::vector<double>{1},std::vector<double>{0});kan::cuda::ResidentNetwork gpu(kan::Network({l}),1);
+    gpu.upload_input(std::vector<double>{55*tail.scales[0]},1);gpu.upload_output_gradient(std::vector<double>{1});gpu.forward();gpu.backward();
+    const auto dx=gpu.download_gradients().input[0];REQUIRE(dx!=0);test::near(dx/1.769123639250348e-167,1,3e-11);
+}
+TEST(m3_resident_nonzero_batch_l2_combines_with_data_vjp) {
+    auto cpu=model(kan::BasisKind::GaussianRbf);kan::cuda::ResidentNetwork gpu(cpu,2);
+    const std::vector<double> x{0.1,-0.3,0.6,0.7},dy{0.2,-0.4};gpu.upload_input(x,2);gpu.upload_output_gradient(dy);gpu.forward();gpu.backward(0.2);
+    const auto actual=gpu.download_gradients();auto expected=cpu.backward(x,2,dy);const auto regularizer=cpu.regularization(0.2);
+    for(std::size_t j=0;j<actual.layers.size();++j) {
+        for(std::size_t k=0;k<expected.layers[j].coefficients.size();++k)expected.layers[j].coefficients[k]+=regularizer.gradients.layers[j].coefficients[k];
+        compare(actual.layers[j].coefficients,expected.layers[j].coefficients);
+        compare(actual.layers[j].centers,expected.layers[j].centers);compare(actual.layers[j].log_widths,expected.layers[j].log_widths);
+    }
+    compare(actual.input,expected.input);
+}
 TEST(m3_resident_zero_batch_regularization_and_validation) {
     auto cpu=model(kan::BasisKind::GaussianRbf); kan::cuda::ResidentNetwork gpu(cpu,0);
     gpu.upload_input({},0); gpu.upload_output_gradient({}); gpu.forward();

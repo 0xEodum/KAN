@@ -147,7 +147,8 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
             const auto expected = result.parameters.layers()[l];
             const auto actual = replay_parameters.layers()[l];
             if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
-                !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()))
+                !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()) ||
+                expected.basis().centers != actual.basis().centers || expected.basis().log_widths != actual.basis().log_widths)
                 throw std::runtime_error("resident verification replay changed parameters");
         }
     }
