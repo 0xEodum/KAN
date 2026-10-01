@@ -31,12 +31,19 @@ coefficient L2, persistent CUDA and NumPy interfaces. All gates passed: integrat
 profiling and independent acceptance review. The reviewed large-launch reduction
 defect is resolved. See [M3 evidence](evidence/M3.md) and [scope/defaults](evidence/M3-plan.md).
 
-## M4: rational edges — NEXT
+## M4: rational edges — DONE
 
 Padé/rational parameterization, singularity policy, conditioning and nonlinear
 parameter derivatives. Do not disguise rational edges as fixed linear basis terms.
+Completed 2026-10-01: distinct trainable numerator/denominator edges, explicit
+scaling and relative pole guard, analytic nonlinear VJPs, mixed CPU/resident CUDA
+and NumPy execution. All gates passed: integrated19/19, sanitizers,98.1% CPU
+coverage, installed consumers, matched complete-call CPU/GPU profiling and
+independent source/evidence acceptance. Reviewed extreme derivative underflow is
+resolved; CPU per-edge allocations removed and GPU parameter reduction tuned.
+See [M4 evidence](evidence/M4.md) and [scope/defaults](evidence/M4-plan.md).
 
-## M5: experimental quantum carriers — PLANNED
+## M5: experimental quantum carriers — NEXT
 
 Typed PQC/Fock carrier interfaces and simulator adapters, physical normalization,
 measurement/gradient semantics and independently verified QUBO/quadratization.

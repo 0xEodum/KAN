@@ -258,8 +258,9 @@ results and measured limits. [M3 acceptance plan](docs/evidence/M3-plan.md)
 defines the localized/adaptive stage and its validation gates.
 M3 is complete; [M3 final evidence](docs/evidence/M3.md) records numerical,
 installation, sanitizer, independent review and hardware-scoped performance
-results. [M4 acceptance plan](docs/evidence/M4-plan.md) defines the rational
-contracts and validation gates; M4 closure is recorded only after acceptance.
+results. M4 is complete; [M4 final evidence](docs/evidence/M4.md) records rational
+contracts, independent review, numerical/installation/sanitizer gates and measured
+CPU/GPU improvements. M5 experimental quantum carriers is next.
 
 The original [KAN paper](https://arxiv.org/abs/2404.19756) motivates the edge-function
 architecture; [NIST DLMF](https://dlmf.nist.gov/18.9) specifies polynomial conventions.
