@@ -1,0 +1,32 @@
+﻿base guarded [0] cpu_step_ms median 704.727 best 645.921
+base guarded [0] resident_step_ms median 6.938 best 6.871 checksum -11.809144532435891
+m2 guarded [0] cpu_step_ms median 631.061 best 612.085
+m2 guarded [0] resident_step_ms median 7.280 best 7.244 checksum -11.809144532435891
+m2 absolute [0] cpu_step_ms median 781.927 best 712.426
+m2 absolute [0] resident_step_ms median 7.416 best 7.033 checksum -11.75359369954484
+m2 smooth [0] cpu_step_ms median 782.717 best 692.786
+m2 smooth [0] resident_step_ms median 7.706 best 7.333 checksum -11.808887523629448
+base guarded [1] cpu_step_ms median 818.851 best 808.564
+base guarded [1] resident_step_ms median 11.742 best 11.307 checksum -12.126027909549236
+m2 guarded [1] cpu_step_ms median 793.937 best 778.470
+m2 guarded [1] resident_step_ms median 11.738 best 11.346 checksum -12.126027909549236
+m2 absolute [1] cpu_step_ms median 872.449 best 794.258
+m2 absolute [1] resident_step_ms median 11.880 best 11.598 checksum -12.064367635483048
+m2 smooth [1] cpu_step_ms median 1042.362 best 986.371
+m2 smooth [1] resident_step_ms median 12.118 best 11.982 checksum -12.126168190625568
+base guarded [2] cpu_step_ms median 1419.137 best 1231.940
+base guarded [2] resident_step_ms median 19.628 best 19.251 checksum -12.358715939418245
+m2 guarded [2] cpu_step_ms median 1416.504 best 1309.230
+m2 guarded [2] resident_step_ms median 37.951 best 20.876 checksum -12.358715939418245
+m2 absolute [2] cpu_step_ms median 1323.337 best 1305.114
+m2 absolute [2] resident_step_ms median 19.626 best 19.045 checksum -12.324735511528788
+m2 smooth [2] cpu_step_ms median 1488.876 best 1459.075
+m2 smooth [2] resident_step_ms median 20.296 best 19.875 checksum -12.326743790880689
+base guarded [0] resident_step_ms median 6.899 best 6.832 checksum -15.177367133207445
+m2 guarded [0] resident_step_ms median 17.201 best 6.346 checksum -15.177367133207445
+base guarded [0] resident_step_ms median 6.864 best 6.124 checksum -15.177367133207445
+m2 guarded [0] resident_step_ms median 6.975 best 6.827 checksum -15.177367133207445
+base guarded [0] resident_step_ms median 7.161 best 6.834 checksum -15.177367133207445
+m2 guarded [0] resident_step_ms median 6.859 best 6.515 checksum -15.177367133207445
+base guarded [0] resident_step_ms median 6.910 best 6.827 checksum -15.177367133207445
+m2 guarded [0] resident_step_ms median 6.894 best 6.830 checksum -15.177367133207445

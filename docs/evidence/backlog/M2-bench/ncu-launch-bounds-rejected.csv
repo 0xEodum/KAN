@@ -1,0 +1,10 @@
+﻿degrees,kernel,build,policy,median_step_time_us,median_step_instructions,registers,steps
+1/1,rational_forward_kernel,lb,absolute,5192.2,88841216,64,8
+1/1,rational_forward_kernel,lb,guarded,5334.8,90772595,64,8
+1/1,rational_forward_kernel,lb,smooth,5512.7,93324800,64,8
+3/2,rational_forward_kernel,lb,absolute,7850.3,126328122,64,8
+3/2,rational_forward_kernel,lb,guarded,7585.5,130388992,64,8
+3/2,rational_forward_kernel,lb,smooth,8154.9,132515328,64,8
+6/4,rational_forward_kernel,lb,absolute,11440.2,188947456,64,8
+6/4,rational_forward_kernel,lb,guarded,12335.4,197485847,64,8
+6/4,rational_forward_kernel,lb,smooth,13556.8,198543162,64,8
