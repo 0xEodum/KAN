@@ -162,10 +162,28 @@ TEST(sgd_rejects_gradients_of_another_carrier) {
     t.nonlinear = kan::RationalGradients{{0}};
     test::throws<std::invalid_argument>([&] { trainable.sgd(t, 0.1); });
 
+    t = trainable.backward(x, 1, u);
+    std::get<kan::TrainableRbfGradients>(t.nonlinear).log_widths.pop_back();
+    test::throws<std::invalid_argument>([&] { trainable.sgd(t, 0.1); });
+
     kan::Layer basis(1, 1, kan::HermiteConfig{3});
     auto b = basis.backward(x, 1, u);
     b.nonlinear = kan::RationalGradients{};
     test::throws<std::invalid_argument>([&] { basis.sgd(b, 0.1); });
+}
+
+TEST(invalid_and_moved_from_carriers_are_rejected) {
+    kan::Layer rational(1, 1, pade());
+    test::throws<std::invalid_argument>([&] {
+        rational.set_carrier(kan::RationalEdges{pade(), ramp(2, 1), std::vector<double>{0}});
+    });
+    kan::Layer spline(1, 1, cubic());
+    auto moved = std::move(spline);
+    test::throws<std::invalid_argument>([&] { kan::insert_knot(spline, 0.5); });
+    test::throws<std::invalid_argument>([&] { kan::adapt_grid(spline, std::vector<double>{0.5}); });
+    test::throws<std::invalid_argument>([&] { spline.set_carrier(moved.carrier()); });
+    kan::insert_knot(moved, 0.5);
+    REQUIRE(moved.terms() == 6);
 }
 
 int main() { return test::run(); }
