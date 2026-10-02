@@ -9,20 +9,29 @@
 #include "support/network.hpp"
 #include "support/test.hpp"
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 
 namespace {
-// Relative to the largest magnitude of the expected vector: cancellation in
-// long reductions makes small entries carry absolute, not relative, error.
+template<class... Parts> std::string precise(const Parts&... parts) {
+    std::ostringstream out;
+    out << std::setprecision(17);
+    (out << ... << parts);
+    return out.str();
+}
+// Per entry: relative error, plus a much smaller floor tied to the largest
+// magnitude of the tensor, because cancellation in long reductions makes
+// small entries carry absolute rather than relative error.
 void compare(std::span<const double> actual, std::span<const double> expected, double tolerance = 1e-12) {
     REQUIRE(actual.size() == expected.size());
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i) {
         REQUIRE(std::isfinite(actual[i]));
-        if (std::abs(actual[i]-expected[i]) > tolerance*(1+scale))
-            throw std::runtime_error("index " + std::to_string(i) + " actual=" + std::to_string(actual[i]) +
-                                     " expected=" + std::to_string(expected[i]));
+        if (std::abs(actual[i]-expected[i]) > tolerance*std::abs(expected[i]) + 1e-1*tolerance*scale + 1e-300)
+            throw std::runtime_error(precise("index ", i, " of ", actual.size(), " actual=", actual[i],
+                                             " expected=", expected[i], " scale=", scale));
     }
 }
 std::vector<double> wave(std::size_t count, double scale, double frequency, double phase = 0) {
@@ -90,6 +99,23 @@ TEST(contraction_wide_mixed_network_trains_like_cpu) {
     REQUIRE(allocations == gpu.workspace_allocations());
 }
 
+// Both execution paths of the engine on one network. The first layer has
+// 80*448+80 = 35 920 > 2^15 coefficients and outputs (cuBLAS parameter VJP)
+// and a forward of 400*80*448 = 14.3M > 2^23 multiply-adds at batch 400
+// (cuBLAS) but 0.25M at batch 7 (warp kernel); the second layer always takes
+// the small parameter-VJP kernel, over 7 batch tiles at batch 400.
+TEST(contraction_engine_paths_agree_with_cpu) {
+    kan::Network cpu({layer(64, 80, kan::ChebyshevConfig{7}, 0.7), layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)});
+    kan::cuda::ResidentNetwork gpu(cpu, 400);
+    for (std::size_t batch : {400u, 7u}) {
+        const auto x = wave(batch*64, 0.9, 0.23), dy = wave(batch*3, 0.05, 0.61);
+        gpu.upload_input(x, batch); gpu.forward(); compare(gpu.download_output(), cpu.forward(x, batch));
+        gpu.upload_output_gradient(dy); gpu.backward(0.01);
+        const auto penalty = cpu.regularization(0.01).gradients;
+        gradients(gpu.download_gradients(), cpu.backward(x, batch, dy), &penalty);
+    }
+}
+
 TEST(contraction_repeated_backward_after_one_forward) {
     auto cpu = wide();
     kan::cuda::ResidentNetwork gpu(cpu, 64);
@@ -118,13 +144,18 @@ TEST(contraction_single_sample_and_single_edge) {
 TEST(contraction_empty_batch_gives_penalty_only) {
     auto cpu = wide();
     kan::cuda::ResidentNetwork gpu(cpu, 16);
-    gpu.upload_input({}, 0); gpu.upload_output_gradient({}); gpu.forward(); gpu.backward(0.25);
-    const auto g = gpu.download_gradients(), e = cpu.regularization(0.25).gradients;
-    REQUIRE(g.input.empty());
-    for (std::size_t j = 0; j < g.layers.size(); ++j) {
-        compare(test::grad(g, j).coefficients, test::grad(e, j).coefficients);
-        compare(test::grad(g, j).bias, test::grad(e, j).bias);
-        compare(test::centers(test::grad(g, j)), test::centers(test::grad(e, j)));
+    gpu.upload_input({}, 0); gpu.upload_output_gradient({}); gpu.forward();
+    // lambda != 0 scales a copy of C; lambda == 0 clears stale gradients.
+    for (double lambda : {0.25, 0.0}) {
+        gpu.backward(lambda);
+        const auto g = gpu.download_gradients(), e = cpu.regularization(lambda).gradients;
+        REQUIRE(g.input.empty());
+        for (std::size_t j = 0; j < g.layers.size(); ++j) {
+            compare(test::grad(g, j).coefficients, test::grad(e, j).coefficients);
+            compare(test::grad(g, j).bias, test::grad(e, j).bias);
+            compare(test::centers(test::grad(g, j)), test::centers(test::grad(e, j)));
+            compare(test::log_widths(test::grad(g, j)), test::log_widths(test::grad(e, j)));
+        }
     }
     // A smaller batch after a larger one must not read stale rows.
     const auto x = wave(5*37, 0.6, 0.77), dy = wave(5*3, 0.3, 0.19);
@@ -152,6 +183,12 @@ TEST(contraction_nonfinite_results_are_reported) {
     backward.upload_output_gradient(std::vector<double>{maximum, maximum});
     test::throws<std::overflow_error>([&] { backward.backward(); });
     test::throws<std::logic_error>([&] { backward.download_gradients(); });
+    // The overflowed coefficient VJP is stale device data; a lambda = 0
+    // backward must overwrite it without reading it.
+    backward.upload_output_gradient(std::vector<double>{0.5, 0.25}); backward.backward();
+    const auto recovered = backward.download_gradients();
+    compare(test::grad(recovered, 0).coefficients, std::vector<double>{0.75, 0.75});
+    compare(test::grad(recovered, 0).bias, std::vector<double>{0.75});
     // Input-VJP overflow: u*C*Phi' leaves the range while Phi*u stays finite.
     kan::Layer input(1, 2, kan::ChebyshevConfig{2});
     input.set_parameters(std::vector<double>{0, 1e300, 0, 1e300}, std::vector<double>{0, 0});

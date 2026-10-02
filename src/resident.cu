@@ -4,8 +4,10 @@
 #include "detail/rational_formulas.hpp"
 #include "detail/input_map_formulas.hpp"
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -27,6 +29,10 @@ void finite(std::span<const double> values) {
 }
 unsigned blocks(std::size_t count,std::size_t work_per_block=256) {
     return static_cast<unsigned>(std::min<std::size_t>((count-1)/work_per_block+1,65535));
+}
+void check(cublasStatus_t status, const char* operation) {
+    if (status != CUBLAS_STATUS_SUCCESS)
+        throw std::runtime_error(std::string(operation) + ": " + cublasGetStatusString(status));
 }
 __device__ void report(double value, int* status) { if (!isfinite(value)) atomicOr(status, 1); }
 // Device guard for the shared formulas: record a nonfinite status bit and
@@ -51,58 +57,110 @@ __global__ void basis_kernel(const double* input, double* values, double* deriva
                                       {values + row, derivatives + row, nullptr, basis.trainable ? log_derivatives + row : nullptr}, guard);
     }
 }
-__global__ void forward_kernel(const double* v, const double* c, const double* bias, double* output,
-                               std::size_t count, std::size_t inputs, std::size_t outputs, std::size_t terms, int* status) {
-    const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
-    for (auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; index < count; index += stride) {
-        const auto batch = index/outputs, o = index%outputs;
-        double sum = bias[o];
-        for (std::size_t i = 0; i < inputs; ++i)
-            for (std::size_t k = 0; k < terms; ++k) sum += c[(o*inputs+i)*terms+k]*v[(batch*inputs+i)*terms+k];
+// Contraction engine epilogues (backlog C2). cuBLAS computes the products:
+// forward Y = Phi*C^T, coefficient VJP dC = U^T*Phi (+ lambda*C), bias VJP
+// db = U^T*1 and W = U*C; these kernels add the bias, reduce W against Phi'
+// to the input VJP and report nonfinite results.
+__global__ void bias_kernel(double* output, const double* bias, std::size_t count, std::size_t outputs, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride) {
+        const double sum = output[index]+bias[index%outputs];
         output[index] = sum; report(sum, status);
     }
 }
-__global__ void input_kernel(const double* d, const double* c, const double* upstream, double* dx,
-                             std::size_t count, std::size_t inputs, std::size_t outputs, std::size_t terms, int* status) {
-    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride) {
-        const auto batch = index/inputs, i = index%inputs;
+// Small forward contractions: one warp per output, Y[b,o] = bias[o] +
+// dot(Phi[b,:], C[o,:]) over two contiguous rows, with the bias and the
+// nonfinite check fused. cuBLAS runs a tiny DGEMM as one latency-bound CTA
+// (42-64 us at 24x32x112 on the RTX 3090; this kernel: 7 us); see C2 evidence.
+__global__ void forward_dot_kernel(const double* v, const double* c, const double* bias, double* output,
+                                   std::size_t count, std::size_t outputs, std::size_t length, int* status) {
+    const auto lane = threadIdx.x%32;
+    const auto warps = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
+    for (auto index = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; index < count; index += warps) {
+        const double* row = v+(index/outputs)*length;
+        const double* column = c+(index%outputs)*length;
         double sum = 0;
-        for (std::size_t o = 0; o < outputs; ++o)
-            for (std::size_t k = 0; k < terms; ++k) sum += upstream[batch*outputs+o]*c[(o*inputs+i)*terms+k]*d[index*terms+k];
+        for (std::size_t k = lane; k < length; k += 32) sum += row[k]*column[k];
+        for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
+        if (lane == 0) { sum += bias[index%outputs]; output[index] = sum; report(sum, status); }
+    }
+}
+// Largest forward contraction (batch*outputs*inputs*terms multiply-adds) run by
+// forward_dot_kernel; cuBLAS above. Both are FP64-ALU bound on GA102 and meet
+// at a few million multiply-adds (C2 evidence, dot_vs_gemm).
+constexpr std::size_t small_forward_contraction = std::size_t{1} << 23;
+// Largest coefficients+outputs whose VJP runs parameter_partial_kernel, in at
+// most parameter_tiles batch tiles of at least parameter_tile_rows samples.
+constexpr std::size_t small_parameter_vjp = std::size_t{1} << 15, parameter_tile_rows = 64;
+constexpr unsigned parameter_tiles = 64;
+unsigned parameter_tile_count(std::size_t batch) {
+    return static_cast<unsigned>(std::min<std::size_t>(parameter_tiles, batch ? (batch-1)/parameter_tile_rows+1 : 1));
+}
+
+// Small parameter VJPs (at most small_parameter_vjp coefficients+outputs):
+// block row t reduces samples [t*chunk, (t+1)*chunk) into partial[t][c] for
+// c = o*IK+ik (U[b,o]*Phi[b,ik]) and the bias c = IK*O+o (U[b,o]). cuBLAS
+// runs these long, narrow products without split-K (one 32x32 tile over the
+// whole batch: up to 331 us at 112x24x1024 on the RTX 3090; C2 evidence).
+__global__ void parameter_partial_kernel(const double* v, const double* u, double* partial, std::size_t batch,
+                                         std::size_t outputs, std::size_t length, std::size_t chunk) {
+    const auto coefficients = outputs*length, count = coefficients+outputs;
+    const auto begin = static_cast<std::size_t>(blockIdx.y)*chunk, end = begin+chunk < batch ? begin+chunk : batch;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto c = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; c < count; c += stride) {
+        double sum = 0;
+        if (c < coefficients) {
+            const auto o = c/length, ik = c%length;
+            for (auto r = begin; r < end; ++r) sum += u[r*outputs+o]*v[r*length+ik];
+        } else {
+            for (auto r = begin; r < end; ++r) sum += u[r*outputs+c-coefficients];
+        }
+        partial[blockIdx.y*count+c] = sum;
+    }
+}
+// One launch finishes a layer's backward: dx[r] = sum_k Phi'[r,k]*W[r,k] for
+// the rows r = (sample, input), then the `checked` parameter VJPs [dC | db]:
+// with partials, their fixed-order tile sum plus lambda*C; otherwise (written
+// by cuBLAS earlier on the stream) only the nonfinite check.
+__global__ void backward_finish_kernel(const double* derivatives, const double* w, double* dx,
+                                       std::size_t rows, std::size_t terms, double* gradients, std::size_t checked,
+                                       const double* partial, unsigned tiles, const double* c, std::size_t coefficients,
+                                       double lambda, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows+checked; index += stride) {
+        if (index >= rows) {
+            const auto q = index-rows;
+            if (partial) {
+                double sum = 0;
+                for (unsigned t = 0; t < tiles; ++t) sum += partial[t*checked+q];
+                if (q < coefficients) sum += lambda*c[q];
+                gradients[q] = sum;
+            }
+            report(gradients[q], status);
+            continue;
+        }
+        double sum = 0;
+        for (std::size_t k = 0; k < terms; ++k) sum += derivatives[index*terms+k]*w[index*terms+k];
         dx[index] = sum; report(sum, status);
     }
 }
-__global__ void parameter_kernel(const double* v, const double* upstream, const double* parameters, double* gradient,
-                                 std::size_t batch, std::size_t inputs, std::size_t outputs, std::size_t terms, double lambda, int* status) {
+__global__ void fill_kernel(double* values, std::size_t count, double value) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    const auto coefficients = inputs*outputs*terms;
-    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < coefficients+outputs; index += stride) {
-        double sum = 0;
-        if (index < coefficients) {
-            const auto k = index%terms, i = (index/terms)%inputs, o = index/(terms*inputs);
-            for (std::size_t b = 0; b < batch; ++b) sum += upstream[b*outputs+o]*v[(b*inputs+i)*terms+k];
-            sum += lambda*parameters[index];
-        } else {
-            const auto o = index-coefficients;
-            for (std::size_t b = 0; b < batch; ++b) sum += upstream[b*outputs+o];
-        }
-        gradient[index] = sum; report(sum, status);
-    }
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
+        values[index] = value;
 }
 constexpr unsigned nonlinear_tiles=64;
-__global__ void nonlinear_partial_kernel(const double* dx, const double* dw, const double* c, const double* upstream,
-                                         double* partial, std::size_t count, std::size_t inputs,
-                                         std::size_t outputs, std::size_t terms, unsigned tiles, int* status) {
+// Center/log-width VJPs: sum over rows r of W[r,k]*(-dPhi/dx) and W[r,k]*dPhi/dlog-width.
+__global__ void nonlinear_partial_kernel(const double* dx, const double* dw, const double* w,
+                                         double* partial, std::size_t rows, std::size_t terms, unsigned tiles, int* status) {
     __shared__ double centers[256], widths[256];
     const auto k=static_cast<std::size_t>(blockIdx.x)/tiles;
     const auto tile=blockIdx.x%tiles, lane=threadIdx.x;
     double center=0,width=0;
     const auto stride=static_cast<std::size_t>(tiles)*blockDim.x;
-    for(auto index=static_cast<std::size_t>(tile)*blockDim.x+lane;index<count;index+=stride) {
-        const auto i=index%inputs, o=(index/inputs)%outputs, b=index/(inputs*outputs);
-        const double factor=upstream[b*outputs+o]*c[(o*inputs+i)*terms+k];
-        center+=factor*(-dx[(b*inputs+i)*terms+k]);width+=factor*dw[(b*inputs+i)*terms+k];
+    for(auto r=static_cast<std::size_t>(tile)*blockDim.x+lane;r<rows;r+=stride) {
+        const double factor=w[r*terms+k];
+        center+=factor*(-dx[r*terms+k]);width+=factor*dw[r*terms+k];
     }
     report(center,status);report(width,status);
     centers[lane]=center;widths[lane]=width;__syncthreads();
@@ -393,10 +451,16 @@ __global__ void layer_norm_parameter_finish_kernel(const double* partial, double
 struct ResidentContext {
     std::size_t capacity, batch = 0;
     std::size_t parameters = 0, gradients = 0, candidates = 0;
+    // Contraction engine (C2): W = U*C scratch shared by all expansion layers
+    // (largest capacity*inputs*terms), a ones vector for the bias VJP and the
+    // cuBLAS workspace, so cuBLAS never allocates during execution.
+    std::size_t scratch = 0, ones = 0, blas_workspace = 0;
+    std::size_t partials = 0; // small parameter VJP tiles, shared like the scratch
     std::vector<std::size_t> activation, upstream;
     double* arena = nullptr;
     int* status = nullptr;
     cudaStream_t stream = nullptr;
+    cublasHandle_t blas = nullptr;
     double* ptr(std::size_t offset) const { return arena+offset; }
     void sync() { check(cudaStreamSynchronize(stream), "resident synchronize"); }
     void upload(double* destination, std::span<const double> data) {
@@ -411,14 +475,19 @@ namespace {
 using Context = ResidentContext;
 
 // Bump allocator over the arena, checked before the single device allocation.
+// Every region starts on a 256-byte boundary (cudaMalloc alignment), which
+// cuBLAS needs for its workspace and prefers for vectorized operand loads.
 struct Reservation {
+    static constexpr std::size_t alignment = 256/sizeof(double);
     std::size_t total = 0;
     std::size_t operator()(std::size_t count) {
         const auto limit = std::vector<double>().max_size();
-        if (count > limit - total) throw std::overflow_error("resident workspace size overflow");
-        const auto offset = total; total += count; return offset;
+        const auto offset = (total+alignment-1)/alignment*alignment;
+        if (offset > limit || count > limit - offset) throw std::overflow_error("resident workspace size overflow");
+        total = offset+count; return offset;
     }
 };
+constexpr std::size_t blas_workspace_bytes = std::size_t{4} << 20;
 
 // A layer's parameters occupy [coefficients | bias | nonlinear] at `offset`
 // inside each of the parameter, gradient and candidate regions.
@@ -568,7 +637,7 @@ void reserve_workspace(TrainableRbfPlan& plan, std::size_t capacity, Reservation
     auto& p = plan.expansion;
     reserve_rows(p, capacity, reserve);
     plan.log_derivatives = reserve(product(product(capacity, p.block.inputs), p.block.terms));
-    const auto count = product(product(capacity, p.block.inputs), p.block.outputs);
+    const auto count = product(capacity, p.block.inputs);
     plan.partial_tiles = static_cast<unsigned>(std::min<std::size_t>(nonlinear_tiles, count?((count-1)/256+1):1));
     plan.partials = reserve(product(p.block.terms, 2*plan.partial_tiles));
 }
@@ -584,6 +653,27 @@ void reserve_workspace(TanhPlan&, std::size_t, Reservation&) {}
 void reserve_workspace(LayerNormPlan& plan, std::size_t capacity, Reservation& reserve) {
     plan.stats = reserve(product(capacity, 2));
     if (plan.affine()) plan.partials = reserve(product(plan.block.features, 2*static_cast<std::size_t>(norm_tiles(capacity))));
+}
+
+// Elements of the shared W = U*C scratch an expansion layer needs (zero otherwise).
+std::size_t scratch_extent(const Plan& plan, std::size_t capacity) {
+    return std::visit([&](const auto& p) -> std::size_t {
+        using P = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<P, BasisPlan> || std::is_same_v<P, TrainableRbfPlan>)
+            return product(product(capacity, p.expansion.block.inputs), p.expansion.block.terms);
+        else return 0;
+    }, plan);
+}
+
+// Elements of the shared small-parameter-VJP partials a layer needs (zero otherwise).
+std::size_t partial_extent(const Plan& plan, std::size_t capacity) {
+    return std::visit([&](const auto& p) -> std::size_t {
+        using P = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<P, BasisPlan> || std::is_same_v<P, TrainableRbfPlan>) {
+            const auto checked = p.expansion.block.coefficients+p.expansion.block.outputs;
+            return checked <= small_parameter_vjp ? checked*parameter_tile_count(capacity) : 0;
+        } else return 0;
+    }, plan);
 }
 
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
@@ -637,8 +727,23 @@ void expansion_forward(Context& s, const ExpansionPlan& p, std::size_t j, double
             s.ptr(s.activation[j]), s.ptr(p.values), s.ptr(p.derivatives), log_derivatives, s.batch*b.inputs, basis, s.status);
     });
     check(cudaGetLastError(), "resident basis launch");
-    forward_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.parameters+b.offset), s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), s.batch*b.outputs, b.inputs, b.outputs, b.terms, s.status);
-    check(cudaGetLastError(), "resident forward launch");
+    const auto count = s.batch*b.outputs, length = b.inputs*b.terms;
+    if (count <= small_forward_contraction/length) {
+        forward_dot_kernel<<<blocks(count, 256/32), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.parameters+b.offset),
+            s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), count, b.outputs, length, s.status);
+        check(cudaGetLastError(), "resident forward contraction launch");
+        return;
+    }
+    // Row-major Y (batch x O) = Phi (batch x IK) * C^T, i.e. column-major
+    // Y^T = C^T(op T) * Phi^T with C stored as column-major IK x O.
+    const auto ik = static_cast<std::int64_t>(b.inputs*b.terms), o = static_cast<std::int64_t>(b.outputs);
+    const double one = 1, zero = 0;
+    check(cublasDgemm_64(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), ik, &one,
+                         s.ptr(s.parameters+b.offset), ik, s.ptr(p.values), ik, &zero, s.ptr(s.activation[j+1]), o),
+          "resident forward contraction");
+    bias_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.ptr(s.parameters+b.bias()),
+        s.batch*b.outputs, b.outputs, s.status);
+    check(cudaGetLastError(), "resident forward bias launch");
 }
 void run_forward(Context& s, const BasisPlan& plan, std::size_t j) {
     const auto& p = plan.expansion;
@@ -688,24 +793,63 @@ void run_forward(Context& s, const LayerNormPlan& plan, std::size_t j) {
 // Backward of layer j: upstream[j+1] -> upstream[j] and the parameter gradients.
 void expansion_backward(Context& s, const ExpansionPlan& p, std::size_t j, double lambda) {
     const auto& b = p.block;
-    if (s.batch) {
-        input_kernel<<<blocks(s.batch*b.inputs), 256, 0, s.stream>>>(s.ptr(p.derivatives), s.ptr(s.parameters+b.offset), s.ptr(s.upstream[j+1]), s.ptr(s.upstream[j]), s.batch*b.inputs, b.inputs, b.outputs, b.terms, s.status);
-        check(cudaGetLastError(), "resident input gradient launch");
+    const auto ik = static_cast<std::int64_t>(b.inputs*b.terms), o = static_cast<std::int64_t>(b.outputs);
+    const auto n = static_cast<std::int64_t>(s.batch);
+    const double* c = s.ptr(s.parameters+b.offset);
+    const double* u = s.ptr(s.upstream[j+1]);
+    double* dc = s.ptr(s.gradients+b.offset);
+    double* db = s.ptr(s.gradients+b.bias());
+    const double one = 1, zero = 0;
+    const auto checked = b.coefficients+b.outputs;
+    const bool small = s.batch && checked <= small_parameter_vjp;
+    const auto tiles = parameter_tile_count(s.batch);
+    if (small) {
+        // Partial sums; backward_finish_kernel adds them with lambda*C.
+        const auto chunk = (s.batch-1)/tiles+1;
+        parameter_partial_kernel<<<dim3(blocks(checked), tiles), 256, 0, s.stream>>>(s.ptr(p.values), u, s.ptr(s.partials),
+            s.batch, b.outputs, b.inputs*b.terms, chunk);
+        check(cudaGetLastError(), "resident parameter partial launch");
+    } else if (s.batch) {
+        // Coefficient VJP + L2: column-major dC^T (IK x O) = Phi^T * U + lambda*C^T.
+        // beta = 0 never reads the output, so lambda = 0 needs no copy.
+        if (lambda != 0) check(cudaMemcpyAsync(dc, c, b.coefficients*sizeof(double), cudaMemcpyDeviceToDevice, s.stream), "resident L2 copy");
+        check(cublasDgemm_64(s.blas, CUBLAS_OP_N, CUBLAS_OP_T, ik, o, n, &one, s.ptr(p.values), ik, u, o,
+                             &lambda, dc, ik), "resident coefficient VJP");
+        // Bias VJP: column sums of U, as U^T * 1 (U^T is column-major O x batch).
+        check(cublasDgemv_64(s.blas, CUBLAS_OP_N, o, n, &one, u, o, s.ptr(s.ones), 1, &zero, db, 1), "resident bias VJP");
+    } else {
+        if (lambda != 0) {
+            check(cudaMemcpyAsync(dc, c, b.coefficients*sizeof(double), cudaMemcpyDeviceToDevice, s.stream), "resident L2 copy");
+            check(cublasDscal_64(s.blas, static_cast<std::int64_t>(b.coefficients), &lambda, dc, 1), "resident L2 scale");
+        } else {
+            check(cudaMemsetAsync(dc, 0, b.coefficients*sizeof(double), s.stream), "resident coefficient VJP reset");
+        }
+        check(cudaMemsetAsync(db, 0, b.outputs*sizeof(double), s.stream), "resident bias VJP reset");
     }
-    parameter_kernel<<<blocks(b.coefficients+b.outputs), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.upstream[j+1]), s.ptr(s.parameters+b.offset), s.ptr(s.gradients+b.offset), s.batch, b.inputs, b.outputs, b.terms, lambda, s.status);
-    check(cudaGetLastError(), "resident parameter gradient launch");
+    if (s.batch) {
+        // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
+        check(cublasDgemm_64(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
+              "resident input VJP contraction");
+    }
+    const auto rows = s.batch*b.inputs;
+    backward_finish_kernel<<<blocks(rows+checked), 256, 0, s.stream>>>(s.ptr(p.derivatives), s.ptr(s.scratch),
+        s.ptr(s.upstream[j]), rows, b.terms, dc, checked, small ? s.ptr(s.partials) : nullptr, tiles, c,
+        b.coefficients, lambda, s.status);
+    check(cudaGetLastError(), "resident backward finish launch");
 }
+
 void run_backward(Context& s, const BasisPlan& plan, std::size_t j, double lambda) { expansion_backward(s, plan.expansion, j, lambda); }
 void run_backward(Context& s, const TrainableRbfPlan& plan, std::size_t j, double lambda) {
     const auto& p = plan.expansion;
     const auto& b = p.block;
     expansion_backward(s, p, j, lambda);
-    const auto count=product(product(s.batch,b.inputs),b.outputs);
-    const auto tiles=static_cast<unsigned>(std::min<std::size_t>(plan.partial_tiles,count?((count-1)/256+1):1));
+    // Reuses W = U*C left in the scratch by expansion_backward (zero rows for an empty batch).
+    const auto rows=product(s.batch,b.inputs);
+    const auto tiles=static_cast<unsigned>(std::min<std::size_t>(plan.partial_tiles,rows?((rows-1)/256+1):1));
     // Bound the launch dimension even for large valid basis term counts.
     if(b.terms>2147483647U/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
-    nonlinear_partial_kernel<<<static_cast<unsigned>(b.terms)*tiles,256,0,s.stream>>>(s.ptr(p.derivatives),s.ptr(plan.log_derivatives),s.ptr(s.parameters+b.offset),
-        s.ptr(s.upstream[j+1]),s.ptr(plan.partials),count,b.inputs,b.outputs,b.terms,tiles,s.status);
+    nonlinear_partial_kernel<<<static_cast<unsigned>(b.terms)*tiles,256,0,s.stream>>>(s.ptr(p.derivatives),s.ptr(plan.log_derivatives),
+        s.ptr(s.scratch),s.ptr(plan.partials),rows,b.terms,tiles,s.status);
     check(cudaGetLastError(),"resident nonlinear partial launch");
     nonlinear_finish_kernel<<<blocks(2*b.terms),256,0,s.stream>>>(s.ptr(plan.partials),s.ptr(s.gradients+b.nonlinear()),b.terms,tiles,s.status);
     check(cudaGetLastError(),"resident nonlinear reduction launch");
@@ -896,12 +1040,27 @@ struct ResidentNetwork::Impl : ResidentContext {
             upstream.push_back(reserve(product(capacity, outputs)));
             std::visit([&](auto& p) { reserve_workspace(p, capacity, reserve); }, plan);
         }
+        std::size_t scratch_size = 0;
+        for (const auto& plan : plans) scratch_size = std::max(scratch_size, scratch_extent(plan, capacity));
+        std::size_t partial_size = 0;
+        for (const auto& plan : plans) partial_size = std::max(partial_size, partial_extent(plan, capacity));
+        scratch = reserve(scratch_size); partials = reserve(partial_size); ones = reserve(capacity);
+        blas_workspace = reserve(blas_workspace_bytes/sizeof(double));
         const auto bytes = product(reserve.total, sizeof(double));
         try {
             if (!available()) throw std::runtime_error("no CUDA device available");
             check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "resident stream create");
             check(cudaMalloc(&arena, bytes), "resident arena allocation"); ++allocations;
             check(cudaMalloc(&status, sizeof(int)), "resident status allocation"); ++allocations;
+            // The handle runs on the network stream with a workspace inside the
+            // arena (set after the stream: cublasSetStream resets it).
+            check(cublasCreate(&blas), "resident cuBLAS handle create");
+            check(cublasSetStream(blas, stream), "resident cuBLAS stream");
+            check(cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes), "resident cuBLAS workspace");
+            if (capacity) {
+                fill_kernel<<<blocks(capacity), 256, 0, stream>>>(ptr(ones), capacity, 1.0);
+                check(cudaGetLastError(), "resident ones launch");
+            }
             for (std::size_t j = 0; j < plans.size(); ++j)
                 with_stage(plans[j], model.layers()[j], [&](const auto& p, const auto& stage, const auto& kind) {
                     upload_stage(*this, p, stage, kind);
@@ -912,10 +1071,11 @@ struct ResidentNetwork::Impl : ResidentContext {
     ~Impl() { cleanup(); }
     void cleanup() noexcept {
         if (stream) cudaStreamSynchronize(stream);
+        if (blas) cublasDestroy(blas);
         if (arena) cudaFree(arena);
         if (status) cudaFree(status);
         if (stream) cudaStreamDestroy(stream);
-        arena = nullptr; status = nullptr; stream = nullptr;
+        arena = nullptr; status = nullptr; stream = nullptr; blas = nullptr;
     }
     void reset_status() { check(cudaMemsetAsync(status, 0, sizeof(int), stream), "resident status reset"); }
     void result() {
