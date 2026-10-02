@@ -1,0 +1,18 @@
+suite,kernel,launches_base,launches_r2,median_us_base,median_us_r2,ratio
+m2,input_kernel,81,81,239.5,239.6,1.000
+m2,parameter_kernel,81,81,180.9,180.9,1.000
+m2,forward_kernel,81,81,159.3,159.2,1.000
+m2,void basis_kernel<,81,81,146.0,146.0,1.000
+m2,candidate_kernel,27,27,2.2,2.2,0.986
+m3,nonlinear_partial_kernel,81,81,502.9,505.2,1.004
+m3,input_kernel,81,81,239.4,239.4,1.000
+m3,parameter_kernel,81,81,181.1,181.1,1.000
+m3,void basis_kernel<,81,81,265.2,265.0,0.999
+m3,forward_kernel,81,81,159.3,159.2,0.999
+m3,nonlinear_finish_kernel,81,81,4.5,4.5,1.000
+m3,validate_width_kernel,81,81,1.8,1.8,1.000
+m3,candidate_kernel,27,27,2.6,2.6,1.000
+m4,rational_parameter_kernel,81,81,2662.5,2663.3,1.000
+m4,rational_forward_kernel,81,81,2599.2,2599.3,1.000
+m4,rational_input_kernel,81,81,28.3,28.2,0.998
+m4,candidate_kernel,27,27,3.4,3.4,1.000

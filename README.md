@@ -119,20 +119,23 @@ exceptions, finite-data requirements and atomic optimizer updates.
 ## Localized and adaptive use
 
 ```cpp
+#include <kan/families.hpp> // family operations: insert_knot, adapt_grid, setters
 // Localized families derive their term count: knots.size() - degree - 1 = 4.
 const kan::BSplineConfig spline{3, {0,0,0,0,1,1,1,1}};
 kan::Layer localized(1,1,spline);
 localized.set_parameters(std::vector<double>{0,0,1.0/3,1}, std::vector<double>{0});
-localized.insert_knot(0.4); // preserves the existing x^2 edge
-localized.adapt_grid(std::vector<double>{0.1,0.2,0.3}); // sample-driven refinement
+kan::insert_knot(localized, 0.4); // preserves the existing x^2 edge
+kan::adapt_grid(localized, std::vector<double>{0.1,0.2,0.3}); // sample-driven refinement
 auto penalty = localized.regularization(0.01); // value and coefficient VJP
 
 // Trainable RBF: shared centers and log widths are nonlinear parameters.
 const kan::TrainableRbfConfig radial{{-0.5,0.5}, {std::log(0.4),std::log(0.6)}}; // include <cmath>
 kan::Layer learnable(1,1,radial); // explicitly initialize coefficients for training
-// Read a layer's configuration back with std::get / std::get_if:
-const auto& knots = std::get<kan::BSplineConfig>(localized.basis()).knots;
-// backward supplies centers/log_widths VJPs; sgd updates them atomically.
+// A layer holds one carrier (kan::BasisEdges, TrainableRbfEdges or RationalEdges):
+const auto& edges = std::get<kan::BasisEdges>(localized.carrier());
+const auto& knots = std::get<kan::BSplineConfig>(edges.basis).knots;
+// backward returns kan::TrainableRbfGradients{centers, log_widths} in
+// LayerGradients::nonlinear; sgd updates them atomically.
 ```
 
 Splines are zero outside their explicit domain; repeated interior knots permit
@@ -142,7 +145,8 @@ per layer and widths use log parameters. Refinement changes coefficient shapes,
 so compute new gradients afterward. For a resident model, download its snapshot,
 refine explicitly, then construct a new executor. `gpu.backward(0.01)` adds
 coefficient L2 gradients on the GPU; CPU callers explicitly add the regularization
-VJP to their loss gradients. Python exposes the same methods; see
+VJP to their loss gradients. Python exposes the same operations (`kan.insert_knot(layer, x)`,
+`layer.carrier`); see
 [localized Python examples](tests/m3_python_test.py).
 
 ## Rational use
@@ -151,8 +155,8 @@ VJP to their loss gradients. Python exposes the same methods; see
 kan::RationalConfig rational;
 rational.numerator_degree = 1; rational.denominator_degree = 1;
 kan::Layer pade(1,1,rational);
-pade.set_rational_parameters(std::vector<double>{1,0.5},
-                            std::vector<double>{-0.5}, std::vector<double>{0});
+kan::set_rational_parameters(pade, std::vector<double>{1,0.5},
+                             std::vector<double>{-0.5}, std::vector<double>{0});
 auto y = pade.forward(std::vector<double>{-0.5,0,0.5},3);
 auto g = pade.backward(std::vector<double>{-0.5,0,0.5},3,
                        std::vector<double>{0.1,-0.2,0.1});
@@ -164,7 +168,8 @@ Degrees range independently from zero to sixteen. Explicit center/scale and a
 relative denominator guard control conditioning: unsafe denominators raise
 `domain_error`, including removable poles. The guard checks evaluated samples;
 choose an input domain and validate it for your application. Numerator parameters
-use `coefficients`; denominator parameters/VJPs use `denominators`. Python exposes
+use `coefficients`; denominators live in `kan::RationalEdges::denominators` and their
+VJPs in `kan::RationalGradients`. Python exposes
 the same typed constructor and strict float64 arrays; see
 [rational Python examples](tests/m4_python_test.py). Resident CUDA accepts rational
 layers in any compatible network without host numerical fallback. The original

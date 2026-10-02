@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4)
+# KAN numerical contract (M1 through M4, backlog R1-R3)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -120,26 +120,27 @@ centers and `log_widths` (equal length, each exponent finite and positive) nonli
 trainable parameters. Centers/log widths are shared
 across a layer's edges, not per edge. At each term, the center derivative is the
 negative input derivative, and log-width derivative is `2*q*q*exp(-q*q)`.
-`BasisValues` returns these vectors only for trainable RBFs. `LayerGradients`
-returns their VJPs, summing over batches and edges; fixed families return empty
-vectors. `set_rbf_parameters` requires a `TrainableRbfConfig` layer and vectors of
-its current term count, validates and atomically replaces both.
+`BasisValues` returns these vectors only for trainable RBFs. `LayerGradients::nonlinear`
+holds their VJPs as `TrainableRbfGradients`, summing over batches and edges; fixed
+families hold `std::monostate`. `kan::set_rbf_parameters(layer, centers, log_widths)`
+requires a `TrainableRbfEdges` layer and vectors of its current term count, validates
+and atomically replaces both.
 SGD validates finite candidate vectors and finite positive exponentiated widths
 before committing any parameter; candidate width overflow/underflow raises
 `overflow_error`, while invalid user configuration/gradients raises
 `invalid_argument`. Network SGD retains whole-network atomicity.
 
-`Layer::insert_knot(x)` accepts a strictly interior spline knot whose new
+`kan::insert_knot(layer, x)` accepts a strictly interior spline knot whose new
 multiplicity is allowed. Boehm insertion adds one term and transforms every edge's
 coefficients, preserving the represented function and its derivatives wherever
 the declared derivative convention applies, within floating-point tolerance.
-`adapt_grid(samples)` validates all samples, counts in-domain samples per nonzero
+`kan::adapt_grid(layer, samples)` validates all samples, counts in-domain samples per nonzero
 span (upper endpoint belongs to the final span), chooses the most populated span
 (ties choose the lowest), and inserts the median (mean of middle pair for even
 count) if strictly inside that span, otherwise its midpoint. Empty/outside-only
 samples or a span without a representable interior value fail explicitly.
-Updates are atomic; stale gradient shapes are rejected after refinement. Network
-methods accept an explicit layer index and samples in that layer's input domain.
+Updates are atomic; stale gradient shapes are rejected after refinement. The
+`Network::insert_knot/adapt_grid` conveniences forward to them and accept an explicit layer index and samples in that layer's input domain.
 Samples do not implicitly propagate through preceding layers.
 
 `regularization(lambda)` returns the coefficient L2 penalty
@@ -188,14 +189,13 @@ function. The guard checks executed samples; it does not prove pole freedom
 between them. Finite setters/SGD candidates can therefore fail later execution.
 
 Numerator layout is `(outputs,inputs,m+1)` and denominator layout is
-`(outputs,inputs,n)`; bias is per output. `coefficients()` exposes numerator a.
-`denominators()` exposes b (empty for basis layers). `set_rational_parameters`
-atomically replaces a,b,bias. `set_parameters`, RBF setters and spline operations
-reject rational layers. `is_rational()` identifies layer type; `basis()` rejects
-rational layers and `rational_config()` rejects basis layers. The constrained
-rational constructor preserves existing `Layer(inputs,outputs,{})` basis usage.
-LayerGradients appends `denominators`, empty for basis layers and correctly shaped
-for rational layers, including zero batch. SGD validates shapes/data and all
+`(outputs,inputs,n)`; bias is per output. A rational layer holds `RationalEdges`
+(`config`, numerator `coefficients`, `denominators`); `Layer::coefficients()` exposes
+numerator a and `set_parameters` replaces a and bias. `kan::set_rational_parameters`
+atomically replaces a,b,bias. RBF setters and spline operations reject rational
+layers. The constrained rational constructor preserves existing
+`Layer(inputs,outputs,{})` basis usage. Rational gradients hold `RationalGradients`
+in `LayerGradients::nonlinear`, correctly shaped including zero batch. SGD validates shapes/data and all
 finite candidate vectors before network-wide commit. Numerator coefficient L2
 keeps its existing definition; denominators and bias are unpenalized.
 
@@ -208,16 +208,62 @@ rational layers.
 
 Python exposes one class per basis configuration type (`kan.ChebyshevConfig(size=...)`,
 `kan.BSplineConfig(degree=..., knots=...)`, ...; each has a `size` property and value
-equality; being mutable, they are unhashable), `kan.basis_size`, and `Layer.basis` returns
-a copy of the layer's configuration. Vector attributes are copies as well: assign a whole
+equality; being mutable, they are unhashable), `kan.basis_size`, and `Layer.carrier`
+returns a read-only snapshot of the carrier (`kan.BasisEdges` / `kan.TrainableRbfEdges`
+with `basis` and `coefficients`, `kan.RationalEdges` with `config`, `coefficients` and
+`denominators`). Family operations are module functions: `kan.insert_knot(layer, x)`,
+`kan.adapt_grid(layer, samples)`, `kan.set_rbf_parameters(layer, centers, log_widths)`,
+`kan.set_rational_parameters(layer, coefficients, denominators, bias)`.
+`LayerGradients.centers/log_widths/denominators` stay available as arrays, empty
+(shape `(0,)`) for other carriers. Vector attributes are copies as well: assign a whole
 list (`cfg.knots = [...]`) rather than mutating the returned list in place.
 Python exposes `RationalConfig`, the rational Layer constructor, owned config,
-parameter and gradient snapshots, and `set_rational_parameters`. Rational
+parameter and gradient snapshots, and `kan.set_rational_parameters`. Rational
 denominator arrays have shape `(outputs,inputs,n)`, even for n=0; basis-layer
 denominator arrays have shape `(0,)`. `evaluate_rational(config,x,a,b)` accepts
 strict one-dimensional float64 arrays and returns `(value,input_derivative,da,db)`.
 `domain_error` maps to Python ValueError. All existing strict array/layout and
 owned-snapshot rules apply.
+
+## Edge carriers (R2)
+
+A `Layer` holds dimensions, a per-output bias and exactly one `kan::Carrier`
+(`include/kan/carrier.hpp`), a `std::variant` of:
+
+- `BasisEdges{basis, coefficients}`: linear in its parameters. A layer is the
+  expansion `Phi: R^I -> R^(I*K)` followed by the dense contraction
+  `Y = Phi * C^T + bias`, `C` being `outputs x (I*K)` in the coefficient layout
+  above. Holds every fixed family; a `TrainableRbfConfig` is rejected.
+- `TrainableRbfEdges{basis, coefficients}`: the same expansion and contraction,
+  plus nonlinear shared centers/log widths with their own VJPs.
+- `RationalEdges{config, coefficients, denominators}`: nonlinear per-edge P/Q.
+
+`Layer(inputs, outputs, BasisConfig)` selects `TrainableRbfEdges` for a
+`TrainableRbfConfig` and `BasisEdges` otherwise; `Layer(inputs, outputs, RationalConfig)`
+selects `RationalEdges`. `carrier()` returns the carrier; `terms()` is the number of
+coefficients per edge; `coefficients()`/`bias()` and `set_parameters` act on every
+carrier's per-edge coefficient tensor (the tensor the coefficient L2 penalizes).
+`set_carrier(carrier[, bias])` validates the configuration, the shapes for the layer's
+dimensions and finite parameters, then replaces the carrier (and bias) atomically.
+Carriers and configurations are values with `operator==`.
+
+`LayerGradients{input, coefficients, bias, nonlinear}`: `nonlinear` is a
+`NonlinearGradients` variant whose alternative corresponds to the carrier
+(`std::monostate`, `TrainableRbfGradients{centers, log_widths}`,
+`RationalGradients{denominators}`). SGD rejects a gradient whose alternative does not
+match the carrier with `std::invalid_argument`.
+
+Family-specific operations are free functions in `include/kan/families.hpp`
+(`insert_knot`, `adapt_grid`, `set_rbf_parameters`, `set_rational_parameters`); each
+requires its carrier and basis type, raises `std::invalid_argument` otherwise, and
+commits through `set_carrier`.
+
+Every Layer operation dispatches on the carrier once per call. The CPU loops of each
+carrier live in `src/carriers/` (`linear_engine.hpp` holds the expansion and
+contraction shared by `BasisEdges` and `TrainableRbfEdges`); the resident executor
+holds one execution plan per carrier. A new carrier adds a `Carrier` and a
+`NonlinearGradients` alternative, its overloads in `src/carriers/edge_ops.hpp` and a
+resident plan; Layer and Network do not change.
 
 ## Extension boundaries
 
@@ -226,7 +272,8 @@ the resident CUDA kernels: `KAN_HOST_DEVICE` templates in `src/detail/basis_form
 and `src/detail/rational_formulas.hpp`, parameterized by a finiteness guard (CPU throws,
 device records status). Public declarations and validation live in
 `include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
-CPU edge contraction lives in `src/layer.cpp`; topology in `src/network.cpp`; persistent
+the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
+loops in `src/carriers/`, family operations in `src/families.cpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family; the
 legacy M1 Chebyshev kernels in `src/cuda.cu`. No symbolic parser, Eigen, Torch,
 Python runtime or imported KAN implementation is required. Quantum carriers need
