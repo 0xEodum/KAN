@@ -1,6 +1,7 @@
 #include "kan/families.hpp"
 #include "kan/network.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <numeric>
 #include <limits>
@@ -22,12 +23,12 @@ void check_fd(kan::Network n) {
     std::vector<double>x{-0.6,0.2,0.5,-0.1},g{0.3,-0.4};const double h=1e-6;
     auto grad=n.backward(x,2,g);
     for(size_t j=0;j<x.size();++j){auto p=x,m=x;p[j]+=h;m[j]-=h;test::near(grad.input[j],(objective(n,p,g)-objective(n,m,g))/(2*h),3e-7);}
-    auto base=n.layers();
+    auto base=test::layers(n);
     for(size_t k=0;k<base.size();++k) {
         auto l=base[k];std::vector<double>a(l.coefficients().begin(),l.coefficients().end()),b(test::denominators(l).begin(),test::denominators(l).end()),v(l.bias().begin(),l.bias().end());
         auto set=[&](kan::Layer& target,const auto& ca,const auto& cb,const auto& cv){if(std::holds_alternative<kan::RationalEdges>(target.carrier()))kan::set_rational_parameters(target,ca,cb,cv);else target.set_parameters(ca,cv);};
         for(int family=0;family<3;++family) {
-            const auto& values=family==0?a:(family==1?b:v);const std::span<const double> analytic=family==0?std::span<const double>(grad.layers[k].coefficients):(family==1?test::denominators(grad.layers[k]):std::span<const double>(grad.layers[k].bias));
+            const auto& values=family==0?a:(family==1?b:v);const std::span<const double> analytic=family==0?std::span<const double>(test::grad(grad,k).coefficients):(family==1?test::denominators(test::grad(grad,k)):std::span<const double>(test::grad(grad,k).bias));
             for(size_t j=0;j<values.size();++j){auto pa=a,ma=a,pb=b,mb=b,pv=v,mv=v;
                 auto& p=family==0?pa:(family==1?pb:pv);auto& m=family==0?ma:(family==1?mb:mv);p[j]+=h;m[j]-=h;
                 std::vector<kan::Layer> plus(base.begin(),base.end()),minus=plus;set(plus[k],pa,pb,pv);set(minus[k],ma,mb,mv);
@@ -70,7 +71,7 @@ TEST(invalid_setters_sgd_and_network_atomicity) {
     REQUIRE(std::vector<double>(l.coefficients().begin(),l.coefficients().end())==a);
     REQUIRE(std::vector<double>(test::denominators(l).begin(),test::denominators(l).end())==b);
     kan::Network n({l,rational()});auto before=n.forward(std::vector<double>{0.1,0.2},1);
-    auto ng=n.backward(std::vector<double>{0.1,0.2},1,std::vector<double>{1,1});test::rational(ng.layers.back()).denominators.back()=std::numeric_limits<double>::max();
+    auto ng=n.backward(std::vector<double>{0.1,0.2},1,std::vector<double>{1,1});test::rational(test::grad(ng,ng.layers.size()-1)).denominators.back()=std::numeric_limits<double>::max();
     test::throws<std::overflow_error>([&]{n.sgd(ng,2);});REQUIRE(n.forward(std::vector<double>{0.1,0.2},1)==before);
     auto penalty=l.regularization(0.2);REQUIRE(test::denominators(penalty.gradients).size()==b.size());
     for(double d:test::denominators(penalty.gradients))test::near(d,0);

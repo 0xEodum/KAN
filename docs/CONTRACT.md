@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3)
+# KAN numerical contract (M1 through M4, backlog R1-R3 and backlog M1)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -17,7 +17,8 @@ degree: explicit `size` for polynomial and Fourier families, derived for localiz
 families (one term per center; `knots.size()-degree-1` for splines). Chebyshev
 uses T_n, Legendre uses P_n, Jacobi uses P_n^(alpha,beta), Hermite uses physicists'
 H_n. Polynomials are evaluated by recurrence, including endpoints and outside [-1,1].
-There is no implicit clipping, normalization, tanh, or extrapolation policy.
+There is no implicit clipping, normalization, tanh, or extrapolation policy; inputs are
+brought into a basis domain only by an explicit input map layer (see "Input maps").
 Fourier is `[1, cos(w*x), sin(w*x), cos(2*w*x), sin(2*w*x), ...]` and size is odd.
 Gaussian RBF is `exp(-((x-center)/width)^2)` with explicit finite centers and width > 0.
 Jacobi alpha and beta are finite and greater than -1; angular frequency is finite and positive.
@@ -36,7 +37,7 @@ raise `std::overflow_error`; invalid configuration, sizes and data raise `std::i
 Dimension multiplication is checked before allocation (`std::overflow_error`).
 Layer dimensions are positive; batch zero accepts only empty inputs/upstream and returns
 empty outputs/input gradients and zero parameter gradients. Networks are nonempty,
-adjacent dimensions match, and can mix basis families.
+adjacent dimensions match, and can mix basis families and input maps.
 Moved-from layers and networks remain assignable; their numerical/parameter-update
 operations raise `std::invalid_argument`. A network rejects moved-from layer values.
 Accessors are safe but their moved-from values are unspecified.
@@ -295,6 +296,66 @@ holds one execution plan per carrier. A new carrier adds a `Carrier` and a
 `NonlinearGradients` alternative, its overloads in `src/carriers/edge_ops.hpp` and a
 resident plan; Layer and Network do not change.
 
+## Input maps (backlog M1)
+
+Polynomial bases grow like `(2|x|)^n` outside `[-1,1]` and localized bases (B-spline,
+RBF, Mexican hat) are zero, with zero gradient, outside their support. Nothing rescales
+inputs implicitly; the explicit tool is an input map, a network layer kind of shape
+`features -> features` (`include/kan/input_map.hpp`). `kan::InputMap(features, map)` holds
+one `InputMapKind = std::variant<AffineMap, TanhMap, LayerNormMap>`:
+
+- `AffineMap{scale, shift}`: `y[b,i] = scale[i]*x[b,i] + shift[i]`, one finite value per
+  feature each, scales nonzero (a zero scale would make a feature silently constant).
+  Fixed (not trained): its purpose is to place inputs in a basis domain, and training
+  could move them out again. `dx = scale*u`.
+- `TanhMap{scale}`: `y = tanh(scale*x)` in `(-1,1)`, fixed finite positive scale (default 1).
+  `dx = u*scale*(1-y)*(1+y)`, evaluated from the output; saturated outputs give exactly 0.
+- `LayerNormMap{epsilon, gain, bias}`: per sample over the features,
+  `mean = sum(x)/n`, `var = sum((x-mean)^2)/n` (population, two passes),
+  `xhat = (x-mean)/sqrt(var+epsilon)`, `y = gain*xhat + bias`, or `y = xhat` when gain and
+  bias are both empty. Epsilon is fixed, finite and positive (default 1e-5); gain and bias
+  are both empty or both of length `features`, and then trainable. With `w = u*gain`
+  (or `u`): `dx = (w - mean(w) - xhat*mean(w*xhat)) / sqrt(var+epsilon)`,
+  `dgain = sum_b u*xhat`, `dbias = sum_b u`. One feature gives `xhat = 0`.
+
+Means are computed as `sum * (1/n)` on both backends. `InputMap::forward/backward/sgd`
+follow the Layer rules: finite inputs, upstreams and parameters (`invalid_argument`),
+nonfinite results including overflowing row moments (`overflow_error`), batch zero, and
+SGD that validates gradient shapes (`InputMapGradients{input, gain, bias}`, gain/bias
+empty for fixed maps) and finite candidates before committing. `set_map` validates and
+replaces the map atomically. A moved-from map has zero features and its operations raise
+`invalid_argument`. `affine_from_range(samples, batch, features, lower=-1, upper=1)`
+builds the fixed map sending each feature's sample `[min,max]` onto `[lower,upper]` (up to
+rounding; a constant feature gets scale 1 and the midpoint; an overflowing span or a
+scale that underflows to zero raises `overflow_error`), and
+`affine_from_moments(samples, batch, features)` the standardizing map `(x-mean)/std`
+(constant feature: scale 1, centered). Both validate the sample shape and finiteness.
+
+A `Network` is a nonempty sequence of `NetworkLayer = std::variant<Layer, InputMap>`
+with matching adjacent dimensions; `Network(std::vector<Layer>)` remains valid.
+`NetworkGradients::layers` holds `NetworkLayerGradients =
+std::variant<LayerGradients, InputMapGradients>`, the alternative matching each
+position, and network SGD rejects a mismatched alternative with `invalid_argument`.
+Layer indices of every Network API are positions in `layers()`, maps included;
+`insert_knot`/`adapt_grid` at an input map raise `invalid_argument`. The coefficient L2
+penalizes KAN layer coefficients only: a map contributes zero value and zero gain/bias
+gradients (no input gradient), like RBF and rational nonlinear parameters. Every
+operation dispatches on a layer's kind once per call. `Network::inputs()/outputs()`
+give the network's dimensions.
+
+The resident executor supports input maps anywhere in a network: elementwise affine and
+tanh kernels, LayerNorm row kernels (fixed-order group shuffles) and a tiled fixed-order
+gain/bias reduction, without floating-point atomics. Trainable gain/bias live in the
+parameter regions and take part in the network-wide atomic SGD; fixed map parameters are
+uploaded at construction. CPU/GPU parity is tolerance-based. Python exposes
+`kan.AffineMap`, `kan.TanhMap`, `kan.LayerNormMap` (value classes with equality; their
+vector attributes are copies, so assign whole lists), `kan.InputMap`
+(`features`, `map` snapshot, `set_map`, `forward`, `backward`, `sgd`),
+`kan.InputMapGradients` (`input`, `gain`, `bias`), `kan.affine_from_range(samples, lower,
+upper)` and `kan.affine_from_moments(samples)`; `kan.Network` accepts and returns mixed
+lists of `Layer` and `InputMap`, and `NetworkGradients.layers` mixes `LayerGradients` and
+`InputMapGradients`.
+
 ## Extension boundaries
 
 Basis and rational formulas have a single source shared by the CPU backend and
@@ -303,7 +364,8 @@ and `src/detail/rational_formulas.hpp`, parameterized by a finiteness guard (CPU
 device records status). Public declarations and validation live in
 `include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
 the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
-loops in `src/carriers/`, family operations in `src/families.cpp`; topology in `src/network.cpp`; persistent
+loops in `src/carriers/`, family operations in `src/families.cpp`; input maps in `src/input_map.cpp`
+with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family; the
 legacy M1 Chebyshev kernels in `src/cuda.cu`. No symbolic parser, Eigen, Torch,
 Python runtime or imported KAN implementation is required. Quantum carriers need

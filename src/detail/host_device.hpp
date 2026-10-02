@@ -46,6 +46,8 @@ KAN_HOST_DEVICE inline double sqrt(double v) { return KAN_MATH_NAMESPACE::sqrt(v
 KAN_HOST_DEVICE inline double acos(double v) { return KAN_MATH_NAMESPACE::acos(v); }
 KAN_HOST_DEVICE inline double cos(double v) { return KAN_MATH_NAMESPACE::cos(v); }
 KAN_HOST_DEVICE inline double sin(double v) { return KAN_MATH_NAMESPACE::sin(v); }
+KAN_HOST_DEVICE inline double tanh(double v) { return KAN_MATH_NAMESPACE::tanh(v); }
+KAN_HOST_DEVICE inline double cosh(double v) { return KAN_MATH_NAMESPACE::cosh(v); }
 KAN_HOST_DEVICE inline double copysign(double magnitude, double sign) {
     return KAN_MATH_NAMESPACE::copysign(magnitude, sign);
 }

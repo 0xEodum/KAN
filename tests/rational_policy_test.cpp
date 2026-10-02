@@ -4,6 +4,7 @@
 #include "kan/network.hpp"
 #include "kan/rational.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <bit>
 #include <cmath>
@@ -287,7 +288,7 @@ TEST(layer_and_network_vjps_under_safe_policies) {
         };
         const double h = 1e-6;
         for (std::size_t j = 0; j < 2; ++j) {
-            const auto& layer = network.layers()[j];
+            const auto& layer = test::layer(network, j);
             const auto d = test::denominators(layer);
             for (std::size_t k = 0; k < d.size(); ++k) {
                 std::vector<double> plus(d.begin(), d.end()), minus = plus;
@@ -296,9 +297,9 @@ TEST(layer_and_network_vjps_under_safe_policies) {
                 const std::vector<double> a(layer.coefficients().begin(), layer.coefficients().end());
                 const std::vector<double> bias(layer.bias().begin(), layer.bias().end());
                 kan::set_rational_parameters(lp, a, plus, bias); kan::set_rational_parameters(lm, a, minus, bias);
-                std::vector<kan::Layer> p(network.layers().begin(), network.layers().end()), m = p;
+                auto p = test::layers(network), m = p;
                 p[j] = lp; m[j] = lm;
-                test::near(test::denominators(g.layers[j])[k],
+                test::near(test::denominators(test::grad(g, j))[k],
                            (objective(kan::Network(p)) - objective(kan::Network(m))) / (2 * h), 1e-7);
             }
         }

@@ -17,6 +17,9 @@ int main() {
     const std::vector<double> expected{-0.9, 0.2, 0.5};
     for (std::size_t i = 0; i < expected.size(); ++i)
         if (std::abs(result[i] - expected[i]) > 1e-12) return 1;
+    // Explicit input map in front of the same layer: x -> x/100 then T(x).
+    kan::Network mapped({kan::InputMap(1, kan::AffineMap{{0.01}, {0}}), layer});
+    if (std::abs(mapped.forward(std::vector<double>{100}, 1)[0] - 0.5) > 1e-12) return 1;
     const kan::BSplineConfig spline{3,{0,0,0,0,1,1,1,1}};
     kan::Layer local(1,1,spline);
     local.set_parameters(std::vector<double>{0,0,1.0/3,1},std::vector<double>{0});
@@ -64,19 +67,19 @@ int main() {
     adaptive.upload_input(std::vector<double>{0.3},1);adaptive.upload_output_gradient(std::vector<double>{0.2});
     adaptive.forward();adaptive.backward(0.01);
     const auto gradients=adaptive.download_gradients();
-    if(std::get<kan::TrainableRbfGradients>(gradients.layers[1].nonlinear).centers.size()!=1)return 1;
+    if(std::get<kan::TrainableRbfGradients>(std::get<kan::LayerGradients>(gradients.layers[1]).nonlinear).centers.size()!=1)return 1;
     adaptive.sgd(0.01);
     const auto snapshot=adaptive.download_parameters();
-    if(snapshot.layers()[1].carrier()==localized.layers()[1].carrier())return 1;
+    if(std::get<kan::Layer>(snapshot.layers()[1]).carrier()==std::get<kan::Layer>(localized.layers()[1]).carrier())return 1;
     std::cout << "Installed M3 localized/nonlinear CUDA consumer passed\n";
     kan::Network rational_network({pade});
     kan::cuda::ResidentNetwork rational_gpu(rational_network,3);
     rational_gpu.upload_input(rational_input,3);rational_gpu.upload_output_gradient(rational_upstream);
     rational_gpu.forward();rational_gpu.backward();
-    if(std::abs(std::get<kan::RationalGradients>(rational_gpu.download_gradients().layers[0].nonlinear).denominators[0]-rational_denominators[0])>1e-12)return 1;
+    if(std::abs(std::get<kan::RationalGradients>(std::get<kan::LayerGradients>(rational_gpu.download_gradients().layers[0]).nonlinear).denominators[0]-rational_denominators[0])>1e-12)return 1;
     rational_gpu.sgd(0.001);rational_network.sgd(rational_network.backward(rational_input,3,rational_upstream),0.001);
     const auto denominator=[](const kan::Layer& l){return std::get<kan::RationalEdges>(l.carrier()).denominators[0];};
-    if(std::abs(denominator(rational_gpu.download_parameters().layers()[0])-denominator(rational_network.layers()[0]))>1e-12)return 1;
+    if(std::abs(denominator(std::get<kan::Layer>(rational_gpu.download_parameters().layers()[0]))-denominator(std::get<kan::Layer>(rational_network.layers()[0])))>1e-12)return 1;
     std::cout << "Installed M4 rational CUDA consumer passed\n";
 #endif
     std::cout << "Installed kan::kan consumer passed\n";

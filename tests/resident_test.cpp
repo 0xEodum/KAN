@@ -1,6 +1,7 @@
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <future>
 #include <limits>
@@ -35,9 +36,9 @@ void parity(test::Family kind) {
         compare(actual.input, expected.input);
         REQUIRE(actual.layers.size() == expected.layers.size());
         for (std::size_t j = 0; j < actual.layers.size(); ++j) {
-            compare(actual.layers[j].input, expected.layers[j].input);
-            compare(actual.layers[j].coefficients, expected.layers[j].coefficients);
-            compare(actual.layers[j].bias, expected.layers[j].bias);
+            compare(test::grad(actual,j).input, test::grad(expected,j).input);
+            compare(test::grad(actual,j).coefficients, test::grad(expected,j).coefficients);
+            compare(test::grad(actual,j).bias, test::grad(expected,j).bias);
         }
         gpu.sgd(0.01); cpu.sgd(expected, 0.01);
     }
@@ -78,7 +79,8 @@ TEST(resident_zero_batch_and_independent_instances) {
     gpu.upload_input({}, 0); gpu.upload_output_gradient({}); gpu.forward(); gpu.backward();
     REQUIRE(gpu.download_output().empty());
     const auto gradients = gpu.download_gradients(); REQUIRE(gradients.input.empty());
-    for (const auto& layer : gradients.layers) {
+    for (std::size_t j = 0; j < gradients.layers.size(); ++j) {
+        const auto& layer = test::grad(gradients, j);
         compare(layer.coefficients, std::vector<double>(layer.coefficients.size(), 0));
         compare(layer.bias, std::vector<double>(layer.bias.size(), 0));
     }
@@ -100,10 +102,10 @@ TEST(resident_numerical_overflow_and_atomic_network_sgd) {
     gpu.forward(); gpu.backward();
     test::throws<std::overflow_error>([&] { gpu.sgd(maximum); });
     const auto unchanged = gpu.download_parameters();
-    compare(unchanged.layers()[0].coefficients(), first.coefficients());
-    compare(unchanged.layers()[1].coefficients(), second.coefficients());
+    compare(test::layer(unchanged,0).coefficients(), first.coefficients());
+    compare(test::layer(unchanged,1).coefficients(), second.coefficients());
     gpu.sgd(0.01); // failed candidate validation must retain usable gradients
-    test::near(gpu.download_parameters().layers()[0].coefficients()[0], 0.11);
+    test::near(test::layer(gpu.download_parameters(),0).coefficients()[0], 0.11);
     kan::Layer high_degree(1, 1, kan::ChebyshevConfig{539});
     kan::cuda::ResidentNetwork high(kan::Network({high_degree}), 1);
     high.upload_input(std::vector<double>{2}, 1);

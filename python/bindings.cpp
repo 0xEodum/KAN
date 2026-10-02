@@ -124,14 +124,59 @@ struct LayerGradient {
     std::size_t batch;
     Topology topology;
 };
+// Input-map gradients with the shape they were computed for.
+struct MapTopology {
+    std::size_t features, kind, trainable;
+    bool operator==(const MapTopology&) const = default;
+};
+MapTopology map_topology(const kan::InputMap& map) {
+    const auto* norm = std::get_if<kan::LayerNormMap>(&map.map());
+    return {map.features(), map.map().index(), norm ? norm->gain.size() : 0};
+}
+struct MapGradient {
+    kan::InputMapGradients value;
+    std::size_t batch;
+    MapTopology topology;
+};
 struct NetworkGradient {
     kan::NetworkGradients value;
     std::size_t batch;
-    std::vector<kan::Layer> topology;
+    std::vector<kan::NetworkLayer> topology;
 };
 
 LayerGradient wrap(kan::LayerGradients value, std::size_t batch, const kan::Layer& layer) {
     return {std::move(value), batch, topology(layer)};
+}
+MapGradient wrap(kan::InputMapGradients value, std::size_t batch, const kan::InputMap& map) {
+    return {std::move(value), batch, map_topology(map)};
+}
+// Python view of one network layer's gradients (LayerGradients or InputMapGradients).
+py::object wrap(const kan::NetworkLayerGradients& value, std::size_t batch, const kan::NetworkLayer& layer) {
+    return std::visit([&](const auto& stage) -> py::object {
+        using Stage = std::decay_t<decltype(stage)>;
+        using Gradients = std::conditional_t<std::is_same_v<Stage, kan::Layer>, kan::LayerGradients, kan::InputMapGradients>;
+        const auto* gradients = std::get_if<Gradients>(&value);
+        if (!gradients) throw std::logic_error("internal gradient kind mismatch");
+        return py::cast(wrap(*gradients, batch, stage));
+    }, layer);
+}
+// Network layers from a Python sequence of Layer and InputMap objects
+// (pybind11's variant caster needs a default-constructible variant).
+std::vector<kan::NetworkLayer> network_layers(const py::sequence& layers) {
+    std::vector<kan::NetworkLayer> result;
+    result.reserve(layers.size());
+    for (const auto& item : layers) {
+        if (py::isinstance<kan::Layer>(item)) result.emplace_back(item.cast<kan::Layer>());
+        else if (py::isinstance<kan::InputMap>(item)) result.emplace_back(item.cast<kan::InputMap>());
+        else throw py::type_error("network layers must be kan.Layer or kan.InputMap objects");
+    }
+    return result;
+}
+// Same kind and topology for every network layer.
+bool same_topology(const kan::NetworkLayer& a, const kan::NetworkLayer& b) {
+    if (a.index() != b.index()) return false;
+    if (const auto* layer = std::get_if<kan::Layer>(&a)) return topology(*layer) == topology(std::get<kan::Layer>(b));
+    return map_topology(std::get<kan::InputMap>(a)) == map_topology(std::get<kan::InputMap>(b));
 }
 
 // A nonlinear gradient vector of one carrier; empty for the other carriers.
@@ -141,14 +186,8 @@ std::span<const double> nonlinear_field(const LayerGradient& g, std::vector<doub
     return nonlinear ? std::span<const double>(nonlinear->*field) : std::span<const double>();
 }
 
-template <typename Model> std::size_t input_count(const Model& model) {
-    if constexpr (std::is_same_v<Model, kan::Layer>) return model.inputs();
-    else return model.layers().front().inputs();
-}
-template <typename Model> std::size_t output_count(const Model& model) {
-    if constexpr (std::is_same_v<Model, kan::Layer>) return model.outputs();
-    else return model.layers().back().outputs();
-}
+template <typename Model> std::size_t input_count(const Model& model) { return model.inputs(); }
+template <typename Model> std::size_t output_count(const Model& model) { return model.outputs(); }
 
 template <typename Model> auto forward(const Model& model, py::array input,
                                        std::optional<std::size_t> requested) {
@@ -173,17 +212,19 @@ template <typename Model> auto backward(const Model& model, py::array input,
         py::gil_scoped_release release;
         gradient = model.backward(data, batch, gradient_data);
     }
-    if constexpr (std::is_same_v<Model, kan::Layer>) return wrap(std::move(gradient), batch, model);
-    else return NetworkGradient{std::move(gradient), batch,
-                               {model.layers().begin(), model.layers().end()}};
+    if constexpr (std::is_same_v<Model, kan::Network>)
+        return NetworkGradient{std::move(gradient), batch, {model.layers().begin(), model.layers().end()}};
+    else return wrap(std::move(gradient), batch, model);
 }
 
 #ifdef KAN_PYTHON_CUDA
 struct Resident {
-    std::vector<kan::Layer> topology;
+    std::vector<kan::NetworkLayer> topology;
+    std::size_t inputs, outputs;
     kan::cuda::ResidentNetwork value;
     Resident(const kan::Network& network, std::size_t capacity)
-        : topology(network.layers().begin(), network.layers().end()), value(network, capacity) {}
+        : topology(network.layers().begin(), network.layers().end()), inputs(network.inputs()),
+          outputs(network.outputs()), value(network, capacity) {}
 };
 #endif
 } // namespace
@@ -358,16 +399,27 @@ PYBIND11_MODULE(_kan, module) {
             return owned(v, std::holds_alternative<kan::RationalGradients>(g.value.nonlinear) ?
                 Shape{axis(t.outputs), axis(t.inputs), axis(t.denominator_size)} : Shape{0});
         });
+    py::class_<MapGradient>(module, "InputMapGradients")
+        .def_property_readonly("input", [](const MapGradient& g) {
+            return owned(g.value.input, {axis(g.batch), axis(g.topology.features)});
+        })
+        .def_property_readonly("gain", [](const MapGradient& g) {
+            return owned(g.value.gain, {axis(g.value.gain.size())});
+        })
+        .def_property_readonly("bias", [](const MapGradient& g) {
+            return owned(g.value.bias, {axis(g.value.bias.size())});
+        });
     py::class_<NetworkGradient>(module, "NetworkGradients")
         .def_property_readonly("input", [](const NetworkGradient& g) {
-            return owned(g.value.input, {axis(g.batch), axis(g.topology.front().inputs())});
+            const auto inputs = std::visit([](const auto& l) { return l.inputs(); }, g.topology.front());
+            return owned(g.value.input, {axis(g.batch), axis(inputs)});
         })
         .def_property_readonly("layers", [](const NetworkGradient& g) {
-            std::vector<LayerGradient> layers;
+            py::list layers;
             for (std::size_t i = 0; i < g.topology.size(); ++i)
-                layers.push_back(wrap(g.value.layers[i], g.batch, g.topology[i]));
+                layers.append(wrap(g.value.layers[i], g.batch, g.topology[i]));
             return layers;
-        });
+        }, "LayerGradients for KAN layers and InputMapGradients for input maps, in layer order.");
     py::class_<kan::Layer>(module, "Layer")
         .def(py::init<std::size_t, std::size_t, kan::BasisConfig>(),
              py::arg("inputs"), py::arg("outputs"), py::arg("basis"))
@@ -404,11 +456,67 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release;
             layer.sgd(gradient.value, learning_rate);
         }, py::arg("gradients"), py::arg("learning_rate"));
+    // Input maps (backlog M1): value classes per map kind and the InputMap layer kind.
+    config_class<kan::AffineMap>(module, "AffineMap")
+        .def(py::init([](std::vector<double> scale, std::vector<double> shift) {
+            return kan::AffineMap{std::move(scale), std::move(shift)}; }),
+             py::arg("scale") = std::vector<double>{}, py::arg("shift") = std::vector<double>{})
+        .def_readwrite("scale", &kan::AffineMap::scale)
+        .def_readwrite("shift", &kan::AffineMap::shift);
+    config_class<kan::TanhMap>(module, "TanhMap")
+        .def(py::init([](double scale) { return kan::TanhMap{scale}; }), py::arg("scale") = 1.0)
+        .def_readwrite("scale", &kan::TanhMap::scale);
+    config_class<kan::LayerNormMap>(module, "LayerNormMap")
+        .def(py::init([](double epsilon, std::vector<double> gain, std::vector<double> bias) {
+            return kan::LayerNormMap{epsilon, std::move(gain), std::move(bias)}; }),
+             py::arg("epsilon") = 1e-5, py::arg("gain") = std::vector<double>{}, py::arg("bias") = std::vector<double>{})
+        .def_readwrite("epsilon", &kan::LayerNormMap::epsilon)
+        .def_readwrite("gain", &kan::LayerNormMap::gain)
+        .def_readwrite("bias", &kan::LayerNormMap::bias);
+    py::class_<kan::InputMap>(module, "InputMap")
+        .def(py::init<std::size_t, kan::InputMapKind>(), py::arg("features"), py::arg("map"))
+        .def_property_readonly("features", &kan::InputMap::features)
+        .def_property_readonly("inputs", &kan::InputMap::inputs)
+        .def_property_readonly("outputs", &kan::InputMap::outputs)
+        .def_property_readonly("map", [](const kan::InputMap& map) { return map.map(); },
+            "Owned snapshot of the map (AffineMap, TanhMap or LayerNormMap).")
+        .def("set_map", [](kan::InputMap& map, kan::InputMapKind kind) {
+            py::gil_scoped_release release;
+            map.set_map(std::move(kind));
+        }, py::arg("map"))
+        .def("forward", &forward<kan::InputMap>, py::arg("input").noconvert(), py::arg("batch") = py::none())
+        .def("backward", &backward<kan::InputMap>, py::arg("input").noconvert(),
+             py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
+        .def("sgd", [](kan::InputMap& map, const MapGradient& gradient, double learning_rate) {
+            if (gradient.topology != map_topology(map)) throw py::value_error("gradient topology mismatch");
+            py::gil_scoped_release release;
+            map.sgd(gradient.value, learning_rate);
+        }, py::arg("gradients"), py::arg("learning_rate"));
+    module.def("affine_from_range", [](py::array samples, double lower, double upper) {
+        const auto data = array_data(samples);
+        if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
+        const auto batch = static_cast<std::size_t>(samples.shape(0)), features = static_cast<std::size_t>(samples.shape(1));
+        py::gil_scoped_release release;
+        return kan::affine_from_range(data, batch, features, lower, upper);
+    }, py::arg("samples").noconvert(), py::arg("lower") = -1.0, py::arg("upper") = 1.0);
+    module.def("affine_from_moments", [](py::array samples) {
+        const auto data = array_data(samples);
+        if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
+        const auto batch = static_cast<std::size_t>(samples.shape(0)), features = static_cast<std::size_t>(samples.shape(1));
+        py::gil_scoped_release release;
+        return kan::affine_from_moments(data, batch, features);
+    }, py::arg("samples").noconvert());
     py::class_<kan::Network>(module, "Network")
-        .def(py::init<std::vector<kan::Layer>>(), py::arg("layers"))
+        .def(py::init([](const py::sequence& layers) { return kan::Network(network_layers(layers)); }), py::arg("layers"),
+             "A sequence of Layer and InputMap objects with matching adjacent dimensions.")
         .def_property_readonly("layers", [](const kan::Network& model) {
-            return std::vector<kan::Layer>(model.layers().begin(), model.layers().end());
-        })
+            py::list result;
+            for (const auto& layer : model.layers())
+                result.append(std::visit([](const auto& l) { return py::cast(l); }, layer));
+            return result;
+        }, "Copies of the network layers (Layer or InputMap) in order.")
+        .def_property_readonly("inputs", &kan::Network::inputs)
+        .def_property_readonly("outputs", &kan::Network::outputs)
         .def("insert_knot", &kan::Network::insert_knot, py::arg("layer_index"), py::arg("x"),
              py::call_guard<py::gil_scoped_release>())
         .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) {
@@ -429,7 +537,7 @@ PYBIND11_MODULE(_kan, module) {
             if (model.layers().size() != gradient.topology.size())
                 throw py::value_error("gradient topology mismatch");
             for (std::size_t i = 0; i < gradient.topology.size(); ++i) {
-                if (topology(model.layers()[i]) != topology(gradient.topology[i]))
+                if (!same_topology(model.layers()[i], gradient.topology[i]))
                     throw py::value_error("gradient topology mismatch");
             }
             py::gil_scoped_release release;
@@ -447,13 +555,13 @@ PYBIND11_MODULE(_kan, module) {
             return model.value.workspace_allocations();
         })
         .def("upload_input", [](Resident& model, py::array input, std::optional<std::size_t> requested) {
-            const auto batch = input_batch(input, model.topology.front().inputs(), requested);
+            const auto batch = input_batch(input, model.inputs, requested);
             const auto data = array_data(input);
             py::gil_scoped_release release;
             model.value.upload_input(data, batch);
         }, py::arg("input").noconvert(), py::arg("batch") = py::none())
         .def("upload_output_gradient", [](Resident& model, py::array gradient) {
-            const auto data = shaped(gradient, {axis(model.value.batch()), axis(model.topology.back().outputs())});
+            const auto data = shaped(gradient, {axis(model.value.batch()), axis(model.outputs)});
             py::gil_scoped_release release;
             model.value.upload_output_gradient(data);
         }, py::arg("output_gradient").noconvert())
@@ -469,7 +577,7 @@ PYBIND11_MODULE(_kan, module) {
                 py::gil_scoped_release release;
                 output = model.value.download_output();
             }
-            return owned(output, {axis(model.value.batch()), axis(model.topology.back().outputs())});
+            return owned(output, {axis(model.value.batch()), axis(model.outputs)});
         })
         .def("download_gradients", [](Resident& model) {
             kan::NetworkGradients gradient;

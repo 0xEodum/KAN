@@ -1,6 +1,7 @@
 #include "kan/cuda.hpp"
 #include "kan/resident.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <limits>
 
@@ -48,7 +49,7 @@ TEST(resident_input_and_parameter_gradients_match_independent_finite_differences
             plus.set_parameters(cp, model.bias()); minus.set_parameters(cm, model.bias());
             kan::cuda::ResidentNetwork gp(kan::Network({plus}), 2), gm(kan::Network({minus}), 2);
             const auto slope = (objective(gp, x, dy) - objective(gm, x, dy)) / (2*h);
-            test::near(gradients.layers[0].coefficients[j], slope, 2e-7);
+            test::near(test::grad(gradients,0).coefficients[j], slope, 2e-7);
         }
     }
 }

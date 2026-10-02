@@ -3,6 +3,7 @@
 #include "kan/families.hpp"
 #include "kan/resident.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <cmath>
 #include <utility>
@@ -47,24 +48,24 @@ TEST(policy_mixed_network_all_vjps_and_trajectory_match_cpu) {
                 auto expected = cpu.backward(x, 3, dy);
                 const auto reg = cpu.regularization(0.1).gradients;
                 for (std::size_t j = 0; j < expected.layers.size(); ++j)
-                    for (std::size_t k = 0; k < expected.layers[j].coefficients.size(); ++k)
-                        expected.layers[j].coefficients[k] += reg.layers[j].coefficients[k];
+                    for (std::size_t k = 0; k < test::grad(expected, j).coefficients.size(); ++k)
+                        test::grad(expected, j).coefficients[k] += test::grad(reg, j).coefficients[k];
                 const auto actual = gpu.download_gradients();
                 compare(actual.input, expected.input);
                 for (std::size_t j = 0; j < expected.layers.size(); ++j) {
-                    compare(actual.layers[j].coefficients, expected.layers[j].coefficients);
-                    compare(test::denominators(actual.layers[j]), test::denominators(expected.layers[j]));
-                    compare(actual.layers[j].bias, expected.layers[j].bias);
+                    compare(test::grad(actual, j).coefficients, test::grad(expected, j).coefficients);
+                    compare(test::denominators(test::grad(actual, j)), test::denominators(test::grad(expected, j)));
+                    compare(test::grad(actual, j).bias, test::grad(expected, j).bias);
                 }
                 gpu.sgd(0.03); cpu.sgd(expected, 0.03);
             }
             const auto trained = gpu.download_parameters();
             for (std::size_t j = 0; j < cpu.layers().size(); ++j) {
-                compare(trained.layers()[j].coefficients(), cpu.layers()[j].coefficients());
-                compare(test::denominators(trained.layers()[j]), test::denominators(cpu.layers()[j]));
-                REQUIRE(trained.layers()[j].carrier().index() == cpu.layers()[j].carrier().index());
+                compare(test::layer(trained, j).coefficients(), test::layer(cpu, j).coefficients());
+                compare(test::denominators(test::layer(trained, j)), test::denominators(test::layer(cpu, j)));
+                REQUIRE(test::layer(trained, j).carrier().index() == test::layer(cpu, j).carrier().index());
             }
-            REQUIRE(std::get<kan::RationalEdges>(trained.layers()[0].carrier()).config.denominator_policy == policy);
+            REQUIRE(std::get<kan::RationalEdges>(test::layer(trained, 0).carrier()).config.denominator_policy == policy);
             REQUIRE(count == gpu.workspace_allocations());
         }
 }
@@ -109,8 +110,8 @@ TEST(resident_sgd_into_a_pole_stops_guarded_but_continues_under_safe_policies) {
             cpu.sgd(cpu.backward(x, 1, std::vector<double>{u}), 0.0625);
         }
         const auto trained = gpu.download_parameters();
-        compare(trained.layers()[0].coefficients(), cpu.layers()[0].coefficients());
-        compare(test::denominators(trained.layers()[0]), test::denominators(cpu.layers()[0]));
+        compare(test::layer(trained, 0).coefficients(), test::layer(cpu, 0).coefficients());
+        compare(test::denominators(test::layer(trained, 0)), test::denominators(test::layer(cpu, 0)));
     }
 }
 
