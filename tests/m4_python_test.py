@@ -112,5 +112,68 @@ class M4(unittest.TestCase):
         np.testing.assert_allclose(pole.download_output(),layer().forward(x),atol=1e-12)
 
 
+def pole_layer(policy):
+    c = rational(0, 1); c.denominator_policy = policy
+    l = kan.Layer(1, 1, c)
+    kan.set_rational_parameters(l, np.array([[[1.]]]), np.array([[[-.5]]]), np.zeros(1))
+    return l
+
+
+class M2DenominatorPolicy(unittest.TestCase):
+    """Backlog M2: pole-free denominator policies."""
+
+    def test_policy_enum_round_trip_and_default(self):
+        P = kan.DenominatorPolicy
+        self.assertEqual(kan.RationalConfig().denominator_policy, P.GUARDED)
+        c = rational(); c.denominator_policy = P.SMOOTH
+        l = kan.Layer(1, 1, c)
+        self.assertEqual(l.carrier.config.denominator_policy, P.SMOOTH)
+        self.assertEqual({p.name for p in P}, {'GUARDED', 'ABSOLUTE', 'SMOOTH'})
+        with self.assertRaises(TypeError): c.denominator_policy = 1
+
+    def test_closed_forms_and_finite_differences(self):
+        a, b = np.array([1., .5, -.2]), np.array([-.5, .3])
+        for policy, q, g in [(kan.DenominatorPolicy.ABSOLUTE, lambda s: 1+abs(s), np.sign),
+                             (kan.DenominatorPolicy.SMOOTH, lambda s: 1+s*s, lambda s: 2*s)]:
+            c = rational(2, 2); c.denominator_policy = policy
+            for x in [-1.3, .4, 2.2]:
+                s = b[0]*x + b[1]*x*x; p = a[0] + a[1]*x + a[2]*x*x
+                v, dx, da, db = kan.evaluate_rational(c, x, a, b)
+                self.assertAlmostEqual(v, p/q(s), places=13)
+                np.testing.assert_allclose(da, [1/q(s), x/q(s), x*x/q(s)], rtol=1e-13)
+                np.testing.assert_allclose(db, [-p/q(s)*g(s)*x/q(s), -p/q(s)*g(s)*x*x/q(s)], rtol=1e-13)
+                h = 1e-6
+                fd = (kan.evaluate_rational(c, x+h, a, b)[0]-kan.evaluate_rational(c, x-h, a, b)[0])/(2*h)
+                self.assertAlmostEqual(dx, fd, places=7)
+
+    def test_sgd_through_a_pole(self):
+        x = np.array([[1.]])
+        def step(l):
+            u = l.forward(x) - 4.
+            l.sgd(l.backward(x, u), .0625)
+            return float(.5*u[0, 0]**2)
+        guarded = pole_layer(kan.DenominatorPolicy.GUARDED)
+        step(guarded)
+        with self.assertRaises(ValueError): step(guarded)
+        for policy in [kan.DenominatorPolicy.ABSOLUTE, kan.DenominatorPolicy.SMOOTH]:
+            l = pole_layer(policy)
+            losses = [step(l) for _ in range(200)]
+            self.assertTrue(np.all(np.isfinite(losses)))
+            self.assertLess(losses[-1], 1e-6*losses[0])
+
+    @unittest.skipUnless('--cuda' in sys.argv, 'CPU-only build')
+    def test_resident_policy_parity(self):
+        x = np.array([[-.4], [0.], [.7]]); u = np.array([[.2], [-.1], [.3]])
+        for policy in kan.DenominatorPolicy:
+            cpu = kan.Network([pole_layer(policy)]); gpu = kan.ResidentNetwork(cpu, 3)
+            gpu.upload_input(x); gpu.upload_output_gradient(u)
+            gpu.forward(); gpu.backward()
+            np.testing.assert_allclose(gpu.download_output(), cpu.forward(x), atol=1e-12)
+            gg, cg = gpu.download_gradients(), cpu.backward(x, u)
+            for key in ['input', 'coefficients', 'denominators', 'bias']:
+                np.testing.assert_allclose(getattr(gg.layers[0], key), getattr(cg.layers[0], key), atol=1e-12)
+            self.assertEqual(gpu.download_parameters().layers[0].carrier.config.denominator_policy, policy)
+
+
 if __name__ == '__main__':
     unittest.main(argv=[sys.argv[0]])

@@ -66,6 +66,12 @@ if(BUILD_TESTING)
         add_test(NAME ${suite} COMMAND ${suite}_test)
         set_tests_properties(${suite} PROPERTIES LABELS "cpu" TIMEOUT 60)
     endforeach()
+    # Backlog M2: rational denominator policies.
+    add_executable(rational_policy_test tests/rational_policy_test.cpp)
+    target_include_directories(rational_policy_test PRIVATE tests)
+    target_link_libraries(rational_policy_test PRIVATE kan)
+    add_test(NAME rational_policy COMMAND rational_policy_test)
+    set_tests_properties(rational_policy PROPERTIES LABELS "cpu" TIMEOUT 60)
     add_test(NAME package_custom_include COMMAND ${CMAKE_COMMAND}
              "-DKAN_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DKAN_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
@@ -111,6 +117,11 @@ if(BUILD_TESTING)
         target_link_libraries(m4_resident_test PRIVATE kan::cuda)
         add_test(NAME m4_resident COMMAND m4_resident_test)
         set_tests_properties(m4_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        add_executable(rational_policy_resident_test tests/rational_policy_resident_test.cpp)
+        target_include_directories(rational_policy_resident_test PRIVATE tests)
+        target_link_libraries(rational_policy_resident_test PRIVATE kan::cuda)
+        add_test(NAME rational_policy_resident COMMAND rational_policy_resident_test)
+        set_tests_properties(rational_policy_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)

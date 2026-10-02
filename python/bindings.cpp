@@ -4,6 +4,7 @@
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
 #endif
+#include <pybind11/native_enum.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
@@ -189,13 +190,20 @@ struct Resident {
 
 PYBIND11_MODULE(_kan, module) {
     module.doc() = "Optional strict float64 NumPy bindings for KAN";
+    py::native_enum<kan::DenominatorPolicy>(module, "DenominatorPolicy", "enum.Enum",
+                                            "Rational denominator singularity policy")
+        .value("GUARDED", kan::DenominatorPolicy::Guarded, "Q = 1 + S with the relative pole guard")
+        .value("ABSOLUTE", kan::DenominatorPolicy::Absolute, "Q = 1 + |S| (safe PAU), pole free")
+        .value("SMOOTH", kan::DenominatorPolicy::Smooth, "Q = 1 + S^2, pole free")
+        .finalize();
     py::class_<kan::RationalConfig>(module, "RationalConfig")
         .def(py::init<>())
         .def_readwrite("numerator_degree", &kan::RationalConfig::numerator_degree)
         .def_readwrite("denominator_degree", &kan::RationalConfig::denominator_degree)
         .def_readwrite("center", &kan::RationalConfig::center)
         .def_readwrite("scale", &kan::RationalConfig::scale)
-        .def_readwrite("epsilon", &kan::RationalConfig::epsilon);
+        .def_readwrite("epsilon", &kan::RationalConfig::epsilon)
+        .def_readwrite("denominator_policy", &kan::RationalConfig::denominator_policy);
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;
 #else
