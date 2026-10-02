@@ -955,8 +955,10 @@ void ResidentNetwork::sgd(double learning_rate) {
     if (!std::isfinite(learning_rate) || learning_rate <= 0) throw std::invalid_argument("learning rate must be finite and positive");
     if (!s.has_backward) throw std::logic_error("resident SGD requires current gradients");
     s.reset_status();
-    candidate_kernel<<<blocks(s.parameter_count), 256, 0, s.stream>>>(s.ptr(s.parameters), s.ptr(s.gradients), s.ptr(s.candidates), s.parameter_count, learning_rate, s.status);
-    check(cudaGetLastError(),"resident candidate launch");
+    if (s.parameter_count) { // zero only for networks of fixed input maps
+        candidate_kernel<<<blocks(s.parameter_count), 256, 0, s.stream>>>(s.ptr(s.parameters), s.ptr(s.gradients), s.ptr(s.candidates), s.parameter_count, learning_rate, s.status);
+        check(cudaGetLastError(),"resident candidate launch");
+    }
     for (const auto& plan : s.plans) std::visit([&](const auto& p) { validate_candidates(s, p); }, plan);
     s.result(); // All layers validated before any parameter mutation.
     // Both regions are permanently reserved and candidate execution is complete.

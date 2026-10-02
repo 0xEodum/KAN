@@ -181,6 +181,7 @@ TEST(map_validation_and_moved_from) {
     test::throws<Error>([] { kan::InputMap(2, kan::AffineMap{{1}, {0, 0}}); });
     test::throws<Error>([] { kan::InputMap(1, kan::AffineMap{{1}, {}}); });
     test::throws<Error>([&] { kan::InputMap(1, kan::AffineMap{{inf}, {0}}); });
+    test::throws<Error>([] { kan::InputMap(2, kan::AffineMap{{1, 0}, {0, 0}}); });
     for (double s : {0.0, -1.0, inf, std::nan("")}) test::throws<Error>([&] { kan::InputMap(1, kan::TanhMap{s}); });
     for (double e : {0.0, -1e-5, inf}) test::throws<Error>([&] { kan::InputMap(2, kan::LayerNormMap{e, {}, {}}); });
     test::throws<Error>([] { kan::InputMap(2, kan::LayerNormMap{1e-5, {1, 1}, {}}); });
@@ -262,6 +263,9 @@ TEST(affine_helpers_map_samples_onto_a_domain) {
     test::throws<Error>([&] { kan::affine_from_range(std::vector<double>{std::nan("")}, 1, 1); });
     test::throws<Error>([&] { kan::affine_from_moments(samples, 2, 2); });
     test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{0, 1e-320}, 2, 1); });
+    // An overflowing span would otherwise give a finite constant map.
+    test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{-1e308, 1e308}, 2, 1); });
+    test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{-1e300, 1e300}, 2, 1, 0, 1e-320); });
 }
 
 TEST(network_mixes_maps_and_layers) {

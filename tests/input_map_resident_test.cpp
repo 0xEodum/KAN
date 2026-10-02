@@ -148,6 +148,19 @@ TEST(resident_map_only_network_and_batch_zero) {
     compare_gradients(gpu.download_gradients(), cpu.backward(x, 2, u));
 }
 
+// Fixed maps only: no trainable parameters, SGD is a validated no-op.
+TEST(resident_fixed_map_network_without_parameters) {
+    kan::Network cpu({kan::InputMap(2, kan::AffineMap{{2, -1}, {0.5, 0}}), kan::InputMap(2, kan::TanhMap{0.7})});
+    kan::cuda::ResidentNetwork gpu(cpu, 3);
+    const auto x = wave(6, 2, 0.2), u = wave(6, 1, 0.5);
+    gpu.upload_input(x, 3); gpu.upload_output_gradient(u);
+    gpu.forward(); gpu.backward();
+    compare(gpu.download_output(), cpu.forward(x, 3));
+    compare_gradients(gpu.download_gradients(), cpu.backward(x, 3, u));
+    gpu.sgd(0.1);
+    compare_parameters(gpu.download_parameters(), cpu);
+}
+
 TEST(resident_map_overflow_is_reported) {
     kan::Network affine({kan::InputMap(1, kan::AffineMap{{1e300}, {0}}), kan::Layer(1, 1, kan::ChebyshevConfig{2})});
     kan::cuda::ResidentNetwork gpu(affine, 1);

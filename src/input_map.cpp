@@ -20,6 +20,9 @@ void validate(const AffineMap& map, std::size_t features) {
         throw std::invalid_argument("affine map scale and shift need one value per feature");
     require_finite(map.scale);
     require_finite(map.shift);
+    // A zero scale would make a feature constant (a silently dead input).
+    for (double scale : map.scale)
+        if (scale == 0) throw std::invalid_argument("affine map scale must be nonzero");
 }
 void validate(const TanhMap& map, std::size_t) {
     if (!std::isfinite(map.scale) || map.scale <= 0)
@@ -229,7 +232,11 @@ AffineMap affine_from_range(std::span<const double> samples, std::size_t batch, 
             high = std::max(high, s.at(b, i));
         }
         if (high > low) {
-            map.scale[i] = (upper - lower) / (high - low);
+            // A span that overflows (or a scale that underflows) would give a
+            // finite but constant map; report it instead.
+            const double span = high - low;
+            map.scale[i] = (upper - lower) / span;
+            if (!std::isfinite(span) || map.scale[i] == 0) throw std::overflow_error("nonfinite numerical result");
             map.shift[i] = lower - map.scale[i] * low;
         } else {
             map.scale[i] = 1.0;
