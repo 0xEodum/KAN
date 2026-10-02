@@ -118,6 +118,12 @@ TEST(resident_layer_norm_wide_rows_and_many_tiles) {
            1000, 5, 0.0);
     parity(kan::Network({kan::InputMap(33, layer_norm(33, false)), seeded(kan::Layer(33, 1, kan::HermiteConfig{3}), 0.5)}),
            65, 3, 0.0);
+    // 32 lanes per row (300 features) and a batch that leaves a partial warp.
+    parity(kan::Network({kan::InputMap(300, layer_norm(300, true)), seeded(kan::Layer(300, 1, kan::ChebyshevConfig{2}), 0.5)}),
+           37, 2, 0.0);
+    // One lane per row (2 features): 32 rows per warp.
+    parity(kan::Network({kan::InputMap(2, layer_norm(2, true)), seeded(kan::Layer(2, 1, kan::ChebyshevConfig{3}), 0.5)}),
+           45, 1, 0.0);
 }
 
 TEST(resident_map_only_network_and_batch_zero) {

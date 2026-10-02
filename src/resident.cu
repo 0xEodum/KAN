@@ -241,67 +241,109 @@ __global__ void tanh_forward_kernel(const double* x, double* y, std::size_t coun
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
         y[index] = detail::tanh_value(scale, x[index]); // bounded by 1 for finite input
 }
-__global__ void tanh_input_kernel(const double* x, const double* upstream, double* dx, std::size_t count,
+// Derivative from the saved output y (activation[j+1]): three FP64 operations
+// instead of cosh and a division per element.
+__global__ void tanh_input_kernel(const double* y, const double* upstream, double* dx, std::size_t count,
                                   double scale, int* status) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride) {
-        dx[index] = upstream[index]*detail::tanh_derivative(scale, x[index]); report(dx[index], status);
+        dx[index] = upstream[index]*detail::tanh_derivative(scale, y[index]); report(dx[index], status);
     }
 }
-// Butterfly sum: every lane ends with the same (commutative) result.
-__device__ double warp_sum(double value) {
-    for (unsigned offset = 16; offset; offset /= 2) value += __shfl_xor_sync(0xffffffffU, value, offset);
+// Butterfly sum over a group of Lanes consecutive lanes: every lane of the
+// group ends with the same (commutative) result.
+template<unsigned Lanes> __device__ double group_sum(double value) {
+    for (unsigned offset = Lanes/2; offset; offset /= 2) value += __shfl_xor_sync(0xffffffffU, value, offset, Lanes);
     return value;
 }
-// One warp per row (the row index is warp-uniform, so every lane takes part
-// in the shuffles). Saves the row mean and 1/sqrt(var+eps) for backward.
+// LayerNorm rows are processed by groups of Lanes lanes (32/Lanes rows per
+// warp), Lanes chosen per map so that each lane holds about eight features:
+// the per-row scalar work (reductions, 1/sqrt) is FP64 and is executed by
+// every lane, so narrower groups cut the FP64 instruction count. The row
+// loop is warp-uniform; groups past the last row recompute a valid row so
+// that every lane takes part in the shuffles, and store nothing.
+template<unsigned Lanes>
 __global__ void layer_norm_forward_kernel(const double* x, const double* gain, const double* bias, double* y,
                                           double* stats, std::size_t rows, std::size_t features,
-                                          double epsilon, int* status) {
-    const auto lane = threadIdx.x%32;
-    const auto warps = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
-    const double count = static_cast<double>(features);
-    for (auto row = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; row < rows; row += warps) {
-        const double* in = x+row*features;
+                                          double inverse_count, double epsilon, int* status) {
+    constexpr unsigned rows_per_warp = 32/Lanes;
+    const auto lane = threadIdx.x%Lanes, group = (threadIdx.x%32)/Lanes;
+    const auto warp = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32)*rows_per_warp;
+    for (auto first = warp*rows_per_warp; first < rows; first += stride) {
+        const auto row = first+group;
+        const bool active = row < rows;
+        const double* in = x+(active ? row : first)*features;
         double sum = 0;
-        for (std::size_t f = lane; f < features; f += 32) sum += in[f];
-        const double mean = warp_sum(sum)/count;
+        for (std::size_t f = lane; f < features; f += Lanes) sum += in[f];
+        const double mean = detail::layer_norm_mean(group_sum<Lanes>(sum), inverse_count);
         double squares = 0;
-        for (std::size_t f = lane; f < features; f += 32) { const double d = in[f]-mean; squares += d*d; }
-        const double variance = warp_sum(squares)/count;
+        for (std::size_t f = lane; f < features; f += Lanes) { const double d = in[f]-mean; squares += d*d; }
+        const double variance = detail::layer_norm_mean(group_sum<Lanes>(squares), inverse_count);
         const double rstd = detail::layer_norm_rstd(variance, epsilon);
+        if (!active) continue;
         if (lane == 0) { report(mean, status); report(variance, status); stats[2*row] = mean; stats[2*row+1] = rstd; }
-        for (std::size_t f = lane; f < features; f += 32) {
+        for (std::size_t f = lane; f < features; f += Lanes) {
             const double xhat = detail::layer_norm_normalized(in[f], mean, rstd);
             const double value = gain ? gain[f]*xhat+bias[f] : xhat;
             y[row*features+f] = value; report(value, status);
         }
     }
 }
+template<unsigned Lanes>
 __global__ void layer_norm_input_kernel(const double* x, const double* upstream, const double* gain, const double* stats,
-                                        double* dx, std::size_t rows, std::size_t features, int* status) {
-    const auto lane = threadIdx.x%32;
-    const auto warps = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
-    const double count = static_cast<double>(features);
-    for (auto row = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; row < rows; row += warps) {
-        const auto base = row*features;
-        const double mean = stats[2*row], rstd = stats[2*row+1];
+                                        double* dx, std::size_t rows, std::size_t features, double inverse_count, int* status) {
+    constexpr unsigned rows_per_warp = 32/Lanes;
+    const auto lane = threadIdx.x%Lanes, group = (threadIdx.x%32)/Lanes;
+    const auto warp = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32)*rows_per_warp;
+    for (auto first = warp*rows_per_warp; first < rows; first += stride) {
+        const auto row = first+group;
+        const bool active = row < rows;
+        const auto base = (active ? row : first)*features;
+        const double mean = stats[2*(active ? row : first)], rstd = stats[2*(active ? row : first)+1];
         double sum_w = 0, sum_wx = 0;
-        for (std::size_t f = lane; f < features; f += 32) {
+        for (std::size_t f = lane; f < features; f += Lanes) {
             const double w = gain ? upstream[base+f]*gain[f] : upstream[base+f];
             sum_w += w; sum_wx += w*detail::layer_norm_normalized(x[base+f], mean, rstd);
         }
-        const double mean_w = warp_sum(sum_w)/count, mean_wx = warp_sum(sum_wx)/count;
-        for (std::size_t f = lane; f < features; f += 32) {
+        const double mean_w = detail::layer_norm_mean(group_sum<Lanes>(sum_w), inverse_count);
+        const double mean_wx = detail::layer_norm_mean(group_sum<Lanes>(sum_wx), inverse_count);
+        if (!active) continue;
+        for (std::size_t f = lane; f < features; f += Lanes) {
             const double w = gain ? upstream[base+f]*gain[f] : upstream[base+f];
             const double xhat = detail::layer_norm_normalized(x[base+f], mean, rstd);
             dx[base+f] = detail::layer_norm_input_vjp(rstd, w, mean_w, xhat, mean_wx); report(dx[base+f], status);
         }
     }
 }
+// Lanes per LayerNorm row: the power of two holding about eight features per lane.
+unsigned norm_lanes(std::size_t features) {
+    unsigned lanes = 1;
+    while (lanes < 32 && lanes*8 < features) lanes *= 2;
+    return lanes;
+}
+template<class F> void with_norm_lanes(unsigned lanes, F&& f) {
+    switch (lanes) {
+    case 1: f(std::integral_constant<unsigned, 1>{}); break;
+    case 2: f(std::integral_constant<unsigned, 2>{}); break;
+    case 4: f(std::integral_constant<unsigned, 4>{}); break;
+    case 8: f(std::integral_constant<unsigned, 8>{}); break;
+    case 16: f(std::integral_constant<unsigned, 16>{}); break;
+    default: f(std::integral_constant<unsigned, 32>{}); break;
+    }
+}
+// Small blocks (two warps) for `rows` rows at `lanes` lanes per row: the row
+// kernels are latency bound, so spreading few warps over every SM matters
+// more than block size (1024 rows x 64 features: 128 blocks, not 32).
+constexpr unsigned norm_block = 64;
+unsigned norm_blocks(std::size_t rows, unsigned lanes) {
+    return blocks(rows, static_cast<std::size_t>(norm_block/lanes));
+}
 // Gain/bias VJPs: block (32 features x 8 row lanes) per feature chunk and row
-// tile; coalesced along features. Partials are [tile][gain | bias].
-constexpr unsigned norm_row_lanes = 8, norm_rows_per_tile = 64, norm_max_tiles = 64;
+// tile; coalesced along features. Partials are [tile][gain | bias]. Small
+// tiles give enough blocks to fill the GPU; the finish sums tiles in order.
+constexpr unsigned norm_row_lanes = 8, norm_rows_per_tile = 16, norm_max_tiles = 64;
 unsigned norm_tiles(std::size_t rows) {
     return static_cast<unsigned>(std::clamp<std::size_t>((rows+norm_rows_per_tile-1)/norm_rows_per_tile, 1, norm_max_tiles));
 }
@@ -323,13 +365,17 @@ __global__ void layer_norm_parameter_partial_kernel(const double* x, const doubl
         partial[blockIdx.y*2*features+f] = sg; partial[blockIdx.y*2*features+features+f] = sb;
     }
 }
+// One warp per gain/bias parameter: lanes sum strided tiles, then a fixed
+// butterfly reduction (independent loads instead of a serial tile chain).
 __global__ void layer_norm_parameter_finish_kernel(const double* partial, double* gradient, std::size_t features,
                                                    unsigned tiles, int* status) {
-    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for (auto p = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; p < 2*features; p += stride) {
+    const auto lane = threadIdx.x%32;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
+    for (auto p = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; p < 2*features; p += stride) {
         double sum = 0;
-        for (unsigned tile = 0; tile < tiles; ++tile) sum += partial[tile*2*features+p];
-        gradient[p] = sum; report(sum, status);
+        for (unsigned tile = lane; tile < tiles; tile += 32) sum += partial[tile*2*features+p];
+        sum = group_sum<32>(sum);
+        if (lane == 0) { gradient[p] = sum; report(sum, status); }
     }
 }
 
@@ -441,7 +487,8 @@ struct TanhPlan {
 struct LayerNormPlan {
     using map_type = LayerNormMap;
     MapBlock block;
-    double epsilon;
+    double epsilon, inverse_count; // inverse_count = 1/features, as on the CPU
+    unsigned lanes;                // lanes per row (norm_lanes)
     std::size_t stats = 0, partials = 0; // (capacity, 2) row moments; (tiles, 2*features) partial VJPs
     bool affine() const noexcept { return block.parameters != 0; }
 };
@@ -486,7 +533,8 @@ Plan make_plan(const InputMap& map, const TanhMap& tanh, std::size_t offset) {
     return TanhPlan{map_block(map, 0, offset), tanh.scale};
 }
 Plan make_plan(const InputMap& map, const LayerNormMap& norm, std::size_t offset) {
-    return LayerNormPlan{map_block(map, product(norm.gain.size(), 2), offset), norm.epsilon};
+    return LayerNormPlan{map_block(map, product(norm.gain.size(), 2), offset), norm.epsilon,
+                         1.0/static_cast<double>(map.features()), norm_lanes(map.features())};
 }
 Plan make_plan(const Layer& layer, std::size_t offset) {
     finite(layer.coefficients()); finite(layer.bias());
@@ -617,9 +665,11 @@ const double* norm_gain(const Context& s, const LayerNormPlan& plan, std::size_t
 }
 void run_forward(Context& s, const LayerNormPlan& plan, std::size_t j) {
     const auto gain = norm_gain(s, plan, s.parameters);
-    layer_norm_forward_kernel<<<blocks(s.batch, 256/32), 256, 0, s.stream>>>(s.ptr(s.activation[j]), gain,
-        gain ? gain+plan.block.half() : nullptr, s.ptr(s.activation[j+1]), s.ptr(plan.stats), s.batch,
-        plan.block.features, plan.epsilon, s.status);
+    with_norm_lanes(plan.lanes, [&](auto lanes) {
+        layer_norm_forward_kernel<decltype(lanes)::value><<<norm_blocks(s.batch, plan.lanes), norm_block, 0, s.stream>>>(
+            s.ptr(s.activation[j]), gain, gain ? gain+plan.block.half() : nullptr, s.ptr(s.activation[j+1]),
+            s.ptr(plan.stats), s.batch, plan.block.features, plan.inverse_count, plan.epsilon, s.status);
+    });
     check(cudaGetLastError(), "resident layer norm launch");
 }
 
@@ -671,15 +721,18 @@ void run_backward(Context& s, const AffinePlan& plan, std::size_t j, double) {
 void run_backward(Context& s, const TanhPlan& plan, std::size_t j, double) {
     const auto count = s.batch*plan.block.features;
     if (!count) return;
-    tanh_input_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.activation[j]), s.ptr(s.upstream[j+1]), s.ptr(s.upstream[j]),
+    tanh_input_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.ptr(s.upstream[j+1]), s.ptr(s.upstream[j]),
         count, plan.scale, s.status);
     check(cudaGetLastError(), "resident tanh map gradient launch");
 }
 void run_backward(Context& s, const LayerNormPlan& plan, std::size_t j, double) {
     const auto features = plan.block.features;
     if (s.batch) {
-        layer_norm_input_kernel<<<blocks(s.batch, 256/32), 256, 0, s.stream>>>(s.ptr(s.activation[j]), s.ptr(s.upstream[j+1]),
-            norm_gain(s, plan, s.parameters), s.ptr(plan.stats), s.ptr(s.upstream[j]), s.batch, features, s.status);
+        with_norm_lanes(plan.lanes, [&](auto lanes) {
+            layer_norm_input_kernel<decltype(lanes)::value><<<norm_blocks(s.batch, plan.lanes), norm_block, 0, s.stream>>>(
+                s.ptr(s.activation[j]), s.ptr(s.upstream[j+1]), norm_gain(s, plan, s.parameters), s.ptr(plan.stats),
+                s.ptr(s.upstream[j]), s.batch, features, plan.inverse_count, s.status);
+        });
         check(cudaGetLastError(), "resident layer norm gradient launch");
     }
     if (!plan.affine()) return;
@@ -689,7 +742,7 @@ void run_backward(Context& s, const LayerNormPlan& plan, std::size_t j, double) 
     layer_norm_parameter_partial_kernel<<<dim3(static_cast<unsigned>(chunks), tiles), dim3(32, norm_row_lanes), 0, s.stream>>>(
         s.ptr(s.activation[j]), s.ptr(s.upstream[j+1]), s.ptr(plan.stats), s.ptr(plan.partials), s.batch, features, tiles);
     check(cudaGetLastError(), "resident layer norm parameter launch");
-    layer_norm_parameter_finish_kernel<<<blocks(2*features), 256, 0, s.stream>>>(s.ptr(plan.partials),
+    layer_norm_parameter_finish_kernel<<<blocks(2*features, 256/32), 256, 0, s.stream>>>(s.ptr(plan.partials),
         s.ptr(s.gradients+plan.block.offset), features, tiles, s.status);
     check(cudaGetLastError(), "resident layer norm parameter reduction launch");
 }

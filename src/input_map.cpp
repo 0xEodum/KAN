@@ -55,10 +55,11 @@ struct RowMoments {
 RowMoments moments(const double* row, std::size_t n, double epsilon) {
     double sum = 0;
     for (std::size_t i = 0; i < n; ++i) sum += row[i];
-    const double mean = sum / static_cast<double>(n);
+    const double inverse = 1.0 / static_cast<double>(n);
+    const double mean = detail::layer_norm_mean(sum, inverse);
     double squares = 0;
     for (std::size_t i = 0; i < n; ++i) squares += (row[i] - mean) * (row[i] - mean);
-    const double variance = squares / static_cast<double>(n);
+    const double variance = detail::layer_norm_mean(squares, inverse);
     if (!std::isfinite(mean) || !std::isfinite(variance)) throw std::overflow_error("nonfinite numerical result");
     return {mean, detail::layer_norm_rstd(variance, epsilon)};
 }
@@ -82,12 +83,13 @@ void backward(const AffineMap& map, std::size_t n, std::span<const double>, std:
 }
 void backward(const TanhMap& map, std::size_t n, std::span<const double> x, std::size_t batch,
               std::span<const double> u, InputMapGradients& g) {
-    for (std::size_t k = 0; k < batch * n; ++k) g.input[k] = u[k] * detail::tanh_derivative(map.scale, x[k]);
+    for (std::size_t k = 0; k < batch * n; ++k)
+        g.input[k] = u[k] * detail::tanh_derivative(map.scale, detail::tanh_value(map.scale, x[k]));
 }
 void backward(const LayerNormMap& map, std::size_t n, std::span<const double> x, std::size_t batch,
               std::span<const double> u, InputMapGradients& g) {
     const bool affine = !map.gain.empty();
-    const double count = static_cast<double>(n);
+    const double inverse = 1.0 / static_cast<double>(n);
     for (std::size_t b = 0; b < batch; ++b) {
         const double* row = x.data() + b * n;
         const double* up = u.data() + b * n;
@@ -98,7 +100,8 @@ void backward(const LayerNormMap& map, std::size_t n, std::span<const double> x,
             sum_w += w;
             sum_wx += w * detail::layer_norm_normalized(row[i], m.mean, m.rstd);
         }
-        const double mean_w = sum_w / count, mean_wx = sum_wx / count;
+        const double mean_w = detail::layer_norm_mean(sum_w, inverse);
+        const double mean_wx = detail::layer_norm_mean(sum_wx, inverse);
         for (std::size_t i = 0; i < n; ++i) {
             const double xhat = detail::layer_norm_normalized(row[i], m.mean, m.rstd);
             const double w = affine ? up[i] * map.gain[i] : up[i];
