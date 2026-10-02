@@ -87,6 +87,29 @@ host shapes/data raise `std::invalid_argument`, dimension/numerical overflow rai
 All M1 mathematical domain and finite-result
 requirements apply; CPU/GPU equivalence is tolerance-based.
 
+**Contraction engine (backlog C2).** For `BasisEdges` and `TrainableRbfEdges` layers the
+resident executor computes the dense contraction and its VJPs with cuBLAS:
+`Y = Phi*C^T + b`, `dC = U^T*Phi + lambda*C`, `db = U^T*1` and `W = U*C`, from which
+`dx = sum_k Phi' (.) W` and the trainable-RBF center/log-width VJPs are reduced. A forward
+contraction of at most `2^23` multiply-adds (`batch*outputs*inputs*terms`) instead runs one
+warp per output, with the bias and the finiteness check in the same launch, because cuBLAS
+executes such tiny products as a single latency-bound block. For the same reason a layer
+with at most `2^15` coefficients plus outputs reduces its coefficient and bias VJPs in at
+most 64 batch tiles and sums the tiles in a fixed order; larger layers use cuBLAS. `W` lives in
+one scratch region shared by all expansion layers (the largest `capacity*inputs*terms`);
+the cuBLAS handle is created at construction and runs on the executor's stream with a
+workspace inside the construction-time arena, so numerical calls make no `cudaMalloc` and
+no arena growth and `workspace_allocations()` is unchanged (the handle's own
+library-internal state, created once with it, is not counted). cuBLAS sums in its own (fused multiply-add, tiled) order: results are no
+longer bitwise identical to the CPU, which stays the FP64 reference, and agree within
+floating-point tolerance (see [C2 evidence](evidence/backlog/C2.md) for the measured
+deviation). Results are deterministic for one GPU, driver and cuBLAS version. The
+nonfinite check covers every result tensor (outputs, coefficient/bias/nonlinear VJPs and
+input VJPs); an intermediate product that overflows inside a fused contraction and is
+cancelled by the accumulator is not reported if the computed result is finite.
+`kan::cuda` therefore links `CUDA::cublas` and requires CUDA 12 or newer; the installed
+package finds it through `CUDAToolkit`.
+
 Python bindings expose the same mathematics through an optional `kan` module.
 Numerical tensor arguments must be NumPy C-contiguous float64 arrays of the declared
 shape. No implicit float32 promotion or layout conversion is performed. Returned
@@ -366,7 +389,8 @@ device records status). Public declarations and validation live in
 the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
 loops in `src/carriers/`, family operations in `src/families.cpp`; input maps in `src/input_map.cpp`
 with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
-kernels in `src/resident.cu`, with one basis kernel instantiation per family; the
+kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
+dense contractions delegated to cuBLAS; the
 legacy M1 Chebyshev kernels in `src/cuda.cu`. No symbolic parser, Eigen, Torch,
 Python runtime or imported KAN implementation is required. Quantum carriers need
 separate physical/measurement contracts at M5.

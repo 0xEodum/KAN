@@ -1,0 +1,10 @@
+O=  24 B=   32 IK=  112  FMA=     86016  cublas      38.4 us  warp-dot       7.3 us
+O=   8 B=   32 IK=  168  FMA=     43008  cublas      58.2 us  warp-dot       6.7 us
+O=  24 B= 1024 IK=  112  FMA=   2752512  cublas      39.9 us  warp-dot      37.0 us
+O=   8 B= 1024 IK=  168  FMA=   1376256  cublas      22.8 us  warp-dot      14.8 us
+O=  64 B=   32 IK=  448  FMA=    917504  cublas      37.9 us  warp-dot       9.4 us
+O=  64 B= 1024 IK=  448  FMA=  29360128  cublas     142.3 us  warp-dot     151.0 us
+O=  32 B= 1024 IK=  448  FMA=  14680064  cublas      67.9 us  warp-dot      75.8 us
+O=  16 B= 1024 IK=  224  FMA=   3670016  cublas      52.6 us  warp-dot      25.6 us
+O= 256 B= 1024 IK= 1792  FMA= 469762048  cublas    2215.3 us  warp-dot    1719.1 us
+O= 256 B= 8192 IK= 1792  FMA=-536870912  cublas   13895.4 us  warp-dot   13752.9 us

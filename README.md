@@ -108,6 +108,11 @@ overflow. Forward retains activations for backward. Input uploads invalidate pri
 outputs/gradients/upstream; SGD invalidates outputs/gradients. Batch capacity is
 fixed; create a new executor to increase it. Different executors are independent;
 serialize access to the same executor. No execution call allocates GPU storage.
+Dense contractions of basis layers run on cuBLAS (`kan::cuda` links `CUDA::cublas`,
+CUDA 12+; the cuBLAS runtime library, e.g. `cublas64_13.dll` on Windows, must be on the
+loader path at run time; the Python package registers the build's CUDA toolkit
+directories and `CUDA_PATH`, so a module copied to another machine needs a CUDA runtime
+there). GPU results match the CPU reference within floating-point tolerance, not bitwise.
 
 Parameters initialize to zero. Initialize multilayer parameters to nonzero
 values explicitly so gradients can propagate. Polynomial inputs are not

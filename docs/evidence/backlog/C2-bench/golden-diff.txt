@@ -1,0 +1,5 @@
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 */c/Users/Yu/AppData/Local/Temp/kan-c2/golden_base_layers.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 */c/Users/Yu/AppData/Local/Temp/kan-c2/golden_c2_layers.txt
+lines: 3052, identical: 2967, numerically different: 85, structural: 0
+  resident mixed                                max deviation / line scale = 3.083e-14
+  resident endpoints                            max deviation / line scale = 4.472e-16

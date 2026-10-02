@@ -1,0 +1,24 @@
+== memcheck resident_contraction_test
+6/6 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck resident_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck resident_review_test
+4/4 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck m3_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck m4_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck input_map_resident_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== memcheck rational_policy_resident_test
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== racecheck resident_contraction_test
+6/6 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
