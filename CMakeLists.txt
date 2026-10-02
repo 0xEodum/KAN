@@ -11,7 +11,8 @@ option(KAN_BUILD_PYTHON "Build optional pybind11/NumPy bindings" OFF)
 option(KAN_BUILD_BENCHMARKS "Build frozen matched full-call benchmarks" OFF)
 option(KAN_BENCH_RESIDENT "Include M2 resident backend in benchmarks" ON)
 
-add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp)
+add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp
+            src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
 set_target_properties(kan PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -58,7 +59,7 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(suite basis basis_config layer network m3_basis m3_layer m4_rational m4_layer m4_allocation)
+    foreach(suite basis basis_config carrier layer network m3_basis m3_layer m4_rational m4_layer m4_allocation)
         add_executable(${suite}_test tests/${suite}_test.cpp)
         target_include_directories(${suite}_test PRIVATE tests)
         target_link_libraries(${suite}_test PRIVATE kan)

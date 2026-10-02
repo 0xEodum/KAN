@@ -1,14 +1,15 @@
 #include "kan/network.hpp"
+#include "kan/families.hpp"
 #include <stdexcept>
 #include <cmath>
 namespace kan {
 void Network::insert_knot(std::size_t index, double x) {
     validate_state();if(index>=layers_.size())throw std::invalid_argument("layer index out of range");
-    layers_[index].insert_knot(x);
+    kan::insert_knot(layers_[index], x);
 }
 double Network::adapt_grid(std::size_t index, std::span<const double> samples) {
     validate_state();if(index>=layers_.size())throw std::invalid_argument("layer index out of range");
-    return layers_[index].adapt_grid(samples);
+    return kan::adapt_grid(layers_[index], samples);
 }
 NetworkRegularizationResult Network::regularization(double lambda) const {
     validate_state();NetworkRegularizationResult r;

@@ -13,7 +13,7 @@ def rational(m=1, n=1):
 
 def layer():
     l = kan.Layer(1, 1, rational())
-    l.set_rational_parameters(np.array([[[1., .5]]]), np.array([[[-.5]]]), np.zeros(1))
+    kan.set_rational_parameters(l, np.array([[[1., .5]]]), np.array([[[-.5]]]), np.zeros(1))
     return l
 
 
@@ -22,12 +22,12 @@ class M4(unittest.TestCase):
         l = layer()
         x = np.array([[-.4], [0.], [.7]])
         np.testing.assert_allclose(l.forward(x), (1+.5*x)/(1-.5*x), atol=1e-14)
-        self.assertTrue(l.is_rational)
-        with self.assertRaises(ValueError): _ = l.basis
-        c = l.rational_config; c.center = 99
-        self.assertEqual(l.rational_config.center, 0)
-        l.denominators[:] = 99
-        np.testing.assert_array_equal(l.denominators, [[[-.5]]])
+        self.assertIsInstance(l.carrier, kan.RationalEdges)
+        self.assertFalse(hasattr(l.carrier, 'basis'))
+        c = l.carrier.config; c.center = 99
+        self.assertEqual(l.carrier.config.center, 0)
+        l.carrier.denominators[:] = 99
+        np.testing.assert_array_equal(l.carrier.denominators, [[[-.5]]])
         g = l.backward(x, np.ones_like(x))
         v, dx, da, db = kan.evaluate_rational(rational(), .5, np.array([1.,.5]), np.array([-.5]))
         self.assertAlmostEqual(v, 5/3)
@@ -37,39 +37,42 @@ class M4(unittest.TestCase):
         np.testing.assert_allclose(g.input, 1/(1-.5*x)**2, atol=1e-14)
         self.assertEqual(g.denominators.shape, (1, 1, 1))
         g.denominators[:] = 99
-        before = l.denominators.copy()
+        before = l.carrier.denominators.copy()
         l.sgd(g, .001)
-        self.assertLess(float(np.max(np.abs(l.denominators-before))), .01)
+        self.assertLess(float(np.max(np.abs(l.carrier.denominators-before))), .01)
 
     def test_parameter_vjps_and_strict_validation(self):
         l = layer(); x = np.array([[-.6], [.1], [.8]]); u = np.array([[.2], [-.3], [.4]])
         g = l.backward(x, u)
         for key in ['coefficients', 'denominators', 'bias']:
-            initial = getattr(l, key)
+            initial = {'coefficients': l.coefficients, 'denominators': l.carrier.denominators, 'bias': l.bias}[key]
             for index in np.ndindex(initial.shape):
                 values = []
                 for sign in [1, -1]:
-                    a, b, bias = l.coefficients, l.denominators, l.bias
+                    a, b, bias = l.coefficients, l.carrier.denominators, l.bias
                     target = {'coefficients': a, 'denominators': b, 'bias': bias}[key]
                     target[index] += sign * 1e-6
-                    q = layer(); q.set_rational_parameters(a, b, bias)
+                    q = layer(); kan.set_rational_parameters(q, a, b, bias)
                     values.append(float((q.forward(x)*u).sum()))
                 self.assertAlmostEqual(getattr(g, key)[index], (values[0]-values[1])/2e-6, places=8)
         with self.assertRaises(TypeError): l.forward(x.astype(np.float32))
-        with self.assertRaises(ValueError): l.set_rational_parameters(l.coefficients, np.zeros((1,1,2)), l.bias)
-        with self.assertRaises(ValueError): l.set_parameters(l.coefficients, l.bias)
+        with self.assertRaises(ValueError): kan.set_rational_parameters(l, l.coefficients, np.zeros((1,1,2)), l.bias)
+        l.set_parameters(l.coefficients, l.bias)  # generic coefficient setter: numerator a
+        with self.assertRaises(ValueError): l.set_parameters(l.carrier.denominators, l.bias)
         with self.assertRaises(ValueError): l.forward(np.array([[2.]]))
         self.assertEqual(l.forward(np.empty((0, 1))).shape, (0, 1))
         z = kan.Layer(1, 1, rational(0, 0))
-        z.set_rational_parameters(np.array([[[.3]]]), np.empty((1,1,0)), np.zeros(1))
+        kan.set_rational_parameters(z, np.array([[[.3]]]), np.empty((1,1,0)), np.zeros(1))
         self.assertEqual(z.backward(x, u).denominators.shape, (1,1,0))
         b = kan.Layer(1,1,kan.ChebyshevConfig())
-        self.assertEqual(b.denominators.shape, (0,))
+        self.assertIsInstance(b.carrier, kan.BasisEdges)
+        self.assertFalse(hasattr(b.carrier, 'denominators'))
+        with self.assertRaises(ValueError): kan.set_rational_parameters(b, b.coefficients, np.empty((0,)), b.bias)
 
     def test_learning_with_independent_holdout_and_mixed_network(self):
         c = rational(); c.center, c.scale = .2, 1.5
         l = kan.Layer(1, 1, c)
-        l.set_rational_parameters(np.array([[[.2, .1]]]), np.array([[[.05]]]), np.zeros(1))
+        kan.set_rational_parameters(l, np.array([[[.2, .1]]]), np.array([[[.05]]]), np.zeros(1))
         x = np.linspace(-1,1,64).reshape(-1,1)
         z = (x-.2)/1.5; target = (.3+.8*z)/(1+.4*z)
         for _ in range(1400):
@@ -77,7 +80,7 @@ class M4(unittest.TestCase):
         hold = np.array([[-.977], [-.351], [.073], [.527], [.913]])
         h = (hold-.2)/1.5
         self.assertLess(float(np.mean((l.forward(hold)-(.3+.8*h)/(1+.4*h))**2)), 1e-6)
-        self.assertGreater(float(np.abs(l.denominators-.05).max()), .05)
+        self.assertGreater(float(np.abs(l.carrier.denominators-.05).max()), .05)
         basis = kan.ChebyshevConfig(size=2)
         b = kan.Layer(1,1,basis); b.set_parameters(np.array([[[.1,.7]]]), np.array([.02]))
         n = kan.Network([l,b]); ng = n.backward(hold,np.ones_like(hold)); n.sgd(ng,.001)
@@ -99,7 +102,7 @@ class M4(unittest.TestCase):
             for key in ['input','coefficients','denominators','bias']:
                 np.testing.assert_allclose(getattr(gg.layers[0],key),getattr(cg.layers[0],key),atol=1e-12)
             gpu.sgd(.001); cpu.sgd(cg,.001)
-            np.testing.assert_allclose(gpu.download_parameters().layers[0].denominators,cpu.layers[0].denominators,atol=1e-12)
+            np.testing.assert_allclose(gpu.download_parameters().layers[0].carrier.denominators,cpu.layers[0].carrier.denominators,atol=1e-12)
         self.assertEqual(allocations,gpu.workspace_allocations)
         pole = kan.ResidentNetwork(kan.Network([layer()]),3)
         pole.upload_input(np.array([[2.]])); pole.upload_output_gradient(np.ones((1,1)))

@@ -1,8 +1,9 @@
 #pragma once
 // Test-only family parameterization: suites that sweep every family with one
 // shared parameter set build the typed configuration through `basis`.
-#include "kan/basis.hpp"
+#include "kan/layer.hpp"
 #include <cstddef>
+#include <span>
 #include <variant>
 #include <vector>
 
@@ -33,8 +34,39 @@ inline kan::BasisConfig basis(Family family, const FamilyParameters& p) {
     return kan::ChebyshevConfig{p.size};
 }
 
-inline const kan::TrainableRbfConfig& trainable(const kan::BasisConfig& config) {
-    return std::get<kan::TrainableRbfConfig>(config);
+// Carrier accessors for test assertions.
+inline const kan::TrainableRbfConfig& trainable(const kan::Layer& layer) {
+    return std::get<kan::TrainableRbfEdges>(layer.carrier()).basis;
+}
+inline const kan::TrainableRbfGradients& trainable(const kan::LayerGradients& gradients) {
+    return std::get<kan::TrainableRbfGradients>(gradients.nonlinear);
+}
+inline kan::TrainableRbfGradients& trainable(kan::LayerGradients& gradients) {
+    return std::get<kan::TrainableRbfGradients>(gradients.nonlinear);
+}
+inline const kan::BasisConfig& basis_of(const kan::Layer& layer) {
+    return std::get<kan::BasisEdges>(layer.carrier()).basis;
+}
+
+// Nonlinear parameter and gradient views; empty for other carriers.
+inline std::span<const double> centers(const kan::LayerGradients& g) {
+    const auto* r = std::get_if<kan::TrainableRbfGradients>(&g.nonlinear);
+    return r ? std::span<const double>(r->centers) : std::span<const double>();
+}
+inline std::span<const double> log_widths(const kan::LayerGradients& g) {
+    const auto* r = std::get_if<kan::TrainableRbfGradients>(&g.nonlinear);
+    return r ? std::span<const double>(r->log_widths) : std::span<const double>();
+}
+inline std::span<const double> denominators(const kan::LayerGradients& g) {
+    const auto* r = std::get_if<kan::RationalGradients>(&g.nonlinear);
+    return r ? std::span<const double>(r->denominators) : std::span<const double>();
+}
+inline kan::RationalGradients& rational(kan::LayerGradients& g) {
+    return std::get<kan::RationalGradients>(g.nonlinear);
+}
+inline std::span<const double> denominators(const kan::Layer& layer) {
+    const auto* r = std::get_if<kan::RationalEdges>(&layer.carrier());
+    return r ? std::span<const double>(r->denominators) : std::span<const double>();
 }
 
 } // namespace test

@@ -1,4 +1,5 @@
 #include "kan/cuda.hpp"
+#include "kan/families.hpp"
 #include "kan/network.hpp"
 #ifdef KAN_BENCH_RESIDENT
 #include "kan/resident.hpp"
@@ -18,6 +19,9 @@ using Clock = std::chrono::steady_clock;
 constexpr double learning_rate = 0.001;
 const char* names[] = {"rational_1_1", "rational_3_2", "rational_6_4"};
 struct Case { int id, family; std::vector<std::size_t> widths; std::size_t batch; };
+// Rational denominators of a layer and of its gradients (every layer here is rational).
+std::span<const double> denominators(const kan::Layer& l) { return std::get<kan::RationalEdges>(l.carrier()).denominators; }
+std::span<const double> denominators(const kan::LayerGradients& g) { return std::get<kan::RationalGradients>(g.nonlinear).denominators; }
 kan::Network network(const Case& c) {
     kan::RationalConfig config;
     config.numerator_degree = c.family == 0 ? 1 : c.family == 1 ? 3 : 6;
@@ -31,9 +35,9 @@ kan::Network network(const Case& c) {
             coefficients[j] = 0.02 * std::sin(static_cast<double>((j + 1) * (l + 1))) /
                               (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % (config.numerator_degree+1)));
         for (std::size_t j = 0; j < bias.size(); ++j) bias[j] = 0.01 * std::cos(static_cast<double>(j + l));
-        std::vector<double> denominator(layer.denominators().size());
+        std::vector<double> denominator(denominators(layer).size());
         for (std::size_t j=0;j<denominator.size();++j) denominator[j]=0.01*std::cos(static_cast<double>((j+3)*(l+1)));
-        layer.set_rational_parameters(coefficients, denominator, bias); layers.push_back(std::move(layer));
+        kan::set_rational_parameters(layer, coefficients, denominator, bias); layers.push_back(std::move(layer));
     }
     return kan::Network(std::move(layers));
 }
@@ -56,12 +60,12 @@ double checksum(std::span<const double> values) {
 }
 double checksum(const kan::NetworkGradients& g) {
     double result = checksum(g.input);
-    for (const auto& layer : g.layers) result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(layer.denominators);
+    for (const auto& layer : g.layers) result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(denominators(layer));
     return result;
 }
 double checksum(const kan::Network& n) {
     double result = 0;
-    for (const auto& l : n.layers()) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(l.denominators());
+    for (const auto& l : n.layers()) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(denominators(l));
     return result;
 }
 struct Result {
@@ -126,7 +130,7 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
             const auto actual = replay_parameters.layers()[l];
             if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
                 !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()) ||
-                !std::equal(expected.denominators().begin(), expected.denominators().end(), actual.denominators().begin()))
+                !std::equal(denominators(expected).begin(), denominators(expected).end(), denominators(actual).begin()))
                 throw std::runtime_error("resident verification replay changed parameters");
         }
     }
@@ -150,8 +154,8 @@ double verify(const Result& expected, const Result& actual) {
     for (std::size_t l = 0; l < expected.parameters.layers().size(); ++l) {
         error = std::max(error, compare(expected.gradients.layers[l].coefficients, actual.gradients.layers[l].coefficients));
         error = std::max(error, compare(expected.gradients.layers[l].bias, actual.gradients.layers[l].bias));
-        error = std::max(error, compare(expected.gradients.layers[l].denominators, actual.gradients.layers[l].denominators));
-        error = std::max(error, compare(expected.parameters.layers()[l].denominators(), actual.parameters.layers()[l].denominators()));
+        error = std::max(error, compare(denominators(expected.gradients.layers[l]), denominators(actual.gradients.layers[l])));
+        error = std::max(error, compare(denominators(expected.parameters.layers()[l]), denominators(actual.parameters.layers()[l])));
         error = std::max(error, compare(expected.parameters.layers()[l].coefficients(), actual.parameters.layers()[l].coefficients()));
         error = std::max(error, compare(expected.parameters.layers()[l].bias(), actual.parameters.layers()[l].bias()));
     }

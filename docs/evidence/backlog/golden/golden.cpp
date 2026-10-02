@@ -1,8 +1,17 @@
-// Bitwise golden dump for behaviour-preserving backlog refactors (R1-R3).
+// Bitwise golden dump for behaviour-preserving backlog refactors (R1-R3, R2).
 // Prints every CPU basis/rational result and every resident CUDA result as
 // exact hex doubles, including guard exceptions. Two builds of the library
 // are equivalent for these fixtures only if their dumps are byte-identical.
+//
+// `--layers` (added for R2) instead dumps CPU Layer/Network execution: forward,
+// backward, L2, SGD and the family operations on the resident fixtures.
+// The harness compiles against the API before R2 (Layer members) and after it
+// (carriers, kan/families.hpp), so both builds run the same fixtures.
 #include "kan/resident.hpp"
+#if __has_include("kan/families.hpp")
+#include "kan/families.hpp"
+#define KAN_GOLDEN_CARRIERS 1
+#endif
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -17,6 +26,62 @@
 using namespace kan;
 
 namespace {
+// API adapters: the dumped values never depend on which branch is compiled.
+namespace api {
+std::vector<double> none() { return {}; }
+#ifdef KAN_GOLDEN_CARRIERS
+bool is_rational(const Layer& l) { return std::holds_alternative<RationalEdges>(l.carrier()); }
+std::vector<double> denominators(const Layer& l) {
+    const auto* r = std::get_if<RationalEdges>(&l.carrier());
+    return r ? r->denominators : none();
+}
+const TrainableRbfConfig* trainable(const Layer& l) {
+    const auto* t = std::get_if<TrainableRbfEdges>(&l.carrier());
+    return t ? &t->basis : nullptr;
+}
+const BSplineConfig* spline(const Layer& l) {
+    const auto* e = std::get_if<BasisEdges>(&l.carrier());
+    return e ? std::get_if<BSplineConfig>(&e->basis) : nullptr;
+}
+void set_rational(Layer& l, std::span<const double> a, std::span<const double> b, std::span<const double> bias) {
+    set_rational_parameters(l, a, b, bias);
+}
+void set_rbf(Layer& l, std::span<const double> c, std::span<const double> w) { set_rbf_parameters(l, c, w); }
+void knot(Layer& l, double x) { insert_knot(l, x); }
+double adapt(Layer& l, std::span<const double> x) { return adapt_grid(l, x); }
+std::vector<double> centers(const LayerGradients& g) {
+    const auto* t = std::get_if<TrainableRbfGradients>(&g.nonlinear);
+    return t ? t->centers : none();
+}
+std::vector<double> log_widths(const LayerGradients& g) {
+    const auto* t = std::get_if<TrainableRbfGradients>(&g.nonlinear);
+    return t ? t->log_widths : none();
+}
+std::vector<double> denominators(const LayerGradients& g) {
+    const auto* r = std::get_if<RationalGradients>(&g.nonlinear);
+    return r ? r->denominators : none();
+}
+#else
+bool is_rational(const Layer& l) { return l.is_rational(); }
+std::vector<double> denominators(const Layer& l) { return {l.denominators().begin(), l.denominators().end()}; }
+const TrainableRbfConfig* trainable(const Layer& l) {
+    return l.is_rational() ? nullptr : std::get_if<TrainableRbfConfig>(&l.basis());
+}
+const BSplineConfig* spline(const Layer& l) {
+    return l.is_rational() ? nullptr : std::get_if<BSplineConfig>(&l.basis());
+}
+void set_rational(Layer& l, std::span<const double> a, std::span<const double> b, std::span<const double> bias) {
+    l.set_rational_parameters(a, b, bias);
+}
+void set_rbf(Layer& l, std::span<const double> c, std::span<const double> w) { l.set_rbf_parameters(c, w); }
+void knot(Layer& l, double x) { l.insert_knot(x); }
+double adapt(Layer& l, std::span<const double> x) { return l.adapt_grid(x); }
+std::vector<double> centers(const LayerGradients& g) { return g.centers; }
+std::vector<double> log_widths(const LayerGradients& g) { return g.log_widths; }
+std::vector<double> denominators(const LayerGradients& g) { return g.denominators; }
+#endif
+} // namespace api
+
 void hex(const char* label, std::span<const double> values) {
     std::printf("%s[%zu]", label, values.size());
     for (double v : values) {
@@ -139,10 +204,10 @@ Layer seeded(Layer layer, double phase) {
     std::vector<double> c(layer.coefficients().size()), b(layer.bias().size());
     for (std::size_t k = 0; k < c.size(); ++k) c[k] = 0.05 * std::sin(phase + 0.37 * static_cast<double>(k));
     for (std::size_t k = 0; k < b.size(); ++k) b[k] = 0.01 * static_cast<double>(k);
-    if (layer.is_rational()) {
-        std::vector<double> d(layer.denominators().size());
+    if (api::is_rational(layer)) {
+        std::vector<double> d(api::denominators(layer).size());
         for (std::size_t k = 0; k < d.size(); ++k) d[k] = 0.03 * std::cos(phase + static_cast<double>(k));
-        layer.set_rational_parameters(c, d, b);
+        api::set_rational(layer, c, d, b);
     } else {
         layer.set_parameters(c, b);
     }
@@ -167,9 +232,9 @@ void dump_network(const char* name, const Network& network, const std::vector<do
             for (const auto& layer : g.layers) {
                 hex("dc", layer.coefficients);
                 hex("db", layer.bias);
-                hex("dcen", layer.centers);
-                hex("dlw", layer.log_widths);
-                hex("dden", layer.denominators);
+                hex("dcen", api::centers(layer));
+                hex("dlw", api::log_widths(layer));
+                hex("dden", api::denominators(layer));
             }
             gpu.sgd(0.05);
         }
@@ -177,8 +242,8 @@ void dump_network(const char* name, const Network& network, const std::vector<do
         for (const auto& layer : trained.layers()) {
             hex("c", layer.coefficients());
             hex("b", layer.bias());
-            hex("den", layer.denominators());
-            if (const auto* trainable = layer.is_rational() ? nullptr : std::get_if<TrainableRbfConfig>(&layer.basis())) {
+            hex("den", api::denominators(layer));
+            if (const auto* trainable = api::trainable(layer)) {
                 hex("cen", trainable->centers);
                 hex("lw", trainable->log_widths);
             }
@@ -186,9 +251,18 @@ void dump_network(const char* name, const Network& network, const std::vector<do
     });
 }
 
-void dump_resident() {
+struct NetworkFixture {
+    const char* name;
+    Network network;
+    std::vector<double> x;
+    std::size_t batch;
+    double l2;
+};
+
+std::vector<NetworkFixture> network_fixtures() {
     RationalConfig rational{3, 2, 0.1, 1.3, 1e-8};
-    const Network mixed({
+    std::vector<NetworkFixture> fixtures;
+    Network mixed({
         seeded(Layer(3, 4, ChebyshevConfig{5}), 0.1),
         seeded(Layer(4, 3, spline(3, {-1, -1, -1, -1, -0.5, 0, 0, 0.5, 1, 1, 1, 1})), 0.2),
         seeded(Layer(3, 3, trainable_rbf({-1, 0, 0.8}, {-0.5, 0.1, -0.2})), 0.3),
@@ -205,26 +279,105 @@ void dump_resident() {
     x[0] = -1;
     x[1] = 1;
     x[2] = 0;
-    dump_network("mixed", mixed, x, 6, 0.1);
+    fixtures.push_back({"mixed", std::move(mixed), x, 6, 0.1});
+    fixtures.push_back({"endpoints",
+                        Network({seeded(Layer(2, 2, JacobiConfig{6, 0.5, -0.3}), 0.2),
+                                 seeded(Layer(2, 1, spline(2, {-1, -1, -1, 0, 1, 1, 1})), 0.3)}),
+                        {-1, 1, 1, -1, 0.5, -0.5}, 3, 0});
+    fixtures.push_back({"hermite_overflow", Network({seeded(Layer(1, 1, HermiteConfig{8}), 0.1)}), {1e300}, 1, 0});
+    fixtures.push_back({"rational_pole", Network({[] {
+                            Layer l(1, 1, RationalConfig{1, 1, 0, 1, 1e-8});
+                            api::set_rational(l, std::vector<double>{1, -1}, std::vector<double>{-1},
+                                              std::vector<double>{0});
+                            return l;
+                        }()}),
+                        {1.0}, 1, 0});
+    fixtures.push_back({"rbf_tiny_width", Network({seeded(Layer(1, 1, rbf({0, 1e-3}, 1e-160)), 0.1)}),
+                        {1e-158}, 1, 0});
+    return fixtures;
+}
 
-    const Network endpoints({seeded(Layer(2, 2, JacobiConfig{6, 0.5, -0.3}), 0.2),
-                             seeded(Layer(2, 1, spline(2, {-1, -1, -1, 0, 1, 1, 1})), 0.3)});
-    dump_network("endpoints", endpoints, {-1, 1, 1, -1, 0.5, -0.5}, 3, 0);
-    dump_network("hermite_overflow", Network({seeded(Layer(1, 1, HermiteConfig{8}), 0.1)}),
-                 {1e300}, 1, 0);
-    dump_network("rational_pole", Network({[] {
-                     Layer l(1, 1, RationalConfig{1, 1, 0, 1, 1e-8});
-                     l.set_rational_parameters(std::vector<double>{1, -1}, std::vector<double>{-1},
-                                               std::vector<double>{0});
-                     return l;
-                 }()}),
-                 {1.0}, 1, 0);
-    dump_network("rbf_tiny_width", Network({seeded(Layer(1, 1, rbf({0, 1e-3}, 1e-160)), 0.1)}),
-                 {1e-158}, 1, 0);
+void dump_resident() {
+    for (const auto& f : network_fixtures()) dump_network(f.name, f.network, f.x, f.batch, f.l2);
+}
+
+void dump_parameters(const Network& network) {
+    for (const auto& layer : network.layers()) {
+        hex("c", layer.coefficients());
+        hex("b", layer.bias());
+        hex("den", api::denominators(layer));
+        if (const auto* trainable = api::trainable(layer)) {
+            hex("cen", trainable->centers);
+            hex("lw", trainable->log_widths);
+        }
+        if (const auto* s = api::spline(layer)) hex("knots", s->knots);
+    }
+}
+
+// CPU Layer/Network execution on the resident fixtures: the same three
+// forward/backward(+L2)/SGD steps, then the family operations.
+void dump_layers() {
+    for (auto& f : network_fixtures()) {
+        guarded(std::string("cpu ") + f.name, [&] {
+            auto network = f.network;
+            const auto outputs = network.layers().back().outputs();
+            std::vector<double> upstream(f.batch * outputs);
+            for (std::size_t k = 0; k < upstream.size(); ++k) upstream[k] = std::cos(0.7 * static_cast<double>(k));
+            for (int step = 0; step < 3; ++step) {
+                hex("y", network.forward(f.x, f.batch));
+                auto g = network.backward(f.x, f.batch, upstream);
+                const auto penalty = network.regularization(f.l2);
+                hex("pen", std::vector<double>{penalty.value});
+                hex("dx", g.input);
+                for (std::size_t j = 0; j < g.layers.size(); ++j) {
+                    auto& layer = g.layers[j];
+                    for (std::size_t k = 0; k < layer.coefficients.size(); ++k)
+                        layer.coefficients[k] += penalty.gradients.layers[j].coefficients[k];
+                    hex("dc", layer.coefficients);
+                    hex("db", layer.bias);
+                    hex("dcen", api::centers(layer));
+                    hex("dlw", api::log_widths(layer));
+                    hex("dden", api::denominators(layer));
+                }
+                network.sgd(g, 0.05);
+            }
+            dump_parameters(network);
+        });
+    }
+    const auto fixtures = network_fixtures();
+    const auto layers = fixtures.front().network.layers();
+    std::vector<Layer> mixed(layers.begin(), layers.end());
+    const std::vector<double> probe{-0.9, -0.3, 0.2, 0.7, 0.95, -0.55, 0.1, 0.45};
+    guarded("cpu spline refinement", [&] {
+        auto& l = mixed[1];
+        api::knot(l, 0.3);
+        hex("knot", std::vector<double>{api::adapt(l, std::vector<double>{-0.8, -0.7, -0.6, -0.65, 0.9, 4})});
+        hex("y", l.forward(probe, 2));
+        dump_parameters(Network({l}));
+    });
+    guarded("cpu spline outside", [&] { api::knot(mixed[1], 5); });
+    guarded("cpu spline empty", [&] { api::adapt(mixed[1], std::vector<double>{7}); });
+    guarded("cpu knot on chebyshev", [&] { api::knot(mixed[0], 0.1); });
+    guarded("cpu rbf setter", [&] {
+        auto& l = mixed[2];
+        api::set_rbf(l, std::vector<double>{-0.9, 0.1, 0.7}, std::vector<double>{-0.4, 0.2, -0.1});
+        hex("y", l.forward(std::vector<double>{0.1, -0.2, 0.3}, 1));
+        const auto g = l.backward(std::vector<double>{0.1, -0.2, 0.3}, 1, std::vector<double>{1, -1, 0.5});
+        hex("dcen", api::centers(g));
+        hex("dlw", api::log_widths(g));
+    });
+    guarded("cpu rbf count", [&] { api::set_rbf(mixed[2], std::vector<double>{0}, std::vector<double>{0}); });
+    guarded("cpu rational shape", [&] {
+        api::set_rational(mixed[3], std::vector<double>{1}, std::vector<double>{}, std::vector<double>{0, 0});
+    });
 }
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--layers") == 0) {
+        dump_layers();
+        return 0;
+    }
     const bool cpu_only = argc > 1 && std::strcmp(argv[1], "--cpu") == 0;
     dump_basis();
     dump_rational();

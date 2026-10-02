@@ -1,5 +1,5 @@
 // Typed per-family basis configuration (backlog R1).
-#include "kan/layer.hpp"
+#include "kan/families.hpp"
 #include "support/test.hpp"
 
 #include <limits>
@@ -71,32 +71,35 @@ TEST(only_trainable_rbf_returns_nonlinear_derivatives) {
 
 TEST(layer_exposes_its_typed_configuration) {
     kan::Layer spline(2, 1, kan::BSplineConfig{1, {-1, -1, 0, 1, 1}});
-    REQUIRE(std::holds_alternative<kan::BSplineConfig>(spline.basis()));
+    const auto basis = [](const kan::Layer& layer) { return std::get<kan::BasisEdges>(layer.carrier()).basis; };
+    REQUIRE(std::holds_alternative<kan::BSplineConfig>(basis(spline)));
     REQUIRE(spline.coefficients().size() == 2 * 3);
-    spline.insert_knot(0.5);
-    const auto& refined = std::get<kan::BSplineConfig>(spline.basis());
+    kan::insert_knot(spline, 0.5);
+    const auto refined = std::get<kan::BSplineConfig>(basis(spline));
     REQUIRE(refined.knots.size() == 6);
-    REQUIRE(kan::basis_size(spline.basis()) == 4);
+    REQUIRE(kan::basis_size(basis(spline)) == 4);
     REQUIRE(spline.coefficients().size() == 2 * 4);
 
     kan::Layer fixed(1, 1, kan::GaussianRbfConfig{{0, 1}, 0.7});
     test::throws<std::invalid_argument>([&] {
-        fixed.set_rbf_parameters(std::vector<double>{0, 1}, std::vector<double>{0, 0});
+        kan::set_rbf_parameters(fixed, std::vector<double>{0, 1}, std::vector<double>{0, 0});
     });
     kan::Layer trainable(1, 1, kan::TrainableRbfConfig{{0, 1}, {0, 0}});
-    trainable.set_rbf_parameters(std::vector<double>{0.1, 0.9}, std::vector<double>{-0.1, 0.1});
-    const auto before = trainable.basis();
+    kan::set_rbf_parameters(trainable, std::vector<double>{0.1, 0.9}, std::vector<double>{-0.1, 0.1});
+    const auto rbf_basis = [](const kan::Layer& layer) { return std::get<kan::TrainableRbfEdges>(layer.carrier()).basis; };
+    const auto before = rbf_basis(trainable);
     // The derived term count cannot change through the parameter setter.
     test::throws<std::invalid_argument>([&] {
-        trainable.set_rbf_parameters(std::vector<double>{0, 1, 2}, std::vector<double>{0, 0, 0});
+        kan::set_rbf_parameters(trainable, std::vector<double>{0, 1, 2}, std::vector<double>{0, 0, 0});
     });
-    REQUIRE(trainable.basis() == before);
-    const auto& rbf = std::get<kan::TrainableRbfConfig>(trainable.basis());
+    REQUIRE(rbf_basis(trainable) == before);
+    const auto rbf = rbf_basis(trainable);
     REQUIRE(rbf.centers == (std::vector<double>{0.1, 0.9}));
     REQUIRE(rbf.log_widths == (std::vector<double>{-0.1, 0.1}));
     const auto gradient = trainable.backward(std::vector<double>{0.3}, 1, std::vector<double>{1});
-    REQUIRE(gradient.centers.size() == 2);
-    REQUIRE(gradient.log_widths.size() == 2);
+    const auto& nonlinear = std::get<kan::TrainableRbfGradients>(gradient.nonlinear);
+    REQUIRE(nonlinear.centers.size() == 2);
+    REQUIRE(nonlinear.log_widths.size() == 2);
 }
 
 int main() { return test::run(); }

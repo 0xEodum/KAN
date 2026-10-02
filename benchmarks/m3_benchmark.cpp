@@ -28,14 +28,24 @@ kan::BasisConfig family_basis(int family) {
 // Configured centers / trainable log widths (empty where the family has none).
 const std::vector<double>& centers(const kan::Layer& l) {
     static const std::vector<double> none;
-    if (const auto* m = std::get_if<kan::MexicanHatConfig>(&l.basis())) return m->centers;
-    if (const auto* t = std::get_if<kan::TrainableRbfConfig>(&l.basis())) return t->centers;
+    if (const auto* e = std::get_if<kan::BasisEdges>(&l.carrier()))
+        if (const auto* m = std::get_if<kan::MexicanHatConfig>(&e->basis)) return m->centers;
+    if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) return t->basis.centers;
     return none;
 }
 const std::vector<double>& log_widths(const kan::Layer& l) {
     static const std::vector<double> none;
-    if (const auto* t = std::get_if<kan::TrainableRbfConfig>(&l.basis())) return t->log_widths;
+    if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) return t->basis.log_widths;
     return none;
+}
+// Trainable RBF gradient vectors (empty for the other carriers).
+std::span<const double> centers(const kan::LayerGradients& g) {
+    const auto* t = std::get_if<kan::TrainableRbfGradients>(&g.nonlinear);
+    return t ? std::span<const double>(t->centers) : std::span<const double>();
+}
+std::span<const double> log_widths(const kan::LayerGradients& g) {
+    const auto* t = std::get_if<kan::TrainableRbfGradients>(&g.nonlinear);
+    return t ? std::span<const double>(t->log_widths) : std::span<const double>();
 }
 kan::Network network(const Case& c) {
     const auto basis = family_basis(c.family);
@@ -70,7 +80,7 @@ double checksum(std::span<const double> values) {
 }
 double checksum(const kan::NetworkGradients& g) {
     double result = checksum(g.input);
-    for (const auto& layer : g.layers) result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(layer.centers) + checksum(layer.log_widths);
+    for (const auto& layer : g.layers) result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(centers(layer)) + checksum(log_widths(layer));
     return result;
 }
 double checksum(const kan::Network& n) {
@@ -184,8 +194,8 @@ double verify(const Result& expected, const Result& actual) {
     for (std::size_t l = 0; l < expected.parameters.layers().size(); ++l) {
         error = std::max(error, compare(expected.gradients.layers[l].coefficients, actual.gradients.layers[l].coefficients));
         error = std::max(error, compare(expected.gradients.layers[l].bias, actual.gradients.layers[l].bias));
-        error = std::max(error, compare(expected.gradients.layers[l].centers, actual.gradients.layers[l].centers));
-        error = std::max(error, compare(expected.gradients.layers[l].log_widths, actual.gradients.layers[l].log_widths));
+        error = std::max(error, compare(centers(expected.gradients.layers[l]), centers(actual.gradients.layers[l])));
+        error = std::max(error, compare(log_widths(expected.gradients.layers[l]), log_widths(actual.gradients.layers[l])));
         error = std::max(error, compare(centers(expected.parameters.layers()[l]), centers(actual.parameters.layers()[l])));
         error = std::max(error, compare(log_widths(expected.parameters.layers()[l]), log_widths(actual.parameters.layers()[l])));
         error = std::max(error, compare(expected.parameters.layers()[l].coefficients(), actual.parameters.layers()[l].coefficients()));

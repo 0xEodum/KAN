@@ -35,16 +35,37 @@ class Bindings(unittest.TestCase):
         self.assertEqual(kan.JacobiConfig(size=3, alpha=.5), kan.JacobiConfig(size=3, alpha=.5))
         self.assertNotEqual(kan.JacobiConfig(size=3, alpha=.5), kan.JacobiConfig(size=3))
         layer = kan.Layer(1, 1, spline)
-        self.assertIsInstance(layer.basis, kan.BSplineConfig)
-        self.assertEqual(layer.basis, spline)
-        layer.insert_knot(.25)
-        self.assertEqual(layer.basis.size, 5)
+        self.assertIsInstance(layer.carrier, kan.BasisEdges)
+        self.assertIsInstance(layer.carrier.basis, kan.BSplineConfig)
+        self.assertEqual(layer.carrier.basis, spline)
+        kan.insert_knot(layer, .25)
+        self.assertEqual(layer.carrier.basis.size, 5)
+        self.assertEqual(layer.terms, 5)
         self.assertEqual(layer.coefficients.shape, (1, 1, 5))
-        self.assertIsInstance(kan.Layer(1, 1, kan.ChebyshevConfig()).basis, kan.ChebyshevConfig)
+        self.assertIsInstance(kan.Layer(1, 1, kan.ChebyshevConfig()).carrier.basis, kan.ChebyshevConfig)
         with self.assertRaises(ValueError):
             kan.Layer(1, 1, kan.TrainableRbfConfig(centers=[0., 1.], log_widths=[0.]))
         with self.assertRaises(ValueError):
             kan.Layer(1, 1, kan.GaussianRbfConfig())
+
+    def test_carriers_and_family_functions(self):
+        rbf = kan.Layer(2, 1, kan.TrainableRbfConfig(centers=[0., 1.], log_widths=[0., .1]))
+        self.assertIsInstance(rbf.carrier, kan.TrainableRbfEdges)
+        self.assertEqual(rbf.carrier.coefficients.shape, (1, 2, 2))
+        kan.set_rbf_parameters(rbf, np.array([.2, .8]), np.array([-.1, .3]))
+        self.assertEqual(rbf.carrier.basis.centers, [.2, .8])
+        with self.assertRaises(ValueError):
+            kan.set_rbf_parameters(rbf, np.array([.2]), np.array([.1]))
+        cheb = kan.Layer(1, 1, kan.ChebyshevConfig(size=3))
+        with self.assertRaises(ValueError):
+            kan.set_rbf_parameters(cheb, np.array([0.]), np.array([0.]))
+        with self.assertRaises(ValueError):
+            kan.insert_knot(cheb, .5)
+        g = cheb.backward(np.array([[.3]]), np.array([[1.]]))
+        self.assertEqual(g.centers.shape, (0,))
+        self.assertEqual(g.denominators.shape, (0,))
+        with self.assertRaises(ValueError):
+            rbf.sgd(g, .1)
 
     def test_basis_independent_values_and_derivatives(self):
         x = 0.31

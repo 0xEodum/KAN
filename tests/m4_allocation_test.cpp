@@ -1,4 +1,6 @@
 #include "kan/layer.hpp"
+#include "kan/families.hpp"
+#include "support/families.hpp"
 #include "support/test.hpp"
 #include <cstdlib>
 #include <new>
@@ -18,8 +20,8 @@ TEST(complete_rational_layer_call_has_no_per_edge_heap_allocations) {
     bool bounded=true;
     for(std::size_t width:{1u,8u,32u})for(std::size_t batch:{1u,64u}) {
         kan::Layer layer(width,width,config);
-        std::vector<double> a(layer.coefficients().size(),0.01),b(layer.denominators().size(),0.01),bias(width);
-        layer.set_rational_parameters(a,b,bias);
+        std::vector<double> a(layer.coefficients().size(),0.01),b(test::denominators(layer).size(),0.01),bias(width);
+        kan::set_rational_parameters(layer,a,b,bias);
         std::vector<double> x(width*batch,0.2),up(width*batch,0.1);
         allocation_count=0;counting=true;
         auto y=layer.forward(x,batch);auto gradient=layer.backward(x,batch,up);layer.sgd(gradient,0.001);

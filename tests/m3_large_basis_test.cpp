@@ -23,7 +23,7 @@ int main() {
         gpu.forward();gpu.backward();const auto g=gpu.download_gradients();
         const double expected=0.2*std::exp(-1.0);
         for(std::size_t k=terms-4;k<terms;++k) {
-            const auto actual=g.layers[0].log_widths[k];
+            const auto actual=std::get<kan::TrainableRbfGradients>(g.layers[0].nonlinear).log_widths[k];
             if(!std::isfinite(actual)||std::abs(actual-expected)>1e-12) {
                 std::cerr<<"FAIL unwritten nonlinear gradient at "<<k<<": actual="<<actual<<" expected="<<expected<<'\n';return 1;
             }

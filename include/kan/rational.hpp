@@ -12,6 +12,7 @@ struct RationalConfig {
     double center = 0;
     double scale = 1;
     double epsilon = 1e-8;
+    bool operator==(const RationalConfig&) const = default;
 };
 
 struct RationalEvaluation {

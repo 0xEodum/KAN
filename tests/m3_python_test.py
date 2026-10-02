@@ -33,17 +33,17 @@ class M3(unittest.TestCase):
             for k in range(4):
                 values = []
                 for sign in [1, -1]:
-                    b = l.basis
+                    b = l.carrier.basis
                     a = list(getattr(b, key)); a[k] += sign * 1e-6
                     setattr(b, key, a)
                     q = kan.Layer(1, 1, b); q.set_parameters(l.coefficients, l.bias)
                     values.append(float((q.forward(x) * u).sum()))
                 self.assertAlmostEqual(getattr(g, key)[k], (values[0]-values[1])/2e-6, places=8)
-        before = np.array(l.basis.centers)
+        before = np.array(l.carrier.basis.centers)
         g.centers[:] = 100  # returned gradient arrays own snapshots
         l.sgd(g, .01)
-        self.assertFalse(np.array_equal(l.basis.centers, before))
-        self.assertLess(np.max(np.abs(np.array(l.basis.centers)-before)), 1)
+        self.assertFalse(np.array_equal(l.carrier.basis.centers, before))
+        self.assertLess(np.max(np.abs(np.array(l.carrier.basis.centers)-before)), 1)
 
     def test_refine_regularize_and_holdout_fit(self):
         l = kan.Layer(1, 1, config(kan.BSplineConfig))
@@ -55,13 +55,13 @@ class M3(unittest.TestCase):
         self.assertLess(float(np.mean((l.forward(hold)-(hold*hold-.3*hold+.2))**2)), 1e-6)
         before = l.forward(hold)
         old_g = l.backward(x, np.ones_like(x))
-        l.insert_knot(.4); l.adapt_grid(np.array([.1, .15, .2, .8]))
+        kan.insert_knot(l, .4); kan.adapt_grid(l, np.array([.1, .15, .2, .8]))
         np.testing.assert_allclose(l.forward(hold), before, rtol=1e-13, atol=1e-13)
         with self.assertRaises(ValueError): l.sgd(old_g, .1)
         value, g = l.regularization(.2)
         self.assertAlmostEqual(value, float(.1*(l.coefficients**2).sum()))
         np.testing.assert_allclose(g.coefficients, .2*l.coefficients)
-        with self.assertRaises(TypeError): l.adapt_grid(np.array([.1], dtype=np.float32))
+        with self.assertRaises(TypeError): kan.adapt_grid(l, np.array([.1], dtype=np.float32))
         n = kan.Network([l]); n.insert_knot(0, .6)
         np.testing.assert_allclose(n.forward(hold), before, atol=1e-13)
 
