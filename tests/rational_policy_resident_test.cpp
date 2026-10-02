@@ -130,9 +130,17 @@ TEST(resident_safe_policies_report_overflow_not_poles) {
         kan::set_rational_parameters(huge, std::vector<double>{1}, std::vector<double>{1e200}, std::vector<double>{0});
         kan::cuda::ResidentNetwork over(kan::Network({huge}), 1);
         over.upload_input(std::vector<double>{1e110}, 1);
-        // Smooth: S^2 overflows. Absolute: dr/db = -r sign(S) z / Q is finite,
-        // but Q = 1 + |S| itself overflows.
+        // S = b z = 1e310 overflows in Horner for both policies (for a finite
+        // S, 1 + |S| cannot overflow; Smooth also fails when only S^2 does).
         test::throws<std::overflow_error>([&] { over.forward(); });
+        // S = 1e210 is finite: Absolute evaluates, Smooth overflows in S^2.
+        over.upload_input(std::vector<double>{1e10}, 1);
+        if (policy == DenominatorPolicy::Smooth) {
+            test::throws<std::overflow_error>([&] { over.forward(); });
+        } else {
+            over.forward();
+            test::near(over.download_output()[0] / 1e-210, 1);
+        }
     }
 }
 

@@ -5,7 +5,9 @@
 #include "kan/rational.hpp"
 #include "support/families.hpp"
 #include "support/test.hpp"
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <utility>
 
@@ -160,6 +162,75 @@ TEST(representable_vjps_survive_underflowing_slopes) {
     c = config(DenominatorPolicy::Absolute, 0, 2);
     r = kan::evaluate_rational(c, 1e-200, std::vector<double>{1e300}, std::vector<double>{-1e-50, 0});
     test::near(r.denominator_derivatives[1] / 1e-100, 1, 1e-10);
+}
+
+TEST(log_space_paths_with_negative_signs) {
+    // Smooth, z = -1e-200: g = 2S < 0, z^2 > 0, so dr/db_2 = -r g z^2/Q > 0.
+    auto c = config(DenominatorPolicy::Smooth, 0, 2);
+    auto r = kan::evaluate_rational(c, -1e-200, std::vector<double>{1e300}, std::vector<double>{1e100, 0});
+    test::near(r.denominator_derivatives[0] / -2.0, 1, 1e-12);
+    test::near(r.denominator_derivatives[1] / 2e-200, 1, 1e-10);
+    // Smooth, z = -1: Q' = 2 S S' = -2 b^2 underflows; dr/dx = -r Q'/Q > 0.
+    const double b = 1.2345e-160, p = 1e300;
+    c = config(DenominatorPolicy::Smooth, 0, 1);
+    r = kan::evaluate_rational(c, -1, std::vector<double>{p}, std::vector<double>{b});
+    test::near(r.input_derivative / ((p * b) * 2 * b), 1, 1e-12);
+    // Absolute, odd power of a negative tiny z (z^3 underflows):
+    // S < 0, g = -1, dr/db_3 = -r g z^3/Q = -1e300 * 1e-600 < 0.
+    c = config(DenominatorPolicy::Absolute, 0, 3);
+    r = kan::evaluate_rational(c, -1e-200, std::vector<double>{1e300}, std::vector<double>{1, 0, 0});
+    test::near(r.denominator_derivatives[0] / -1e100, 1, 1e-12);
+    test::near(r.denominator_derivatives[2] / -1e-300, 1, 1e-10);
+}
+
+TEST(set_carrier_rejects_an_unknown_policy) {
+    kan::Layer layer(1, 1, config(DenominatorPolicy::Absolute, 1, 1));
+    auto edges = std::get<kan::RationalEdges>(layer.carrier());
+    edges.config.denominator_policy = static_cast<DenominatorPolicy>(-1);
+    test::throws<std::invalid_argument>([&] { layer.set_carrier(edges); });
+    REQUIRE(std::get<kan::RationalEdges>(layer.carrier()).config.denominator_policy == DenominatorPolicy::Absolute);
+}
+
+namespace {
+// evaluate_rational results of the pre-M2 code (5dc6819) as exact bit
+// patterns: the default policy must reproduce them bit for bit.
+struct Pinned {
+    double value, input;
+    std::vector<double> a, b;
+};
+void require_bits(double actual, double expected) {
+    REQUIRE(std::bit_cast<std::uint64_t>(actual) == std::bit_cast<std::uint64_t>(expected));
+}
+void require_pinned(const kan::RationalConfig& c, double x, const std::vector<double>& a,
+                    const std::vector<double>& b, const Pinned& expected) {
+    REQUIRE(c.denominator_policy == DenominatorPolicy::Guarded);
+    const auto r = kan::evaluate_rational(c, x, a, b);
+    require_bits(r.value, expected.value);
+    require_bits(r.input_derivative, expected.input);
+    for (std::size_t k = 0; k < a.size(); ++k) require_bits(r.numerator_derivatives[k], expected.a[k]);
+    for (std::size_t k = 0; k < b.size(); ++k) require_bits(r.denominator_derivatives[k], expected.b[k]);
+}
+} // namespace
+
+TEST(default_policy_is_bit_identical_to_pre_m2_formulas) {
+    const kan::RationalConfig c{3, 2, 0.1, 1.3, 1e-8};
+    const std::vector<double> a{0.3, -0.2, 0.11, 0.05}, b{0.4, -0.25};
+    require_pinned(c, 0.7, a, b, {0x1.ab48294361de5p-3, -0x1.1b8d2fcf27fd6p-4,
+        {0x1.c48d639d74c0dp-1, 0x1.a1bd97077f76ep-2, 0x1.819b5055b0bc8p-3, 0x1.63f1d400545f3p-4},
+        {-0x1.5c9e7dc8a69ccp-4, -0x1.41cd606a72695p-5}});
+    require_pinned(c, -1.9, a, b, {-0x1.a7f9b2ce60195p+1, -0x1.b683912ed57cep+3,
+        {-0x1.3507507507509p+2, 0x1.db6db6db6db6fp+2, -0x1.6db6db6db6db8p+3, 0x1.1951951951952p+4},
+        {0x1.89b101767dce7p+4, -0x1.2ed6ed6ed6ed9p+5}});
+    // Log-space paths (underflowing powers and quotients).
+    require_pinned({0, 2, 0, 1, 1e-8}, 1e-200, {1e300}, {0, 0},
+        {0x1.7e43c8800759cp+996, 0, {1}, {-0x1.249ad2594c37dp+332, -0x1.bff2ee48e0319p-333}});
+    require_pinned({0, 1, 0, 1, 1e-8}, 1e300, {1e-300}, {1e-270},
+        {0, 0, {0x1.4484bfeebc29fp-100}, {-0x1.9b604aaaca649p-200}});
+    require_pinned({6, 4, -0.2, 0.9, 1e-8}, 1.3, {0.1, 0.2, -0.3, 0.05, 0.01, -0.02, 0.003}, {0.1, -0.05, 0.02, 0.01},
+        {-0x1.e622d64d105cap-3, -0x1.3e8eff2a8dccap-1,
+         {0x1.ab8be054741fbp-1, 0x1.6449e59bb61a6p+0, 0x1.28e83f5717c0ap+1, 0x1.eed8699127964p+1,
+          0x1.9c5f02a3a0fd3p+2, 0x1.57a4823306285p+3, 0x1.1e5e6c7fda76ep+4},
+         {0x1.524a62fb90aa0p-2, 0x1.19e8a7d1a3385p-1, 0x1.d5d917b2bab31p-1, 0x1.878a3e6a463fep+0}});
 }
 
 namespace {
