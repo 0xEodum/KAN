@@ -127,6 +127,12 @@ if(BUILD_TESTING)
         target_link_libraries(rational_policy_resident_test PRIVATE kan::cuda)
         add_test(NAME rational_policy_resident COMMAND rational_policy_resident_test)
         set_tests_properties(rational_policy_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog C2: GEMM contraction engine.
+        add_executable(resident_contraction_test tests/resident_contraction_test.cpp)
+        target_include_directories(resident_contraction_test PRIVATE tests)
+        target_link_libraries(resident_contraction_test PRIVATE kan::cuda)
+        add_test(NAME resident_contraction COMMAND resident_contraction_test)
+        set_tests_properties(resident_contraction PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
