@@ -1,0 +1,532 @@
+== 1. tests/carrier_test.cpp against the headers of 4a73811
+carrier_test.cpp
+tests\carrier_test.cpp(4): fatal error C1083: Cannot open include file: 'kan/families.hpp': No such file or directory
+
+== 2. the same, with a stub kan/families.hpp (only includes kan/layer.hpp) to expose the API errors
+carrier_test.cpp
+tests\carrier_test.cpp(26): error C2039: 'BasisEdges': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(26): error C2065: 'BasisEdges': undeclared identifier
+tests\carrier_test.cpp(26): error C2039: 'carrier': is not a member of 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(26): error C2672: 'std::get_if': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1270): note: could be '_Add_pointer<const _Ty,void>::type std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(26): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1259): note: or       '_Add_pointer<_Ty,void>::type std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(26): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1252): note: or       'auto std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(26): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(26): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1246): note: or       'auto std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(26): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(26): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(27): error C3536: 'linear': cannot be used before it is initialized
+tests\carrier_test.cpp(30): error C2248: 'kan::Layer::terms': cannot access private member declared in class 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(56): note: see declaration of 'kan::Layer::terms'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(33): error C2039: 'TrainableRbfEdges': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(33): error C2065: 'TrainableRbfEdges': undeclared identifier
+tests\carrier_test.cpp(33): error C2039: 'carrier': is not a member of 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(33): error C2672: 'std::get_if': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1270): note: could be '_Add_pointer<const _Ty,void>::type std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(33): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1259): note: or       '_Add_pointer<_Ty,void>::type std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(33): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1252): note: or       'auto std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(33): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(33): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1246): note: or       'auto std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(33): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(33): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(34): error C3536: 'nonlinear': cannot be used before it is initialized
+tests\carrier_test.cpp(39): error C2039: 'RationalEdges': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(39): error C2065: 'RationalEdges': undeclared identifier
+tests\carrier_test.cpp(39): error C2039: 'carrier': is not a member of 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(39): error C2672: 'std::get_if': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1270): note: could be '_Add_pointer<const _Ty,void>::type std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(39): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1259): note: or       '_Add_pointer<_Ty,void>::type std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(39): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1252): note: or       'auto std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(39): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(39): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1246): note: or       'auto std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(39): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(39): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(40): error C3536: 'edges': cannot be used before it is initialized
+tests\carrier_test.cpp(44): error C2248: 'kan::Layer::terms': cannot access private member declared in class 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(56): note: see declaration of 'kan::Layer::terms'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(51): error C2039: 'nonlinear': is not a member of 'kan::LayerGradients'
+<worktree of 4a73811>\include\kan/layer.hpp(11): note: see declaration of 'kan::LayerGradients'
+tests\carrier_test.cpp(51): error C2672: 'std::holds_alternative': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1148): note: could be 'bool std::holds_alternative(const std::variant<_Types...> &) noexcept'
+tests\carrier_test.cpp(56): error C2039: 'TrainableRbfGradients': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(56): error C2065: 'TrainableRbfGradients': undeclared identifier
+tests\carrier_test.cpp(56): error C2039: 'nonlinear': is not a member of 'kan::LayerGradients'
+<worktree of 4a73811>\include\kan/layer.hpp(11): note: see declaration of 'kan::LayerGradients'
+tests\carrier_test.cpp(56): error C2672: 'std::get_if': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1270): note: could be '_Add_pointer<const _Ty,void>::type std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(56): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1259): note: or       '_Add_pointer<_Ty,void>::type std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(56): note: 'std::get_if': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1252): note: or       'auto std::get_if(const std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(56): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(56): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1246): note: or       'auto std::get_if(std::variant<_Types...> *) noexcept'
+tests\carrier_test.cpp(56): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(56): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(57): error C3536: 'rbf_gradient': cannot be used before it is initialized
+tests\carrier_test.cpp(60): error C2039: 'TrainableRbfGradients': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(60): error C2065: 'TrainableRbfGradients': undeclared identifier
+tests\carrier_test.cpp(60): error C2039: 'nonlinear': is not a member of 'kan::LayerGradients'
+<worktree of 4a73811>\include\kan/layer.hpp(11): note: see declaration of 'kan::LayerGradients'
+tests\carrier_test.cpp(60): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: could be 'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(60): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(60): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(64): error C2039: 'RationalGradients': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(64): error C2065: 'RationalGradients': undeclared identifier
+tests\carrier_test.cpp(64): error C2039: 'nonlinear': is not a member of 'kan::LayerGradients'
+<worktree of 4a73811>\include\kan/layer.hpp(11): note: see declaration of 'kan::LayerGradients'
+tests\carrier_test.cpp(64): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: could be 'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(64): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(64): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(65): error C2039: 'RationalGradients': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(65): error C2065: 'RationalGradients': undeclared identifier
+tests\carrier_test.cpp(65): error C2039: 'nonlinear': is not a member of 'kan::LayerGradients'
+<worktree of 4a73811>\include\kan/layer.hpp(11): note: see declaration of 'kan::LayerGradients'
+tests\carrier_test.cpp(65): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: could be 'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(65): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(65): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(72): error C2039: 'RationalEdges': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(72): error C2065: 'RationalEdges': undeclared identifier
+tests\carrier_test.cpp(72): error C2039: 'carrier': is not a member of 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(72): error C2672: 'std::get': no matching overloaded function found
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(969): note: could be 'const _Ty &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(957): note: or       '_Ty &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(945): note: or       'const _Ty &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\tuple(933): note: or       '_Ty &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1234): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1223): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1212): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1201): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1190): note: or       'decltype(auto) std::get(const std::variant<_Types...> &&)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1180): note: or       'decltype(auto) std::get(const std::variant<_Types...> &)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1170): note: or       'decltype(auto) std::get(std::variant<_Types...> &&)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\variant(1160): note: or       'decltype(auto) std::get(std::variant<_Types...> &)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(433): note: or       'auto std::ranges::get(const std::ranges::subrange<_It,_Se,_Ki> &)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\__msvc_iter_core.hpp(437): note: or       'auto std::ranges::get(std::ranges::subrange<_It,_Se,_Ki> &&)'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(764): note: or       'const _Ty2 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(758): note: or       'const _Ty1 &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(748): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(const std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(742): note: or       '_Ty2 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(736): note: or       '_Ty1 &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(726): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &&std::get(std::pair<_Ty1,_Ty2> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(720): note: or       'const _Ty2 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(714): note: or       'const _Ty1 &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(704): note: or       'const tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(const std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(698): note: or       '_Ty2 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty2', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(692): note: or       '_Ty1 &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: 'std::get': invalid template argument for '_Ty1', type expected
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(682): note: or       'tuple_element<_Idx,std::pair<_Ty1,_Ty2>>::type &std::get(std::pair<_Ty1,_Ty2> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(206): note: or       'const _Ty &&std::get(const std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(203): note: or       '_Ty &&std::get(std::array<_Ty,_Size> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(200): note: or       'const _Ty &std::get(const std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(197): note: or       '_Ty &std::get(std::array<_Ty,_Size> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(194): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(const std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(191): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &&std::get(std::tuple<_Types...> &&) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(188): note: or       'const tuple_element<_Index,std::tuple<_Types...>>::type &std::get(const std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\include\utility(185): note: or       'tuple_element<_Index,std::tuple<_Types...>>::type &std::get(std::tuple<_Types...> &) noexcept'
+tests\carrier_test.cpp(72): note: expression did not evaluate to a constant
+tests\carrier_test.cpp(72): note: a non-constant (sub-)expression was encountered
+tests\carrier_test.cpp(72): error C2530: 'edges': references must be initialized
+tests\carrier_test.cpp(73): error C3536: 'edges': cannot be used before it is initialized
+tests\carrier_test.cpp(83): error C2039: 'carrier': is not a member of 'kan::Layer'
+<worktree of 4a73811>\include\kan/layer.hpp(25): note: see declaration of 'kan::Layer'
+tests\carrier_test.cpp(83): error C2737: 'before': const object must be initialized
+tests\carrier_test.cpp(85): error C2760: syntax error: '{' was unexpected here; expected ')'
+tests\carrier_test.cpp(85): error C3878: syntax error: unexpected token 'kan' following 'expression'
+tests\carrier_test.cpp(85): error C2760: syntax error: '}' was unexpected here; expected ';'
+tests\carrier_test.cpp(85): error C2059: syntax error: ','
+tests\carrier_test.cpp(85): error C2059: syntax error: ')'
+tests\carrier_test.cpp(85): error C2059: syntax error: '}'
+tests\carrier_test.cpp(85): error C2143: syntax error: missing ';' before '}'
+tests\carrier_test.cpp(85): error C2059: syntax error: ')'
+tests\carrier_test.cpp(86): error C3409: empty attribute block is not allowed
+tests\carrier_test.cpp(86): error C2143: syntax error: missing ']' before '&'
+tests\carrier_test.cpp(86): error C2059: syntax error: '&'
+tests\carrier_test.cpp(86): error C2143: syntax error: missing ')' before '{'
+tests\carrier_test.cpp(86): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(86): error C2244: 'throws': unable to match function definition to an existing declaration
+tests\carrier_test.cpp(86): note: see declaration of 'throws'
+tests\carrier_test.cpp(86): error C2059: syntax error: ')'
+tests\carrier_test.cpp(87): error C3409: empty attribute block is not allowed
+tests\carrier_test.cpp(87): error C2143: syntax error: missing ']' before '&'
+tests\carrier_test.cpp(87): error C2059: syntax error: '&'
+tests\carrier_test.cpp(87): error C2143: syntax error: missing ')' before '{'
+tests\carrier_test.cpp(87): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(87): error C2244: 'throws': unable to match function definition to an existing declaration
+tests\carrier_test.cpp(87): note: see declaration of 'throws'
+tests\carrier_test.cpp(89): error C2059: syntax error: ')'
+tests\carrier_test.cpp(91): error C3409: empty attribute block is not allowed
+tests\carrier_test.cpp(91): error C2143: syntax error: missing ']' before '&'
+tests\carrier_test.cpp(91): error C2059: syntax error: '&'
+tests\carrier_test.cpp(91): error C2143: syntax error: missing ')' before '{'
+tests\carrier_test.cpp(91): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(91): error C2244: 'throws': unable to match function definition to an existing declaration
+tests\carrier_test.cpp(91): note: see declaration of 'throws'
+tests\carrier_test.cpp(91): error C2059: syntax error: ')'
+tests\carrier_test.cpp(92): error C3409: empty attribute block is not allowed
+tests\carrier_test.cpp(92): error C2143: syntax error: missing ']' before '&'
+tests\carrier_test.cpp(92): error C2059: syntax error: '&'
+tests\carrier_test.cpp(92): error C2143: syntax error: missing ')' before '{'
+tests\carrier_test.cpp(92): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(92): error C2244: 'throws': unable to match function definition to an existing declaration
+tests\carrier_test.cpp(92): note: see declaration of 'throws'
+tests\carrier_test.cpp(94): error C2059: syntax error: ')'
+tests\carrier_test.cpp(95): error C3409: empty attribute block is not allowed
+tests\carrier_test.cpp(95): error C2143: syntax error: missing ']' before '&'
+tests\carrier_test.cpp(95): error C2059: syntax error: '&'
+tests\carrier_test.cpp(95): error C2143: syntax error: missing ')' before '{'
+tests\carrier_test.cpp(95): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(95): error C2244: 'throws': unable to match function definition to an existing declaration
+tests\carrier_test.cpp(95): note: see declaration of 'throws'
+tests\carrier_test.cpp(97): error C2059: syntax error: ')'
+tests\carrier_test.cpp(98): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(98): error C2365: 'test::require': redefinition; previous definition was 'function'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\support/test.hpp(18): note: see declaration of 'test::require'
+tests\carrier_test.cpp(98): error C2065: 'layer': undeclared identifier
+tests\carrier_test.cpp(98): error C2065: 'before': undeclared identifier
+tests\carrier_test.cpp(99): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(99): error C2365: 'test::require': redefinition; previous definition was 'function'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\support/test.hpp(18): note: see declaration of 'test::require'
+tests\carrier_test.cpp(99): error C2065: 'layer': undeclared identifier
+tests\carrier_test.cpp(101): error C3927: '->': trailing return type is not allowed after a non-function declarator
+tests\carrier_test.cpp(101): error C3484: syntax error: expected '->' before the return type
+tests\carrier_test.cpp(101): error C3613: missing return type after '->' ('int' assumed)
+tests\carrier_test.cpp(101): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(101): error C2146: syntax error: missing ';' before identifier 'set_carrier'
+tests\carrier_test.cpp(101): error C2039: 'BasisEdges': is not a member of 'kan'
+<worktree of 4a73811>\include\kan/network.hpp(5): note: see declaration of 'kan'
+tests\carrier_test.cpp(101): error C2143: syntax error: missing ';' before '{'
+tests\carrier_test.cpp(101): error C2143: syntax error: missing ')' before ';'
+tests\carrier_test.cpp(101): error C2447: '{': missing function header (old-style formal list?)
+tests\carrier_test.cpp(101): error C2059: syntax error: ')'
+tests\carrier_test.cpp(102): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+tests\carrier_test.cpp(102): error C2365: 'test::near': redefinition; previous definition was 'function'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\support/test.hpp(21): note: see declaration of 'test::near'
+tests\carrier_test.cpp(103): error C3927: '->': trailing return type is not allowed after a non-function declarator
+tests\carrier_test.cpp(103): error C3484: syntax error: expected '->' before the return type
+tests\carrier_test.cpp(103): error C3613: missing return type after '->' ('int' assumed)
+tests\carrier_test.cpp(103): fatal error C1003: error count exceeds 100; stopping compilation
