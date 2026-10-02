@@ -16,6 +16,7 @@
 #include "host_device.hpp"
 #include "kan/rational.hpp"
 #include <cstddef>
+#include <stdexcept>
 #include <type_traits>
 
 namespace kan::detail {
@@ -28,10 +29,11 @@ using PolicyConstant = std::integral_constant<DenominatorPolicy, Policy>;
 template<class F>
 decltype(auto) visit_denominator_policy(DenominatorPolicy policy, F&& f) {
     switch (policy) {
+    case DenominatorPolicy::Guarded: return f(PolicyConstant<DenominatorPolicy::Guarded>{});
     case DenominatorPolicy::Absolute: return f(PolicyConstant<DenominatorPolicy::Absolute>{});
     case DenominatorPolicy::Smooth: return f(PolicyConstant<DenominatorPolicy::Smooth>{});
-    default: return f(PolicyConstant<DenominatorPolicy::Guarded>{});
     }
+    throw std::logic_error("unvalidated rational denominator policy");
 }
 
 struct RationalHorner {
@@ -40,7 +42,7 @@ struct RationalHorner {
     double q, dq; // denominator Q and its z-derivative Q' = g S'
     double bound; // Guarded: sum |b_k| |z|^k + 1, the pole guard reference magnitude
     double ds;    // safe policies: S'
-    double gain;  // safe policies: g = dQ/dS (Guarded: g = 1, not stored)
+    double gain;  // safe policies: g = dQ/dS (Guarded: unused and 0; its g = 1 is implicit)
 };
 
 struct RationalEdge {
@@ -177,13 +179,12 @@ template<DenominatorPolicy Policy, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE double rational_denominator_vjp(double p, double q, double value, double gain,
                                                 double z, std::size_t k, double power, double divided,
                                                 const Guard& guard) {
-    const bool odd = math::signbit(z) && k % 2 != 0; // z^k < 0
     if constexpr (Policy == DenominatorPolicy::Guarded) {
         const double derivative = guard(-value * divided);
         if (p != 0 && z != 0 && (math::tiny(power) || math::tiny(divided) || math::tiny(value)))
             return rational_signed_exp(math::log(math::abs(p)) + static_cast<double>(k) * math::log(math::abs(z)) -
                                            2 * math::log(math::abs(q)),
-                                       math::signbit(p) == odd, guard);
+                                       math::signbit(p) == (math::signbit(z) && k % 2 != 0), guard);
         return derivative;
     } else if constexpr (Policy == DenominatorPolicy::Absolute) {
         // g in {-1, 0, 1}: the guarded-form derivative times g, exactly.
@@ -196,7 +197,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE double rational_denominator_vjp(double p, doubl
             return rational_signed_exp(math::log(math::abs(p)) + math::log(math::abs(gain)) +
                                            static_cast<double>(k) * math::log(math::abs(z)) -
                                            2 * math::log(math::abs(q)),
-                                       (math::signbit(p) != odd) == math::signbit(gain), guard);
+                                       (math::signbit(p) != (math::signbit(z) && k % 2 != 0)) == math::signbit(gain),
+                                       guard);
         return derivative;
     }
 }

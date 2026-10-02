@@ -18,6 +18,42 @@ RationalTerms edge_terms(const RationalEdges& edges, std::size_t edge, double x)
                                      std::span<const double>(edges.denominators).subspan(edge * n, n));
 }
 
+// The loops of one policy. Loop bounds are locals of these functions (not
+// lambda captures) so that MSVC, which does not use type-based alias
+// analysis, keeps them in registers across the gradient stores.
+template<DenominatorPolicy Policy>
+void forward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias,
+                   std::span<const double> input, std::size_t batch, std::span<double> output) {
+    const auto inputs = shape.inputs, outputs = shape.outputs;
+    for (std::size_t b = 0; b < batch; ++b) {
+        for (std::size_t o = 0; o < outputs; ++o) output[b * outputs + o] = bias[o];
+        for (std::size_t i = 0; i < inputs; ++i)
+            for (std::size_t o = 0; o < outputs; ++o) {
+                output[b * outputs + o] += edge_terms<Policy>(edges, o * inputs + i, input[b * inputs + i]).value;
+                result_finite(output.subspan(b * outputs + o, 1));
+            }
+    }
+}
+
+template<DenominatorPolicy Policy>
+void backward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const double> input,
+                    std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+                    std::span<double> coefficient_gradient, RationalGradients& nonlinear) {
+    const auto inputs = shape.inputs, outputs = shape.outputs;
+    const auto m = edges.config.numerator_degree + 1, n = edges.config.denominator_degree;
+    auto& denominators = nonlinear.denominators;
+    for (std::size_t b = 0; b < batch; ++b)
+        for (std::size_t i = 0; i < inputs; ++i)
+            for (std::size_t o = 0; o < outputs; ++o) {
+                const auto edge = o * inputs + i;
+                const auto r = edge_terms<Policy>(edges, edge, input[b * inputs + i]);
+                const auto u = upstream[b * outputs + o];
+                input_gradient[b * inputs + i] += u * r.input_derivative;
+                for (std::size_t k = 0; k < m; ++k) coefficient_gradient[edge * m + k] += u * r.numerator_derivatives[k];
+                for (std::size_t k = 0; k < n; ++k) denominators[edge * n + k] += u * r.denominator_derivatives[k];
+            }
+}
+
 } // namespace
 
 std::size_t terms(const RationalEdges& edges) noexcept { return edges.config.numerator_degree + 1; }
@@ -35,38 +71,17 @@ void require_finite_nonlinear(const RationalEdges& edges) { require_finite(edges
 
 void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias,
              std::span<const double> input, std::size_t batch, std::span<double> output) {
-    const auto inputs = shape.inputs, outputs = shape.outputs;
     visit_denominator_policy(edges.config.denominator_policy, [&](auto policy) {
-        constexpr auto Policy = decltype(policy)::value;
-        for (std::size_t b = 0; b < batch; ++b) {
-            for (std::size_t o = 0; o < outputs; ++o) output[b * outputs + o] = bias[o];
-            for (std::size_t i = 0; i < inputs; ++i)
-                for (std::size_t o = 0; o < outputs; ++o) {
-                    output[b * outputs + o] += edge_terms<Policy>(edges, o * inputs + i, input[b * inputs + i]).value;
-                    result_finite(output.subspan(b * outputs + o, 1));
-                }
-        }
+        forward_edges<decltype(policy)::value>(edges, shape, bias, input, batch, output);
     });
 }
 
 void backward(const RationalEdges& edges, EdgeShape shape, std::span<const double> input,
               std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, RationalGradients& nonlinear) {
-    const auto inputs = shape.inputs, outputs = shape.outputs;
-    const auto m = edges.config.numerator_degree + 1, n = edges.config.denominator_degree;
-    auto& denominators = nonlinear.denominators;
     visit_denominator_policy(edges.config.denominator_policy, [&](auto policy) {
-        constexpr auto Policy = decltype(policy)::value;
-        for (std::size_t b = 0; b < batch; ++b)
-            for (std::size_t i = 0; i < inputs; ++i)
-                for (std::size_t o = 0; o < outputs; ++o) {
-                    const auto edge = o * inputs + i;
-                    const auto r = edge_terms<Policy>(edges, edge, input[b * inputs + i]);
-                    const auto u = upstream[b * outputs + o];
-                    input_gradient[b * inputs + i] += u * r.input_derivative;
-                    for (std::size_t k = 0; k < m; ++k) coefficient_gradient[edge * m + k] += u * r.numerator_derivatives[k];
-                    for (std::size_t k = 0; k < n; ++k) denominators[edge * n + k] += u * r.denominator_derivatives[k];
-                }
+        backward_edges<decltype(policy)::value>(edges, shape, input, batch, upstream, input_gradient,
+                                                coefficient_gradient, nonlinear);
     });
 }
 
