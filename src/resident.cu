@@ -136,8 +136,11 @@ __global__ void candidate_kernel(const double* parameters, const double* gradien
 }
 // Distinct rational execution: caches are edge-major to expose contiguous
 // samples to nonlinear parameter reductions. All caches live in the arena.
+// One instantiation per denominator policy; `gains` (g = dQ/dS) is cached
+// only by the safe policies and is null for Guarded.
+template<DenominatorPolicy Policy>
 __global__ void rational_forward_kernel(const double* input,const double* a,const double* b,const double* bias,
-                                        double* values,double* denominator_values,double* derivatives,double* output,
+                                        double* values,double* denominator_values,double* derivatives,double* gains,double* output,
                                         std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,
                                         RationalConfig config,int* status) {
     const StatusGuard guard{status};
@@ -147,11 +150,11 @@ __global__ void rational_forward_kernel(const double* input,const double* a,cons
         const auto sample=index/outputs,o=index%outputs;double sum=bias[o];
         for(std::size_t i=0;i<inputs;++i) {
             const auto edge=o*inputs+i,cache=edge*capacity+sample;
-            const auto h=detail::rational_horner(config,input[sample*inputs+i],a+edge*(m+1),b+edge*n,guard);
-            if(detail::rational_pole(config,h)) {
+            const auto h=detail::rational_horner<Policy>(config,input[sample*inputs+i],a+edge*(m+1),b+edge*n,guard);
+            if(detail::rational_pole<Policy>(config,h)) {
                 atomicOr(status,2);values[cache]=denominator_values[cache]=derivatives[cache]=0;continue;
             }
-            const auto e=detail::rational_edge(config,h,guard);
+            const auto e=detail::rational_edge<Policy>(config,h,guard);
             // Derivative powers are part of the nonlinear contract, including
             // zero upstream. Detect unusable parameter VJPs during forward.
             double power=1;
@@ -159,8 +162,9 @@ __global__ void rational_forward_kernel(const double* input,const double* a,cons
                 if(k)power=guard(power*h.z);
                 const double divided=guard(power/h.q);
                 if(k<=m)detail::rational_numerator_vjp(h.q,h.z,k,power,divided,guard);
-                if(k&&k<=n)detail::rational_denominator_vjp(h.p,h.q,e.value,h.z,k,power,divided,guard);
+                if(k&&k<=n)detail::rational_denominator_vjp<Policy>(h.p,h.q,e.value,h.gain,h.z,k,power,divided,guard);
             }
+            if constexpr(Policy!=DenominatorPolicy::Guarded)gains[cache]=h.gain;
             values[cache]=h.p;denominator_values[cache]=h.q;derivatives[cache]=e.input_derivative;sum+=e.value;report(sum,status);
         }
         output[index]=sum;report(sum,status);
@@ -175,7 +179,8 @@ __global__ void rational_input_kernel(const double* derivatives,const double* up
         input_gradient[index]=sum;report(sum,status);
     }
 }
-__global__ void rational_parameter_kernel(const double* input,const double* values,const double* denominator_values,const double* upstream,
+template<DenominatorPolicy Policy>
+__global__ void rational_parameter_kernel(const double* input,const double* values,const double* denominator_values,const double* gains,const double* upstream,
                                           const double* parameters,double* gradients,std::size_t batch,std::size_t capacity,
                                           std::size_t inputs,std::size_t outputs,RationalConfig config,double lambda,int* status) {
     // Forward validated z and every parameter VJP of these cached samples with
@@ -203,7 +208,8 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
                 if(numerator)derivative=detail::rational_numerator_vjp(q,z,k,power,divided,guard);
                 else {
                     const double p=values[cache];
-                    derivative=detail::rational_denominator_vjp(p,q,p/q,z,k,power,divided,guard);
+                    const double gain=Policy==DenominatorPolicy::Guarded?1.0:gains[cache];
+                    derivative=detail::rational_denominator_vjp<Policy>(p,q,p/q,gain,z,k,power,divided,guard);
                 }
             }
             const double term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
@@ -294,13 +300,14 @@ struct TrainableRbfPlan {
     unsigned partial_tiles = 1;
 };
 
-// Rational edges with edge-major caches of P, Q and dr/dx (nonlinear block:
-// denominators).
+// Rational edges with edge-major caches of P, Q and dr/dx, plus g = dQ/dS for
+// the safe denominator policies (nonlinear block: denominators).
 struct RationalPlan {
     using edges_type = RationalEdges;
     ParameterBlock block;
     RationalConfig config;
-    std::size_t values = 0, derivatives = 0, denominator_values = 0;
+    std::size_t values = 0, derivatives = 0, denominator_values = 0, gains = 0;
+    bool safe() const { return config.denominator_policy != DenominatorPolicy::Guarded; }
 };
 
 using Plan = std::variant<BasisPlan, TrainableRbfPlan, RationalPlan>;
@@ -346,6 +353,7 @@ void reserve_workspace(TrainableRbfPlan& plan, std::size_t capacity, Reservation
 void reserve_workspace(RationalPlan& plan, std::size_t capacity, Reservation& reserve) {
     const auto count = product(product(capacity, plan.block.inputs), plan.block.outputs);
     plan.values = reserve(count); plan.derivatives = reserve(count); plan.denominator_values = reserve(count);
+    if (plan.safe()) plan.gains = reserve(count);
 }
 
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
@@ -394,10 +402,14 @@ void run_forward(Context& s, const TrainableRbfPlan& plan, std::size_t j) {
 }
 void run_forward(Context& s, const RationalPlan& plan, std::size_t j) {
     const auto& b = plan.block;
-    rational_forward_kernel<<<blocks(s.batch*b.outputs),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(s.parameters+b.offset),
-        s.ptr(s.parameters+b.nonlinear()),s.ptr(s.parameters+b.bias()),
-        s.ptr(plan.values),s.ptr(plan.denominator_values),s.ptr(plan.derivatives),s.ptr(s.activation[j+1]),
-        s.batch,s.capacity,b.inputs,b.outputs,plan.config,s.status);
+    double* gains = plan.safe() ? s.ptr(plan.gains) : nullptr;
+    detail::visit_denominator_policy(plan.config.denominator_policy, [&](auto policy) {
+        rational_forward_kernel<decltype(policy)::value><<<blocks(s.batch*b.outputs),256,0,s.stream>>>(
+            s.ptr(s.activation[j]),s.ptr(s.parameters+b.offset),
+            s.ptr(s.parameters+b.nonlinear()),s.ptr(s.parameters+b.bias()),
+            s.ptr(plan.values),s.ptr(plan.denominator_values),s.ptr(plan.derivatives),gains,s.ptr(s.activation[j+1]),
+            s.batch,s.capacity,b.inputs,b.outputs,plan.config,s.status);
+    });
     check(cudaGetLastError(),"resident rational forward launch");
 }
 
@@ -433,9 +445,13 @@ void run_backward(Context& s, const RationalPlan& plan, std::size_t j, double la
             s.batch,s.capacity,b.inputs,b.outputs,s.status);
         check(cudaGetLastError(),"resident rational input gradient launch");
     }
-    rational_parameter_kernel<<<blocks(b.size(),8),256,0,s.stream>>>(s.ptr(s.activation[j]),s.ptr(plan.values),s.ptr(plan.denominator_values),
-        s.ptr(s.upstream[j+1]),s.ptr(s.parameters+b.offset),s.ptr(s.gradients+b.offset),s.batch,s.capacity,b.inputs,b.outputs,
-        plan.config,lambda,s.status);
+    const double* gains = plan.safe() ? s.ptr(plan.gains) : nullptr;
+    detail::visit_denominator_policy(plan.config.denominator_policy, [&](auto policy) {
+        rational_parameter_kernel<decltype(policy)::value><<<blocks(b.size(),8),256,0,s.stream>>>(
+            s.ptr(s.activation[j]),s.ptr(plan.values),s.ptr(plan.denominator_values),gains,
+            s.ptr(s.upstream[j+1]),s.ptr(s.parameters+b.offset),s.ptr(s.gradients+b.offset),s.batch,s.capacity,b.inputs,b.outputs,
+            plan.config,lambda,s.status);
+    });
     check(cudaGetLastError(),"resident rational parameter gradient launch");
 }
 
