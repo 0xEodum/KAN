@@ -188,6 +188,35 @@ numerators and zero upstreams. Nonfinite intermediates/results raise
 function. The guard checks executed samples; it does not prove pole freedom
 between them. Finite setters/SGD candidates can therefore fail later execution.
 
+### Denominator policy (backlog M2)
+
+`RationalConfig::denominator_policy` (`kan::DenominatorPolicy`, Python
+`kan.DenominatorPolicy.GUARDED/ABSOLUTE/SMOOTH`) selects the denominator. With
+`S(z)=sum(b[k-1]*z^k,k=1..n)` and the gain `g=dQ/dS`:
+
+| Policy | Q | g | Poles |
+|---|---|---|---|
+| `Guarded` (default) | `1+S` | `1` | relative guard above, `domain_error` |
+| `Absolute` (safe PAU, Molina et al. 2019) | `1+abs(S)` | `sign(S)`, `sign(0)=0` | none, `Q>=1` |
+| `Smooth` | `1+S^2` | `2S` | none, `Q>=1` |
+
+The derivatives are, for every policy, `Q'=g*S'`, `dr/dx=(P'/Q-r*Q'/Q)/scale`,
+`dr/da[k]=z^k/Q` and `dr/db[k-1]=-r*g*z^k/Q`. For `Absolute`, `sign(0)=0` is the
+subgradient at `S=0`: the midpoint of the one-sided derivatives (the same
+convention as `abs` in PyTorch autograd). Consequently `b=0` is stationary under
+both safe policies (`S` vanishes identically and every `dr/db` is zero; for `Smooth`
+this is a true critical point): denominators of a safe layer must be initialized
+nonzero, or they never train. The safe policies never report a pole and ignore
+`epsilon`, which is still validated for every policy; all finiteness checks remain
+(`S`, `S^2`, `Q`, `Q'` and every derivative intermediate). The log-space paths cover
+the safe policies too; `Smooth` restores `r*Q'/Q` from `log|g|+log|S'|` when
+`Q'=2*S*S'` underflows. A safe policy changes the represented function: supplied
+Padé coefficients (such as the [1/1] exponential above) describe a `Guarded` edge.
+An unknown enumerator raises `std::invalid_argument` ("invalid rational
+configuration"). CPU loops dispatch the policy once per call; resident CUDA has one
+forward and one parameter-VJP kernel instantiation per policy and caches `g` per
+sample/edge for the safe policies only (the `Guarded` arena layout is unchanged).
+
 Numerator layout is `(outputs,inputs,m+1)` and denominator layout is
 `(outputs,inputs,n)`; bias is per output. A rational layer holds `RationalEdges`
 (`config`, numerator `coefficients`, `denominators`); `Layer::coefficients()` exposes
@@ -217,7 +246,8 @@ with `basis` and `coefficients`, `kan.RationalEdges` with `config`, `coefficient
 `LayerGradients.centers/log_widths/denominators` stay available as arrays, empty
 (shape `(0,)`) for other carriers. Vector attributes are copies as well: assign a whole
 list (`cfg.knots = [...]`) rather than mutating the returned list in place.
-Python exposes `RationalConfig`, the rational Layer constructor, owned config,
+Python exposes `RationalConfig` (including `denominator_policy`, a
+`kan.DenominatorPolicy` enum member), the rational Layer constructor, owned config,
 parameter and gradient snapshots, and `kan.set_rational_parameters`. Rational
 denominator arrays have shape `(outputs,inputs,n)`, even for n=0; basis-layer
 denominator arrays have shape `(0,)`. `evaluate_rational(config,x,a,b)` accepts
@@ -284,6 +314,7 @@ separate physical/measurement contracts at M5.
 - [Original KAN paper](https://arxiv.org/abs/2404.19756): learned univariate edge functions.
 - [NIST DLMF 18.9](https://dlmf.nist.gov/18.9): polynomial recurrence and derivative conventions.
 - [NIST DLMF 3.11](https://dlmf.nist.gov/3.11): rational and Padé approximation definitions.
+- [Molina, Schramowski, Kersting: Padé Activation Units (2019)](https://arxiv.org/abs/1907.06732): safe denominator `1+|Σ b_k x^k|`; no code reused.
 - [SciPy BSpline mathematical notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.html): spline recurrence and partition of unity.
 - [Boehm insertion references](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.BSpline.insert_knot.html): exact spline refinement.
 - [Ricker definition](https://docs.scipy.org/doc/scipy-1.12.0/reference/generated/scipy.signal.ricker.html): continuous Mexican-hat normalization.
