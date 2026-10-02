@@ -56,7 +56,8 @@ double objective(const kan::Network& n, const std::vector<double>& x, std::size_
     return dot(n.forward(x, batch), g);
 }
 // Every parameter of every stage of a network against central differences.
-void check_network(const kan::Network& net, const std::vector<double>& x, std::size_t batch, double tolerance = 2e-6) {
+void check_network(const kan::Network& net, const std::vector<double>& x, double tolerance = 2e-6) {
+    const auto batch = x.size() / net.inputs();
     std::vector<double> g = wave(batch * std::visit([](const auto& s) { return s.outputs(); }, net.layers().back()), 0.9, 0.4);
     const auto grad = net.backward(x, batch, g);
     REQUIRE(grad.layers.size() == net.layers().size());
@@ -200,6 +201,12 @@ TEST(map_validation_and_moved_from) {
     test::throws<Error>([&] { kan::Network invalid({kan::NetworkLayer(map)}); });
     map = moved;
     REQUIRE(map.forward(std::vector<double>{0, 1}, 1).size() == 2);
+    kan::InputMap target(1, kan::AffineMap{{1}, {0}});
+    target = std::move(moved);
+    REQUIRE(target.features() == 2 && std::holds_alternative<kan::TanhMap>(target.map()));
+    test::throws<Error>([&] { moved.backward(std::vector<double>{0, 1}, 1, std::vector<double>{1, 1}); });
+    test::throws<Error>([&] { map.set_map(kan::TanhMap{-1}); });
+    test::throws<Error>([&] { kan::Network({kan::NetworkLayer(map)}).regularization(-1); });
     REQUIRE((kan::AffineMap{{1}, {2}} == kan::AffineMap{{1}, {2}}));
     REQUIRE((kan::LayerNormMap{} == kan::LayerNormMap{1e-5, {}, {}}));
 }
@@ -330,13 +337,13 @@ TEST(network_sgd_with_maps_is_atomic) {
 TEST(far_inputs_train_with_map_and_fail_without) {
     std::vector<double> x(33), t(33);
     for (std::size_t i = 0; i < x.size(); ++i) {
-        x[i] = -200 + 400 * static_cast<double>(i) / 32;
-        const double u = x[i] / 200;
+        x[i] = 100 + 400 * static_cast<double>(i) / 32; // [100, 500]: entirely outside [-1, 1]
+        const double u = (x[i] - 300) / 200;
         t[i] = 0.2 + 0.7 * u - 0.4 * u * u;
     }
     const double initial = mse(std::vector<double>(t.size(), 0.0), t);
 
-    // Polynomial without a map: T_4(200) ~ 1e10, SGD overflows or diverges.
+    // Polynomial without a map: T_4(500) ~ 5e11, SGD overflows or diverges.
     bool exploded = false;
     try {
         kan::Network raw({kan::Layer(1, 1, kan::ChebyshevConfig{5})});

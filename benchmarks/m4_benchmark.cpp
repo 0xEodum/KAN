@@ -6,6 +6,7 @@
 #endif
 #include <algorithm>
 #include <chrono>
+#include <functional>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
@@ -15,6 +16,14 @@
 #include <string>
 
 namespace {
+// Benchmark networks hold KAN layers only (no input maps).
+const kan::Layer& kan_layer(const kan::Network& n, std::size_t j) { return std::get<kan::Layer>(n.layers()[j]); }
+std::vector<std::reference_wrapper<const kan::Layer>> kan_layers(const kan::Network& n) {
+    std::vector<std::reference_wrapper<const kan::Layer>> result;
+    for (const auto& stage : n.layers()) result.push_back(std::cref(std::get<kan::Layer>(stage)));
+    return result;
+}
+const kan::LayerGradients& kan_grad(const kan::NetworkGradients& g, std::size_t j) { return std::get<kan::LayerGradients>(g.layers[j]); }
 using Clock = std::chrono::steady_clock;
 constexpr double learning_rate = 0.001;
 const char* names[] = {"rational_1_1", "rational_3_2", "rational_6_4"};
@@ -60,12 +69,12 @@ double checksum(std::span<const double> values) {
 }
 double checksum(const kan::NetworkGradients& g) {
     double result = checksum(g.input);
-    for (const auto& layer : g.layers) result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(denominators(layer));
+    for (std::size_t j = 0; j < g.layers.size(); ++j) { const auto& layer = kan_grad(g, j); result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(denominators(layer)); }
     return result;
 }
 double checksum(const kan::Network& n) {
     double result = 0;
-    for (const auto& l : n.layers()) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(denominators(l));
+    for (const kan::Layer& l : kan_layers(n)) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(denominators(l));
     return result;
 }
 struct Result {
@@ -126,8 +135,8 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
         replay.synchronize();
         const auto replay_parameters = replay.download_parameters();
         for (std::size_t l = 0; l < result.parameters.layers().size(); ++l) {
-            const auto expected = result.parameters.layers()[l];
-            const auto actual = replay_parameters.layers()[l];
+            const auto expected = kan_layer(result.parameters,l);
+            const auto actual = kan_layer(replay_parameters,l);
             if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
                 !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()) ||
                 !std::equal(denominators(expected).begin(), denominators(expected).end(), denominators(actual).begin()))
@@ -152,12 +161,12 @@ double verify(const Result& expected, const Result& actual) {
     double error = compare(expected.output, actual.output);
     error = std::max(error, compare(expected.gradients.input, actual.gradients.input));
     for (std::size_t l = 0; l < expected.parameters.layers().size(); ++l) {
-        error = std::max(error, compare(expected.gradients.layers[l].coefficients, actual.gradients.layers[l].coefficients));
-        error = std::max(error, compare(expected.gradients.layers[l].bias, actual.gradients.layers[l].bias));
-        error = std::max(error, compare(denominators(expected.gradients.layers[l]), denominators(actual.gradients.layers[l])));
-        error = std::max(error, compare(denominators(expected.parameters.layers()[l]), denominators(actual.parameters.layers()[l])));
-        error = std::max(error, compare(expected.parameters.layers()[l].coefficients(), actual.parameters.layers()[l].coefficients()));
-        error = std::max(error, compare(expected.parameters.layers()[l].bias(), actual.parameters.layers()[l].bias()));
+        error = std::max(error, compare(kan_grad(expected.gradients,l).coefficients, kan_grad(actual.gradients,l).coefficients));
+        error = std::max(error, compare(kan_grad(expected.gradients,l).bias, kan_grad(actual.gradients,l).bias));
+        error = std::max(error, compare(denominators(kan_grad(expected.gradients,l)), denominators(kan_grad(actual.gradients,l))));
+        error = std::max(error, compare(denominators(kan_layer(expected.parameters,l)), denominators(kan_layer(actual.parameters,l))));
+        error = std::max(error, compare(kan_layer(expected.parameters,l).coefficients(), kan_layer(actual.parameters,l).coefficients()));
+        error = std::max(error, compare(kan_layer(expected.parameters,l).bias(), kan_layer(actual.parameters,l).bias()));
     }
     return error;
 }

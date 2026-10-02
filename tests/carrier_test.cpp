@@ -3,6 +3,7 @@
 // gradients; family-specific operations are free functions, not Layer members.
 #include "kan/families.hpp"
 #include "kan/network.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <limits>
 #include <variant>
@@ -143,7 +144,7 @@ TEST(family_operations_are_free_functions) {
 
     kan::Network network({kan::Layer(1, 1, cubic())});
     network.insert_knot(0, 0.25);
-    REQUIRE(network.layers()[0].terms() == 6);
+    REQUIRE(test::layer(network,0).terms() == 6);
 }
 
 TEST(sgd_rejects_gradients_of_another_carrier) {

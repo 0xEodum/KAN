@@ -6,11 +6,16 @@
 // `--layers` (added for R2) instead dumps CPU Layer/Network execution: forward,
 // backward, L2, SGD and the family operations on the resident fixtures.
 // The harness compiles against the API before R2 (Layer members) and after it
-// (carriers, kan/families.hpp), so both builds run the same fixtures.
+// (carriers, kan/families.hpp), so both builds run the same fixtures. Since M1
+// network layers are a variant (KAN layer or input map) and network gradients
+// hold the matching alternative; the fixtures contain KAN layers only.
 #include "kan/resident.hpp"
 #if __has_include("kan/families.hpp")
 #include "kan/families.hpp"
 #define KAN_GOLDEN_CARRIERS 1
+#endif
+#if __has_include("kan/input_map.hpp")
+#define KAN_GOLDEN_STAGES 1
 #endif
 #include <cmath>
 #include <cstdint>
@@ -29,6 +34,20 @@ namespace {
 // API adapters: the dumped values never depend on which branch is compiled.
 namespace api {
 std::vector<double> none() { return {}; }
+#ifdef KAN_GOLDEN_STAGES
+std::vector<Layer> layers(const Network& n) {
+    std::vector<Layer> result;
+    for (const auto& stage : n.layers()) result.push_back(std::get<Layer>(stage));
+    return result;
+}
+LayerGradients& grad(NetworkGradients& g, std::size_t j) { return std::get<LayerGradients>(g.layers[j]); }
+const LayerGradients& grad(const NetworkGradients& g, std::size_t j) { return std::get<LayerGradients>(g.layers[j]); }
+#else
+std::vector<Layer> layers(const Network& n) { return {n.layers().begin(), n.layers().end()}; }
+LayerGradients& grad(NetworkGradients& g, std::size_t j) { return g.layers[j]; }
+const LayerGradients& grad(const NetworkGradients& g, std::size_t j) { return g.layers[j]; }
+#endif
+std::size_t outputs(const Network& n) { return layers(n).back().outputs(); }
 #ifdef KAN_GOLDEN_CARRIERS
 bool is_rational(const Layer& l) { return std::holds_alternative<RationalEdges>(l.carrier()); }
 std::vector<double> denominators(const Layer& l) {
@@ -218,7 +237,7 @@ void dump_network(const char* name, const Network& network, const std::vector<do
                   std::size_t batch, double l2) {
     guarded(std::string("resident ") + name, [&] {
         cuda::ResidentNetwork gpu(network, batch);
-        const auto outputs = network.layers().back().outputs();
+        const auto outputs = api::outputs(network);
         std::vector<double> upstream(batch * outputs);
         for (std::size_t k = 0; k < upstream.size(); ++k) upstream[k] = std::cos(0.7 * static_cast<double>(k));
         gpu.upload_input(x, batch);
@@ -229,7 +248,8 @@ void dump_network(const char* name, const Network& network, const std::vector<do
             gpu.backward(l2);
             const auto g = gpu.download_gradients();
             hex("dx", g.input);
-            for (const auto& layer : g.layers) {
+            for (std::size_t j = 0; j < g.layers.size(); ++j) {
+                const auto& layer = api::grad(g, j);
                 hex("dc", layer.coefficients);
                 hex("db", layer.bias);
                 hex("dcen", api::centers(layer));
@@ -239,7 +259,7 @@ void dump_network(const char* name, const Network& network, const std::vector<do
             gpu.sgd(0.05);
         }
         const auto trained = gpu.download_parameters();
-        for (const auto& layer : trained.layers()) {
+        for (const auto& layer : api::layers(trained)) {
             hex("c", layer.coefficients());
             hex("b", layer.bias());
             hex("den", api::denominators(layer));
@@ -302,7 +322,7 @@ void dump_resident() {
 }
 
 void dump_parameters(const Network& network) {
-    for (const auto& layer : network.layers()) {
+    for (const auto& layer : api::layers(network)) {
         hex("c", layer.coefficients());
         hex("b", layer.bias());
         hex("den", api::denominators(layer));
@@ -320,7 +340,7 @@ void dump_layers() {
     for (auto& f : network_fixtures()) {
         guarded(std::string("cpu ") + f.name, [&] {
             auto network = f.network;
-            const auto outputs = network.layers().back().outputs();
+            const auto outputs = api::outputs(network);
             std::vector<double> upstream(f.batch * outputs);
             for (std::size_t k = 0; k < upstream.size(); ++k) upstream[k] = std::cos(0.7 * static_cast<double>(k));
             for (int step = 0; step < 3; ++step) {
@@ -330,9 +350,9 @@ void dump_layers() {
                 hex("pen", std::vector<double>{penalty.value});
                 hex("dx", g.input);
                 for (std::size_t j = 0; j < g.layers.size(); ++j) {
-                    auto& layer = g.layers[j];
+                    auto& layer = api::grad(g, j);
                     for (std::size_t k = 0; k < layer.coefficients.size(); ++k)
-                        layer.coefficients[k] += penalty.gradients.layers[j].coefficients[k];
+                        layer.coefficients[k] += api::grad(penalty.gradients, j).coefficients[k];
                     hex("dc", layer.coefficients);
                     hex("db", layer.bias);
                     hex("dcen", api::centers(layer));
@@ -345,8 +365,7 @@ void dump_layers() {
         });
     }
     const auto fixtures = network_fixtures();
-    const auto layers = fixtures.front().network.layers();
-    std::vector<Layer> mixed(layers.begin(), layers.end());
+    std::vector<Layer> mixed = api::layers(fixtures.front().network);
     const std::vector<double> probe{-0.9, -0.3, 0.2, 0.7, 0.95, -0.55, 0.1, 0.45};
     guarded("cpu spline refinement", [&] {
         auto& l = mixed[1];

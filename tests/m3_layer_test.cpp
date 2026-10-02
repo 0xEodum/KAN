@@ -1,6 +1,7 @@
 #include "kan/families.hpp"
 #include "kan/network.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <algorithm>
 #include <limits>
@@ -56,8 +57,8 @@ TEST(rbf_invalid_updates_are_atomic_across_network) {
     test::trainable(g).log_widths[1]=-1000;test::throws<std::overflow_error>([&]{l.sgd(g,1);});unchanged(l,before);
     test::trainable(g).log_widths[1]=1000;test::throws<std::overflow_error>([&]{l.sgd(g,1);});unchanged(l,before);
     kan::Network n({l,l});auto ng=n.backward(std::vector<double>{0.2,0.4},1,std::vector<double>{1,1});
-    test::trainable(ng.layers[1]).centers[0]=std::numeric_limits<double>::infinity();
-    test::throws<std::invalid_argument>([&]{n.sgd(ng,0.1);});for(auto& q:n.layers())unchanged(q,before);
+    test::trainable(test::grad(ng,1)).centers[0]=std::numeric_limits<double>::infinity();
+    test::throws<std::invalid_argument>([&]{n.sgd(ng,0.1);});for(auto& q:test::layers(n))unchanged(q,before);
     kan::Layer fixed(1,1,{});test::throws<std::invalid_argument>([&]{kan::set_rbf_parameters(fixed,{},{});});
 }
 TEST(exact_knot_insertion_preserves_values_and_derivatives) {
@@ -104,6 +105,6 @@ TEST(l2_objective_vjp_and_zero_defaults) {
     test::near(l.regularization(0).value,0);auto before=l;
     test::throws<std::invalid_argument>([&]{l.regularization(-1);});unchanged(l,before);
     kan::Network n({l,l});auto nr=n.regularization(0.3);test::near(nr.value,2*sum);n.sgd(nr.gradients,0.01);
-    for(const auto& q:n.layers())for(std::size_t k=0;k<q.coefficients().size();++k)test::near(q.coefficients()[k],0.997*l.coefficients()[k]);
+    for(const auto& q:test::layers(n))for(std::size_t k=0;k<q.coefficients().size();++k)test::near(q.coefficients()[k],0.997*l.coefficients()[k]);
 }
 int main(){return test::run();}

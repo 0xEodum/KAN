@@ -1,4 +1,5 @@
 #include "kan/network.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <limits>
 #include <numeric>
@@ -24,7 +25,7 @@ TEST(topology_must_be_nonempty_and_compatible) {
 }
 TEST(forward_is_layer_composition) {
     auto net=fixture();const std::vector<double>x{-0.4,0.2,0.7,-0.1};
-    const auto first=net.layers()[0].forward(x,2),expected=net.layers()[1].forward(first,2),actual=net.forward(x,2);
+    const auto first=test::layer(net,0).forward(x,2),expected=test::layer(net,1).forward(first,2),actual=net.forward(x,2);
     REQUIRE(actual==expected);
 }
 TEST(network_gradients_match_finite_differences) {
@@ -32,31 +33,31 @@ TEST(network_gradients_match_finite_differences) {
     REQUIRE(grad.layers.size()==2);
     for(std::size_t i=0;i<x.size();++i){auto p=x,m=x;p[i]+=h;m[i]-=h;test::near(grad.input[i],(objective(net,p,g)-objective(net,m,g))/(2*h),1e-7);}
     for(std::size_t l=0;l<net.layers().size();++l){
-        std::vector<kan::Layer> layers(net.layers().begin(),net.layers().end());
+        auto layers=test::layers(net);
         const std::vector<double> c(layers[l].coefficients().begin(),layers[l].coefficients().end()),b(layers[l].bias().begin(),layers[l].bias().end());
         for(std::size_t i=0;i<c.size();++i){auto plus=layers,minus=layers;auto pc=c,mc=c;pc[i]+=h;mc[i]-=h;plus[l].set_parameters(pc,b);minus[l].set_parameters(mc,b);
-            test::near(grad.layers[l].coefficients[i],(objective(kan::Network(plus),x,g)-objective(kan::Network(minus),x,g))/(2*h),1e-7);}
+            test::near(test::grad(grad,l).coefficients[i],(objective(kan::Network(plus),x,g)-objective(kan::Network(minus),x,g))/(2*h),1e-7);}
         for(std::size_t i=0;i<b.size();++i){auto plus=layers,minus=layers;auto pb=b,mb=b;pb[i]+=h;mb[i]-=h;plus[l].set_parameters(c,pb);minus[l].set_parameters(c,mb);
-            test::near(grad.layers[l].bias[i],(objective(kan::Network(plus),x,g)-objective(kan::Network(minus),x,g))/(2*h),1e-7);}
+            test::near(test::grad(grad,l).bias[i],(objective(kan::Network(plus),x,g)-objective(kan::Network(minus),x,g))/(2*h),1e-7);}
     }
 }
 TEST(empty_and_invalid_network_batches) {
     auto net=fixture();REQUIRE(net.forward({},0).empty());const auto grad=net.backward({},0,{});REQUIRE(grad.input.empty());REQUIRE(grad.layers.size()==2);
-    for(const auto& layer:grad.layers)for(double v:layer.coefficients)test::near(v,0);
+    for(std::size_t l=0;l<grad.layers.size();++l)for(double v:test::grad(grad,l).coefficients)test::near(v,0);
     test::throws<std::invalid_argument>([&]{net.forward(std::vector<double>{1},1);});
     test::throws<std::invalid_argument>([&]{net.backward(std::vector<double>{1,2},1,std::vector<double>{1,2});});
 }
 TEST(network_sgd_is_atomic_across_layers) {
     auto net=fixture();const std::vector<double>x{0.2,0.4};const auto before=net.forward(x,1);auto grad=net.backward(x,1,std::vector<double>{1});
     auto bad=grad;bad.layers.pop_back();test::throws<std::invalid_argument>([&]{net.sgd(bad,0.1);});
-    bad=grad;bad.layers.back().bias[0]=std::numeric_limits<double>::quiet_NaN();test::throws<std::invalid_argument>([&]{net.sgd(bad,0.1);});
+    bad=grad;test::grad(bad,1).bias[0]=std::numeric_limits<double>::quiet_NaN();test::throws<std::invalid_argument>([&]{net.sgd(bad,0.1);});
     REQUIRE(net.forward(x,1)==before);
-    bad=grad;bad.layers.back().coefficients.back()=std::numeric_limits<double>::max();test::throws<std::overflow_error>([&]{net.sgd(bad,2);});
+    bad=grad;test::grad(bad,1).coefficients.back()=std::numeric_limits<double>::max();test::throws<std::overflow_error>([&]{net.sgd(bad,2);});
     REQUIRE(net.forward(x,1)==before);net.sgd(grad,0.1);REQUIRE(net.forward(x,1)!=before);
 }
 TEST(single_layer_network_matches_layer) {
     kan::Layer layer(1,1,{});kan::Network net({layer});const std::vector<double>x{0.1,0.2},g{1,2};
-    REQUIRE(net.forward(x,2)==layer.forward(x,2));REQUIRE(net.backward(x,2,g).layers[0].coefficients==layer.backward(x,2,g).coefficients);
+    REQUIRE(net.forward(x,2)==layer.forward(x,2));REQUIRE(test::grad(net.backward(x,2,g),0).coefficients==layer.backward(x,2,g).coefficients);
 }
 TEST(sgd_training_fits_polynomial) {
     kan::ChebyshevConfig config{3};kan::Network net({kan::Layer(1,1,config)});std::vector<double>x(33),target(33);

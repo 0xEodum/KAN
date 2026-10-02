@@ -1,6 +1,7 @@
 #include "kan/resident.hpp"
 #include "kan/cuda.hpp"
 #include "support/families.hpp"
+#include "support/network.hpp"
 #include "support/test.hpp"
 #include <limits>
 
@@ -34,18 +35,18 @@ void parity(test::Family kind) {
         gpu.backward(); auto a=gpu.download_gradients(); auto e=cpu.backward(x,4,dy);
         compare(a.input,e.input);
         for(std::size_t j=0;j<a.layers.size();++j) {
-            REQUIRE(a.layers[j].nonlinear.index()==e.layers[j].nonlinear.index());
-            compare(a.layers[j].coefficients,e.layers[j].coefficients);
-            compare(a.layers[j].bias,e.layers[j].bias);
-            compare(test::centers(a.layers[j]),test::centers(e.layers[j]));
-            compare(test::log_widths(a.layers[j]),test::log_widths(e.layers[j]));
+            REQUIRE(test::grad(a,j).nonlinear.index()==test::grad(e,j).nonlinear.index());
+            compare(test::grad(a,j).coefficients,test::grad(e,j).coefficients);
+            compare(test::grad(a,j).bias,test::grad(e,j).bias);
+            compare(test::centers(test::grad(a,j)),test::centers(test::grad(e,j)));
+            compare(test::log_widths(test::grad(a,j)),test::log_widths(test::grad(e,j)));
         }
         gpu.sgd(0.03); cpu.sgd(e,0.03);
     }
     const auto snapshot=gpu.download_parameters(); compare(snapshot.forward(x,4),cpu.forward(x,4));
     if(kind==test::Family::TrainableRbf) {
-        compare(test::trainable(snapshot.layers()[0]).centers,test::trainable(cpu.layers()[0]).centers);
-        compare(test::trainable(snapshot.layers()[0]).log_widths,test::trainable(cpu.layers()[0]).log_widths);
+        compare(test::trainable(test::layer(snapshot,0)).centers,test::trainable(test::layer(cpu,0)).centers);
+        compare(test::trainable(test::layer(snapshot,0)).log_widths,test::trainable(test::layer(cpu,0)).log_widths);
     }
     REQUIRE(allocations==gpu.workspace_allocations());
 }
@@ -82,9 +83,9 @@ TEST(m3_resident_nonzero_batch_l2_combines_with_data_vjp) {
     const std::vector<double> x{0.1,-0.3,0.6,0.7},dy{0.2,-0.4};gpu.upload_input(x,2);gpu.upload_output_gradient(dy);gpu.forward();gpu.backward(0.2);
     const auto actual=gpu.download_gradients();auto expected=cpu.backward(x,2,dy);const auto regularizer=cpu.regularization(0.2);
     for(std::size_t j=0;j<actual.layers.size();++j) {
-        for(std::size_t k=0;k<expected.layers[j].coefficients.size();++k)expected.layers[j].coefficients[k]+=regularizer.gradients.layers[j].coefficients[k];
-        compare(actual.layers[j].coefficients,expected.layers[j].coefficients);
-        compare(test::centers(actual.layers[j]),test::centers(expected.layers[j]));compare(test::log_widths(actual.layers[j]),test::log_widths(expected.layers[j]));
+        for(std::size_t k=0;k<test::grad(expected,j).coefficients.size();++k)test::grad(expected,j).coefficients[k]+=test::grad(regularizer.gradients,j).coefficients[k];
+        compare(test::grad(actual,j).coefficients,test::grad(expected,j).coefficients);
+        compare(test::centers(test::grad(actual,j)),test::centers(test::grad(expected,j)));compare(test::log_widths(test::grad(actual,j)),test::log_widths(test::grad(expected,j)));
     }
     compare(actual.input,expected.input);
 }
@@ -96,11 +97,11 @@ TEST(m3_resident_zero_batch_regularization_and_validation) {
     gpu.backward(0.3); const auto g=gpu.download_gradients(), e=cpu.regularization(0.3).gradients;
     REQUIRE(g.input.empty());
     for(std::size_t j=0;j<g.layers.size();++j) {
-        compare(g.layers[j].coefficients,e.layers[j].coefficients);
-        compare(g.layers[j].bias,e.layers[j].bias);
-        compare(test::centers(g.layers[j]),test::centers(e.layers[j])); compare(test::log_widths(g.layers[j]),test::log_widths(e.layers[j]));
+        compare(test::grad(g,j).coefficients,test::grad(e,j).coefficients);
+        compare(test::grad(g,j).bias,test::grad(e,j).bias);
+        compare(test::centers(test::grad(g,j)),test::centers(test::grad(e,j))); compare(test::log_widths(test::grad(g,j)),test::log_widths(test::grad(e,j)));
     }
-    gpu.sgd(0.1); cpu.sgd(e,0.1); compare(gpu.download_parameters().layers()[0].coefficients(),cpu.layers()[0].coefficients());
+    gpu.sgd(0.1); cpu.sgd(e,0.1); compare(test::layer(gpu.download_parameters(),0).coefficients(),test::layer(cpu,0).coefficients());
 }
 TEST(m3_resident_width_candidate_validation_is_atomic) {
     const kan::TrainableRbfConfig b{{0},{0}};
@@ -109,9 +110,9 @@ TEST(m3_resident_width_candidate_validation_is_atomic) {
     kan::cuda::ResidentNetwork gpu(kan::Network({first,second}),1);
     gpu.upload_input(std::vector<double>{1},1); gpu.upload_output_gradient(std::vector<double>{1}); gpu.forward();gpu.backward();
     test::throws<std::overflow_error>([&]{gpu.sgd(2000);});
-    const auto same=gpu.download_parameters(); compare(same.layers()[0].coefficients(),first.coefficients());
-    compare(same.layers()[1].coefficients(),second.coefficients()); compare(test::trainable(same.layers()[0]).log_widths,b.log_widths);
-    gpu.sgd(0.01); REQUIRE(test::trainable(gpu.download_parameters().layers()[0]).log_widths[0]<0);
+    const auto same=gpu.download_parameters(); compare(test::layer(same,0).coefficients(),first.coefficients());
+    compare(test::layer(same,1).coefficients(),second.coefficients()); compare(test::trainable(test::layer(same,0)).log_widths,b.log_widths);
+    gpu.sgd(0.01); REQUIRE(test::trainable(test::layer(gpu.download_parameters(),0)).log_widths[0]<0);
 }
 TEST(m3_resident_explicit_refinement_reconstruction) {
     auto cpu=model(test::Family::BSpline); kan::cuda::ResidentNetwork before(cpu,2);
