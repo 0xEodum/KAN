@@ -12,6 +12,7 @@ backward and training; optional Python bindings expose the same implementation.
 | Harmonic / wave | Fourier, normalized Mexican-hat wavelets | Additional wavelets |
 | Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
 | Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
+| Input maps | Explicit affine (fixed, from data range or moments), tanh, LayerNorm (trainable gain/bias) layers | — |
 | Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
 
 CPU supports all eight available families and compatible networks of any depth.
@@ -110,11 +111,31 @@ serialize access to the same executor. No execution call allocates GPU storage.
 
 Parameters initialize to zero. Initialize multilayer parameters to nonzero
 values explicitly so gradients can propagate. Polynomial inputs are not
-automatically normalized or clipped. Fourier uses angular frequency and the
+automatically normalized or clipped; use an explicit input map (below). Fourier uses angular frequency and the
 order `[1, cos(wx), sin(wx), ...]`. RBF width is the denominator in
 `exp(-((x-center)/width)^2)`, not a standard deviation.
 See [the numerical contract](docs/CONTRACT.md) for layouts, derivatives,
 exceptions, finite-data requirements and atomic optimizer updates.
+
+## Input maps
+
+Inputs are never rescaled implicitly. Polynomials explode for |x| >> 1 and localized
+bases are dead outside their support, so put an explicit input map in front:
+
+```cpp
+#include <kan/network.hpp>
+// Map each feature's sample range onto the Chebyshev domain [-1, 1].
+const auto affine = kan::affine_from_range(samples, batch, features, -1.0, 1.0);
+kan::Network model({kan::InputMap(features, affine), kan::Layer(features, 1, kan::ChebyshevConfig{5})});
+// Alternatives: kan::TanhMap{0.01} (squash), kan::LayerNormMap{1e-5, gain, bias}
+// (per-sample normalization, trainable gain/bias), kan::affine_from_moments(...).
+const auto& map = std::get<kan::InputMap>(model.layers()[0]); // layers() holds Layer or InputMap
+```
+
+Layer indices (`insert_knot`, `adapt_grid`, gradients) are positions in `layers()`,
+maps included; `NetworkGradients::layers[i]` holds `kan::LayerGradients` or
+`kan::InputMapGradients`. Maps run on the resident executor as well. See the
+[contract](docs/CONTRACT.md#input-maps-backlog-m1).
 
 ## Localized and adaptive use
 
@@ -221,7 +242,9 @@ Python wheels and distribution packaging remain M6 work.
 The NumPy interface requires C-contiguous float64 arrays, preserving caller dtype
 and layout decisions. Tensor results own their memory. See
 [Python test examples](tests/python_test.py) for layer/network construction,
-gradients, training, and resident uploads/downloads.
+gradients, training, and resident uploads/downloads, and
+[input map examples](tests/input_map_python_test.py) for
+`kan.Network([kan.InputMap(2, kan.affine_from_range(x)), kan.Layer(2, 1, ...)])`.
 
 ## Full-call benchmarks and profiling
 

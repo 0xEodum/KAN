@@ -1,0 +1,12 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,1.011,0.803,1.233
+m2,m1_host_full,4,0.925,0.769,1.001
+m2,m2_resident_full,24,0.923,0.228,1.043
+m2,m2_transfer_full,24,0.950,0.238,1.168
+m3,cpu_full,12,0.991,0.904,1.061
+m3,m3_resident_full,12,0.960,0.641,1.045
+m3,m3_transfer_full,12,0.977,0.883,1.050
+m4,cpu_full,12,1.004,0.921,1.242
+m4,m4_resident_full,12,1.043,0.691,2.459
+m4,m4_transfer_full,12,1.016,0.496,1.910
+checksum mismatches: 0
