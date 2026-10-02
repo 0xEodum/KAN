@@ -216,9 +216,12 @@ __global__ void rational_parameter_kernel(const double* input,const double* valu
     }
 }
 
+} // namespace
+
 // Device state shared by every layer plan: the arena, stream and status word,
-// the double-buffered parameter regions and the per-layer activations.
-struct Context {
+// the double-buffered parameter regions and the per-layer activations. Named
+// (not anonymous) because ResidentNetwork::Impl derives from it.
+struct ResidentContext {
     std::size_t capacity, batch = 0;
     std::size_t parameters = 0, gradients = 0, candidates = 0;
     std::vector<std::size_t> activation, upstream;
@@ -234,6 +237,9 @@ struct Context {
         if (!destination.empty()) check(cudaMemcpyAsync(destination.data(), data, destination.size_bytes(), cudaMemcpyDeviceToHost, stream), "resident download");
     }
 };
+
+namespace {
+using Context = ResidentContext;
 
 // Bump allocator over the arena, checked before the single device allocation.
 struct Reservation {
@@ -275,12 +281,14 @@ struct ExpansionPlan {
 };
 
 struct BasisPlan {
+    using edges_type = BasisEdges;
     ExpansionPlan expansion;
 };
 
 // Adds trainable shared centers/log widths (nonlinear block: centers, then
 // log widths) and their tiled reductions.
 struct TrainableRbfPlan {
+    using edges_type = TrainableRbfEdges;
     ExpansionPlan expansion;
     std::size_t log_derivatives = 0, partials = 0;
     unsigned partial_tiles = 1;
@@ -289,6 +297,7 @@ struct TrainableRbfPlan {
 // Rational edges with edge-major caches of P, Q and dr/dx (nonlinear block:
 // denominators).
 struct RationalPlan {
+    using edges_type = RationalEdges;
     ParameterBlock block;
     RationalConfig config;
     std::size_t values = 0, derivatives = 0, denominator_values = 0;
@@ -440,6 +449,8 @@ void validate_candidates(Context& s, const TrainableRbfPlan& plan) {
 void validate_candidates(Context&, const RationalPlan&) {}
 
 // Nonlinear gradients, downloaded asynchronously (the caller synchronizes).
+// The destination vectors are moved, never copied, into the result, so the
+// heap buffers the pending copies target stay the same.
 NonlinearGradients download_nonlinear(Context&, const BasisPlan&) { return std::monostate{}; }
 NonlinearGradients download_nonlinear(Context& s, const TrainableRbfPlan& plan) {
     const auto& b = plan.expansion.block;
@@ -474,20 +485,18 @@ Carrier download_carrier(Context& s, const RationalPlan& plan, const RationalEdg
 // Applies f(plan, edges) to a layer's plan and its matching carrier alternative.
 template<class F> decltype(auto) with_carrier(const Plan& plan, const Layer& layer, F&& f) {
     return std::visit([&](const auto& p) -> decltype(auto) {
-        using P = std::decay_t<decltype(p)>;
-        using Edges = std::conditional_t<std::is_same_v<P, BasisPlan>, BasisEdges,
-                      std::conditional_t<std::is_same_v<P, TrainableRbfPlan>, TrainableRbfEdges, RationalEdges>>;
+        using Edges = typename std::decay_t<decltype(p)>::edges_type;
         return f(p, std::get<Edges>(layer.carrier()));
     }, plan);
 }
 }
 
-struct ResidentNetwork::Impl : Context {
+struct ResidentNetwork::Impl : ResidentContext {
     Network model;
     std::size_t allocations = 0, parameter_count = 0;
     std::vector<Plan> plans;
     bool has_input = false, has_upstream = false, has_forward = false, has_backward = false;
-    explicit Impl(const Network& source, std::size_t maximum) : Context{maximum}, model(source) {
+    explicit Impl(const Network& source, std::size_t maximum) : ResidentContext{maximum}, model(source) {
         if (model.layers().empty()) throw std::invalid_argument("resident network is empty or moved from");
         // Validate the copied CPU state and all shape arithmetic before CUDA allocation.
         model.forward({}, 0);

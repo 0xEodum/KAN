@@ -19,6 +19,7 @@ template<class Config>
 void expansion_forward(const Config& basis, const std::vector<double>& coefficients, EdgeShape shape,
                        std::span<const double> bias, std::span<const double> input, std::size_t batch,
                        std::span<double> output) {
+    if (batch == 0) return; // no scratch for shape-only calls
     Expansion expansion(basis_view(basis), shape.inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);
@@ -59,6 +60,7 @@ void forward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const do
 void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> input,
               std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, std::monostate&) {
+    if (batch == 0) return;
     Expansion expansion(basis_view(edges.basis), shape.inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);
@@ -71,6 +73,7 @@ void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> 
 void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> input,
               std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, TrainableRbfGradients& nonlinear) {
+    if (batch == 0) return;
     Expansion expansion(basis_view(edges.basis), shape.inputs);
     double* centers = nonlinear.centers.data();
     double* log_widths = nonlinear.log_widths.data();

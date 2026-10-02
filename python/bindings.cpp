@@ -367,7 +367,9 @@ PYBIND11_MODULE(_kan, module) {
              py::arg("inputs"), py::arg("outputs"), py::arg("rational"))
         .def_property_readonly("inputs", &kan::Layer::inputs)
         .def_property_readonly("outputs", &kan::Layer::outputs)
-        .def_property_readonly("carrier", &carrier_view)
+        .def_property_readonly("carrier", &carrier_view,
+            "Owned read-only snapshot of the layer's carrier (BasisEdges, TrainableRbfEdges or "
+            "RationalEdges); every access copies the parameters.")
         .def_property_readonly("terms", &kan::Layer::terms)
         .def_property_readonly("coefficients", [](const kan::Layer& layer) {
             return owned(layer.coefficients(), coefficient_shape(layer));

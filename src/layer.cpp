@@ -61,15 +61,13 @@ void Layer::validate_state() const {
 
 void Layer::set_parameters(std::span<const double> coefficients, std::span<const double> bias) {
     validate_state();
-    auto next = carrier_;
-    auto& next_coefficients = coefficients_of(next);
-    if (coefficients.size() != next_coefficients.size() || bias.size() != bias_.size())
+    auto& current = coefficients_of(carrier_);
+    if (coefficients.size() != current.size() || bias.size() != bias_.size())
         throw std::invalid_argument("parameter shape mismatch");
     require_finite(coefficients);
     require_finite(bias);
-    next_coefficients.assign(coefficients.begin(), coefficients.end());
-    std::vector<double> next_bias(bias.begin(), bias.end());
-    carrier_ = std::move(next);
+    std::vector<double> next_coefficients(coefficients.begin(), coefficients.end()), next_bias(bias.begin(), bias.end());
+    current.swap(next_coefficients);
     bias_.swap(next_bias);
 }
 
