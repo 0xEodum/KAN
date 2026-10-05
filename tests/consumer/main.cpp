@@ -43,7 +43,17 @@ int main() {
     if(rational_denominators.size()!=1)return 1;
 #ifdef KAN_CONSUMER_CUDA
     if (!kan::cuda::available()) return 1;
+    // The installed legacy API (deprecated since backlog R7) must still link and run.
+#if defined(_MSC_VER)
+#pragma warning(suppress : 4996)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     const auto gpu_result = kan::cuda::forward(layer, std::vector<double>{-1, 0, 1}, 3);
+#if !defined(_MSC_VER) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
     for (std::size_t i = 0; i < expected.size(); ++i)
         if (std::abs(gpu_result[i] - expected[i]) > 1e-12) return 1;
     std::cout << "Installed kan::cuda consumer passed\n";
