@@ -1,4 +1,140 @@
-# Backlog R8/R9 RED run at 6715723 + RED tests (build-b-r8r9, MSVC 19.50 + CUDA 13.1 + Python)
+# Backlog R8/R9 RED run: 6715723 + RED tests, build-b-r8r9 (MSVC 19.50 + CUDA 13.1 + Python)
 ## Build: resident_upload_test does not compile
+tests\resident_upload_test.cpp(169): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(194): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(213): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(222): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(321): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(335): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(363): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(367): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(434): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(447): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(458): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(470): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(473): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(487): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(492): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(503): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(509): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(511): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(516): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(517): error C2039: 'upload_parameters': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_upload_test.cpp(522): error C2039: 'available': is not a member of 'kan::cuda'
+tests\resident_upload_test.cpp(522): error C3861: 'available': identifier not found
 
 ## CTest (remaining targets built with ninja -k 0)
+Test project build-b-r8r9
+    Start 16: cuda_deprecation_available
+1/3 Test #16: cuda_deprecation_available .......   Passed    0.89 sec
+    Start 17: cuda_deprecation_resident_only
+2/3 Test #17: cuda_deprecation_resident_only ...***Failed    0.44 sec
+[1/2] Building CXX object CMakeFiles\cuda_deprecation_resident_only.dir\tests\cuda_deprecation_probe.cpp.obj
+FAILED: CMakeFiles/cuda_deprecation_resident_only.dir/tests/cuda_deprecation_probe.cpp.obj 
+"C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64\cl.exe"  /nologo /TP -DKAN_PROBE_RESIDENT_ONLY -Iinclude /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -std:c++20 -MD /we4996 /showIncludes /FoCMakeFiles\cuda_deprecation_resident_only.dir\tests\cuda_deprecation_probe.cpp.obj /FdCMakeFiles\cuda_deprecation_resident_only.dir\ /FS -c tests\cuda_deprecation_probe.cpp
+tests\cuda_deprecation_probe.cpp(15): error C2039: 'available': is not a member of 'kan::cuda'
+include\kan/resident.hpp(6): note: see declaration of 'kan::cuda'
+tests\cuda_deprecation_probe.cpp(15): error C3861: 'available': identifier not found
+ninja: build stopped: subcommand failed.
+
+    Start 18: cuda_deprecation_legacy
+3/3 Test #18: cuda_deprecation_legacy ..........   Passed    0.52 sec
+
+67% tests passed, 1 tests failed out of 3
+
+Label Time Summary:
+build    =   1.84 sec*proc (3 tests)
+cuda     =   1.84 sec*proc (3 tests)
+
+Total Test time (real) =   1.85 sec
+
+The following tests FAILED:
+	 17 - cuda_deprecation_resident_only (Failed)           build cuda
+Errors while running CTest
+Test project build-b-r8r9
+    Start 27: resident_upload
+Could not find executable build-b-r8r9/resident_upload_test.exe
+Looked in the following places:
+build-b-r8r9/resident_upload_test.exe
+build-b-r8r9/resident_upload_test.exe.exe
+build-b-r8r9/Release/resident_upload_test.exe
+build-b-r8r9/Release/resident_upload_test.exe.exe
+build-b-r8r9/Debug/resident_upload_test.exe
+build-b-r8r9/Debug/resident_upload_test.exe.exe
+build-b-r8r9/MinSizeRel/resident_upload_test.exe
+build-b-r8r9/MinSizeRel/resident_upload_test.exe.exe
+build-b-r8r9/RelWithDebInfo/resident_upload_test.exe
+build-b-r8r9/RelWithDebInfo/resident_upload_test.exe.exe
+build-b-r8r9/Deployment/resident_upload_test.exe
+build-b-r8r9/Deployment/resident_upload_test.exe.exe
+build-b-r8r9/Development/resident_upload_test.exe
+build-b-r8r9/Development/resident_upload_test.exe.exe
+Unable to find executable: build-b-r8r9/resident_upload_test.exe
+1/2 Test #27: resident_upload ..................***Not Run   0.00 sec
+    Start 34: resident_upload_python
+2/2 Test #34: resident_upload_python ...........***Failed    0.40 sec
+EEEEE
+======================================================================
+ERROR: test_cpu_trained_weights_run_on_the_gpu (__main__.UploadParameters.test_cpu_trained_weights_run_on_the_gpu)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests\resident_upload_python_test.py", line 54, in test_cpu_trained_weights_run_on_the_gpu
+    self.assertIsNone(gpu.upload_parameters(cpu))
+                      ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'upload_parameters'. Did you mean: 'download_parameters'?
+
+======================================================================
+ERROR: test_float32_rejects_unrepresentable_values (__main__.UploadParameters.test_float32_rejects_unrepresentable_values)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests\resident_upload_python_test.py", line 88, in test_float32_rejects_unrepresentable_values
+    gpu.upload_parameters(network(gain=1e39))
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'upload_parameters'. Did you mean: 'download_parameters'?
+
+======================================================================
+ERROR: test_mismatch_raises_value_error_and_keeps_state (__main__.UploadParameters.test_mismatch_raises_value_error_and_keeps_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests\resident_upload_python_test.py", line 79, in test_mismatch_raises_value_error_and_keeps_state
+    gpu.upload_parameters(other)
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'upload_parameters'. Did you mean: 'download_parameters'?
+
+======================================================================
+ERROR: test_round_trip (__main__.UploadParameters.test_round_trip)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests\resident_upload_python_test.py", line 67, in test_round_trip
+    fresh.upload_parameters(saved)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'upload_parameters'. Did you mean: 'download_parameters'?
+
+======================================================================
+ERROR: test_upload_invalidates_forward_state (__main__.UploadParameters.test_upload_invalidates_forward_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests\resident_upload_python_test.py", line 98, in test_upload_invalidates_forward_state
+    gpu.upload_parameters(trained(network(), self.x, self.u))
+    ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'upload_parameters'. Did you mean: 'download_parameters'?
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.116s
+
+FAILED (errors=5)
+
+
+0% tests passed, 2 tests failed out of 2
+
+Label Time Summary:
+cuda           =   0.00 sec*proc (1 test)
+integration    =   0.40 sec*proc (1 test)
+python         =   0.40 sec*proc (1 test)
+
+Total Test time (real) =   0.41 sec
+
+The following tests FAILED:
+	 27 - resident_upload (Not Run)                         cuda
+	 34 - resident_upload_python (Failed)                   integration python
+Errors while running CTest
