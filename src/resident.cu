@@ -76,16 +76,60 @@ struct StatusGuard {
 struct CheckedEarlier {
     template<class T> __device__ T operator()(T value) const { return value; }
 };
+// Row tiles staged in shared memory (backlog C1 profiling). A row of Phi,
+// Phi' or W holds `terms` contiguous values; one thread per row reading or
+// writing it directly makes every warp access 32 addresses `terms` elements
+// apart (uncoalesced; about 7x the DRAM traffic of the 256-wide FP32 step).
+// Kernels instead move tiles of `tile_rows` consecutive rows, i.e. contiguous
+// tile_rows*terms elements, between global and shared memory with coalesced
+// accesses, and each thread works on its row in shared memory. The arithmetic
+// and summation order are unchanged. tile_rows = 0 (rows too long for the
+// shared budget) keeps the direct per-thread access.
+constexpr unsigned stage_threads = 256;
+constexpr std::size_t stage_bytes = std::size_t{32} << 10;
+template<class T> unsigned stage_rows(std::size_t terms, std::size_t planes) {
+    const auto rows = std::min<std::size_t>(stage_threads, stage_bytes/(terms*planes*sizeof(T)))/32*32;
+    return static_cast<unsigned>(rows);
+}
+template<class T> __device__ T* stage_memory() {
+    extern __shared__ __align__(16) unsigned char stage_raw[];
+    return reinterpret_cast<T*>(stage_raw);
+}
+
 template<detail::BasisKind Kind, class T>
 __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_derivatives,
-                             std::size_t count, detail::BasisViewOf<T> basis, int* status) {
+                             std::size_t count, detail::BasisViewOf<T> basis, unsigned tile_rows, int* status) {
     const StatusGuard guard{status};
-    const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
-    for (auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; index < count; index += stride) {
-        const auto row = index * basis.terms;
-        const detail::BasisRowOf<T> out{values + row, derivatives + row, nullptr,
-                                        basis.trainable ? log_derivatives + row : nullptr};
-        detail::basis_terms_for<Kind>(basis, input[index], out, guard);
+    const auto terms = basis.terms;
+    if (tile_rows == 0) {
+        const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
+        for (auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; index < count; index += stride) {
+            const auto row = index * terms;
+            const detail::BasisRowOf<T> out{values + row, derivatives + row, nullptr,
+                                            basis.trainable ? log_derivatives + row : nullptr};
+            detail::basis_terms_for<Kind>(basis, input[index], out, guard);
+        }
+        return;
+    }
+    T* stage = stage_memory<T>();
+    const auto plane = static_cast<std::size_t>(tile_rows) * terms;
+    for (auto base = static_cast<std::size_t>(blockIdx.x) * tile_rows; base < count;
+         base += static_cast<std::size_t>(gridDim.x) * tile_rows) {
+        const auto rows = count - base < tile_rows ? count - base : static_cast<std::size_t>(tile_rows);
+        if (threadIdx.x < rows) {
+            const auto row = threadIdx.x * terms;
+            const detail::BasisRowOf<T> out{stage + row, stage + plane + row, nullptr,
+                                            basis.trainable ? stage + 2 * plane + row : nullptr};
+            detail::basis_terms_for<Kind>(basis, input[base + threadIdx.x], out, guard);
+        }
+        __syncthreads();
+        const auto length = rows * terms, offset = base * terms;
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
+            values[offset + i] = stage[i];
+            derivatives[offset + i] = stage[plane + i];
+            if (basis.trainable) log_derivatives[offset + i] = stage[2 * plane + i];
+        }
+        __syncthreads();
     }
 }
 // Contraction engine epilogues (backlog C2). cuBLAS computes the products:
@@ -160,27 +204,48 @@ __global__ void parameter_partial_kernel(const T* v, const T* u, T* partial, std
 // the rows r = (sample, input), then the `checked` parameter VJPs [dC | db]:
 // with partials, their fixed-order tile sum plus lambda*C; otherwise (written
 // by cuBLAS earlier on the stream) only the nonfinite check.
+// Rows are reduced from staged tiles of Phi' and W (tile_rows > 0, see
+// stage_rows) or directly; the parameter part is a grid-stride loop.
 template<class T>
 __global__ void backward_finish_kernel(const T* derivatives, const T* w, T* dx,
                                        std::size_t rows, std::size_t terms, T* gradients, std::size_t checked,
                                        const T* partial, unsigned tiles, const T* c, std::size_t coefficients,
-                                       T lambda, int* status) {
+                                       T lambda, unsigned tile_rows, int* status) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows+checked; index += stride) {
-        if (index >= rows) {
-            const auto q = index-rows;
-            if (partial) {
-                T sum = 0;
-                for (unsigned t = 0; t < tiles; ++t) sum += partial[t*checked+q];
-                if (q < coefficients) sum += lambda*c[q];
-                gradients[q] = sum;
-            }
-            report(gradients[q], status);
-            continue;
+    if (tile_rows == 0) {
+        for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
+            T sum = 0;
+            for (std::size_t k = 0; k < terms; ++k) sum += derivatives[index*terms+k]*w[index*terms+k];
+            dx[index] = sum; report(sum, status);
         }
-        T sum = 0;
-        for (std::size_t k = 0; k < terms; ++k) sum += derivatives[index*terms+k]*w[index*terms+k];
-        dx[index] = sum; report(sum, status);
+    } else {
+        T* stage = stage_memory<T>();
+        const auto plane = static_cast<std::size_t>(tile_rows)*terms;
+        for (auto base = static_cast<std::size_t>(blockIdx.x)*tile_rows; base < rows;
+             base += static_cast<std::size_t>(gridDim.x)*tile_rows) {
+            const auto count = rows-base < tile_rows ? rows-base : static_cast<std::size_t>(tile_rows);
+            const auto length = count*terms, offset = base*terms;
+            for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
+                stage[i] = derivatives[offset+i]; stage[plane+i] = w[offset+i];
+            }
+            __syncthreads();
+            if (threadIdx.x < count) {
+                T sum = 0;
+                const T* d = stage+threadIdx.x*terms;
+                for (std::size_t k = 0; k < terms; ++k) sum += d[k]*d[plane+k];
+                dx[base+threadIdx.x] = sum; report(sum, status);
+            }
+            __syncthreads();
+        }
+    }
+    for (auto q = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; q < checked; q += stride) {
+        if (partial) {
+            T sum = 0;
+            for (unsigned t = 0; t < tiles; ++t) sum += partial[t*checked+q];
+            if (q < coefficients) sum += lambda*c[q];
+            gradients[q] = sum;
+        }
+        report(gradients[q], status);
     }
 }
 template<class T>
@@ -212,6 +277,47 @@ __global__ void nonlinear_partial_kernel(const T* dx, const T* dw, const T* w,
     if(lane==0) {
         partial[k*tiles+tile]=centers[0];partial[(terms+k)*tiles+tile]=widths[0];
         report(centers[0],status);report(widths[0],status);
+    }
+}
+// Staged variant (C1 profiling): the kernel above reads column k of three
+// row-major (rows, terms) tensors, i.e. addresses `terms` apart per lane.
+// Here block `tile` moves chunks of tile_rows consecutive rows of dx, dw and
+// W into shared memory with coalesced loads; thread t accumulates term
+// k = t % terms over the chunk rows t / terms, t / terms + per, ... (per =
+// blockDim / terms), and a fixed-order sum over those row lanes gives the
+// same partial layout [k*tiles + tile] that nonlinear_finish_kernel reduces.
+template<class T>
+__global__ void nonlinear_staged_kernel(const T* dx, const T* dw, const T* w, T* partial, std::size_t rows,
+                                        std::size_t terms, unsigned tiles, unsigned tile_rows, int* status) {
+    __shared__ T centers[stage_threads], widths[stage_threads];
+    T* stage = stage_memory<T>();
+    const auto plane = static_cast<std::size_t>(tile_rows)*terms;
+    const auto per = blockDim.x/terms, k = threadIdx.x%terms, lane_row = threadIdx.x/terms;
+    const bool active = lane_row < per;
+    T center = 0, width = 0;
+    for (auto base = static_cast<std::size_t>(blockIdx.x)*tile_rows; base < rows; base += static_cast<std::size_t>(tiles)*tile_rows) {
+        const auto count = rows-base < tile_rows ? rows-base : static_cast<std::size_t>(tile_rows);
+        const auto length = count*terms, offset = base*terms;
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
+            stage[i] = dx[offset+i]; stage[plane+i] = dw[offset+i]; stage[2*plane+i] = w[offset+i];
+        }
+        __syncthreads();
+        if (active)
+            for (std::size_t r = lane_row; r < count; r += per) {
+                const auto i = r*terms+k;
+                const T factor = stage[2*plane+i];
+                center += factor*(-stage[i]); width += factor*stage[plane+i];
+            }
+        __syncthreads();
+    }
+    report(center, status); report(width, status);
+    centers[threadIdx.x] = center; widths[threadIdx.x] = width;
+    __syncthreads();
+    if (threadIdx.x < terms) {
+        T c = 0, v = 0;
+        for (unsigned r = 0; r < per; ++r) { c += centers[r*terms+threadIdx.x]; v += widths[r*terms+threadIdx.x]; }
+        partial[threadIdx.x*tiles+blockIdx.x] = c; partial[(terms+threadIdx.x)*tiles+blockIdx.x] = v;
+        report(c, status); report(v, status);
     }
 }
 template<class T>
@@ -883,15 +989,18 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     auto basis = p.view;
     basis.centers = centers; basis.log_widths = log_widths;
     basis.scales = s.ptr(p.scales); basis.knots = s.ptr(p.knots);
+    const auto count = s.batch*b.inputs;
+    const auto tile_rows = stage_rows<T>(b.terms, basis.trainable ? 3 : 2);
+    const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*(basis.trainable ? 3 : 2)*sizeof(T);
     detail::visit_basis_family(basis.kind, [&](auto family) {
-        basis_kernel<decltype(family)::value><<<blocks(s.batch*b.inputs), 256, 0, s.stream>>>(
-            s.ptr(s.activation[j]), s.ptr(p.values), s.ptr(p.derivatives), log_derivatives, s.batch*b.inputs, basis, s.status);
+        basis_kernel<decltype(family)::value><<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads, shared, s.stream>>>(
+            s.ptr(s.activation[j]), s.ptr(p.values), s.ptr(p.derivatives), log_derivatives, count, basis, tile_rows, s.status);
     });
     check(cudaGetLastError(), "resident basis launch");
-    const auto count = s.batch*b.outputs, length = b.inputs*b.terms;
-    if (count <= small_forward_contraction<T>/length) {
-        forward_dot_kernel<<<blocks(count, 256/32), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.parameters+b.offset),
-            s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), count, b.outputs, length, s.status);
+    const auto outputs = s.batch*b.outputs, length = b.inputs*b.terms;
+    if (outputs <= small_forward_contraction<T>/length) {
+        forward_dot_kernel<<<blocks(outputs, 256/32), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.parameters+b.offset),
+            s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), outputs, b.outputs, length, s.status);
         check(cudaGetLastError(), "resident forward contraction launch");
         return;
     }
@@ -994,9 +1103,12 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
               "resident input VJP contraction");
     }
     const auto rows = s.batch*b.inputs;
-    backward_finish_kernel<<<blocks(rows+checked), 256, 0, s.stream>>>(s.ptr(p.derivatives), s.ptr(s.scratch),
+    const auto tile_rows = stage_rows<T>(b.terms, 2);
+    const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*2*sizeof(T);
+    const auto grid = std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
+    backward_finish_kernel<<<grid, stage_threads, shared, s.stream>>>(s.ptr(p.derivatives), s.ptr(s.scratch),
         s.ptr(s.upstream[j]), rows, b.terms, dc, checked, small ? s.ptr(s.partials) : nullptr, tiles, c,
-        b.coefficients, lambda, s.status);
+        b.coefficients, lambda, tile_rows, s.status);
     check(cudaGetLastError(), "resident backward finish launch");
 }
 
@@ -1012,8 +1124,15 @@ template<class T> void run_backward(Context<T>& s, const TrainableRbfPlan<T>& pl
     const auto tiles=static_cast<unsigned>(std::min<std::size_t>(plan.partial_tiles,rows?((rows-1)/256+1):1));
     // Bound the launch dimension even for large valid basis term counts.
     if(b.terms>2147483647U/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
-    nonlinear_partial_kernel<<<static_cast<unsigned>(b.terms)*tiles,256,0,s.stream>>>(s.ptr(p.derivatives),s.ptr(plan.log_derivatives),
-        s.ptr(s.scratch),s.ptr(plan.partials),rows,b.terms,tiles,s.status);
+    const auto tile_rows = b.terms <= stage_threads ? stage_rows<T>(b.terms, 3) : 0;
+    if (rows && tile_rows) {
+        nonlinear_staged_kernel<<<tiles, stage_threads, static_cast<std::size_t>(tile_rows)*b.terms*3*sizeof(T), s.stream>>>(
+            s.ptr(p.derivatives), s.ptr(plan.log_derivatives), s.ptr(s.scratch), s.ptr(plan.partials), rows, b.terms, tiles,
+            tile_rows, s.status);
+    } else {
+        nonlinear_partial_kernel<<<static_cast<unsigned>(b.terms)*tiles,256,0,s.stream>>>(s.ptr(p.derivatives),s.ptr(plan.log_derivatives),
+            s.ptr(s.scratch),s.ptr(plan.partials),rows,b.terms,tiles,s.status);
+    }
     check(cudaGetLastError(),"resident nonlinear partial launch");
     nonlinear_finish_kernel<<<blocks(2*b.terms),256,0,s.stream>>>(s.ptr(plan.partials),s.ptr(s.gradients+b.nonlinear()),b.terms,tiles,s.status);
     check(cudaGetLastError(),"resident nonlinear reduction launch");
