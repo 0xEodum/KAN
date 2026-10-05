@@ -23,6 +23,10 @@ using kan::cuda::ResidentNetwork;
 // reductions makes small entries carry absolute error) and the FP32 normal
 // range (values below it are flushed or subnormal in single precision).
 constexpr double fp32_relative = 2e-4, fp32_floor = 5e-5, fp32_underflow = 1e-37;
+// TF32 tensor-op contractions round their operands to 10 mantissa bits.
+constexpr double tf32_relative = 1e-2, tf32_floor = 1e-2;
+// Per-call tolerance of the precision under test (train_like_cpu sets it).
+double call_relative = fp32_relative, call_floor = fp32_floor;
 
 template<class... Parts> std::string precise(const Parts&... parts) {
     std::ostringstream out;
@@ -31,7 +35,8 @@ template<class... Parts> std::string precise(const Parts&... parts) {
     return out.str();
 }
 void close(std::span<const double> actual, std::span<const double> expected,
-           double relative = fp32_relative, double floor = fp32_floor) {
+           double relative = -1, double floor = -1) {
+    if (relative < 0) { relative = call_relative; floor = call_floor; }
     REQUIRE(actual.size() == expected.size());
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
@@ -134,9 +139,11 @@ constexpr double trajectory_relative = 1e-2, trajectory_floor = 1e-3;
 // sensitivity; SGD is checked against p - rate*g of the downloaded values and
 // the final parameters against an FP64 CPU trajectory within the loose bound.
 void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, double lambda, int steps,
-                    double rate = 0.05) {
-    ResidentNetwork gpu(cpu, capacity, Precision::Float32);
-    REQUIRE(gpu.precision() == Precision::Float32);
+                    double rate = 0.05, Precision precision = Precision::Float32) {
+    ResidentNetwork gpu(cpu, capacity, precision);
+    REQUIRE(gpu.precision() == precision);
+    const bool tf32 = precision == Precision::TensorFloat32;
+    call_relative = tf32 ? tf32_relative : fp32_relative; call_floor = tf32 ? tf32_floor : fp32_floor;
     const auto allocations = gpu.workspace_allocations();
     const auto x = wave(batch*cpu.inputs(), 0.9, 0.37), dy = wave(batch*cpu.outputs(), 0.2, 0.53, 1);
     gpu.upload_input(x, batch); gpu.upload_output_gradient(dy);
@@ -164,7 +171,7 @@ void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, d
                 for (std::size_t k = 0; k < t->coefficients.size(); ++k) t->coefficients[k] += test::grad(cpu_penalty, j).coefficients[k];
         cpu.sgd(total, rate);
     }
-    close(flat(gpu.download_parameters()), flat(cpu), trajectory_relative, trajectory_floor);
+    close(flat(gpu.download_parameters()), flat(cpu), trajectory_relative, tf32 ? tf32_floor : trajectory_floor);
     REQUIRE(gpu.workspace_allocations() == allocations);
 }
 } // namespace
@@ -229,6 +236,23 @@ TEST(float32_contraction_paths_match_fp64_cpu) {
 
 // Results beyond the FP32 range are nonfinite in single precision and are
 // reported like any nonfinite result; the executor then recovers.
+// TF32 tensor-op contractions (opt-in): the cuBLAS paths of the contraction
+// test within the TF32 tolerance, and their results differ from FP32 SGEMM
+// (so the math mode is in effect) while staying within that tolerance of it.
+TEST(tensor_float32_contractions_match_fp64_cpu) {
+    struct Reset { ~Reset() { call_relative = fp32_relative; call_floor = fp32_floor; } } reset;
+    const auto net = [] {
+        return kan::Network({layer(64, 80, kan::ChebyshevConfig{7}, 0.7), layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)});
+    };
+    train_like_cpu(net(), 1000, 1000, 0.01, 2, 0.01, Precision::TensorFloat32);
+    const auto x = wave(1000*64, 0.9, 0.37);
+    ResidentNetwork fp32(net(), 1000, Precision::Float32), tf32(net(), 1000, Precision::TensorFloat32);
+    fp32.upload_input(x, 1000); fp32.forward(); tf32.upload_input(x, 1000); tf32.forward();
+    const auto a = tf32.download_output(), b = fp32.download_output();
+    REQUIRE(a != b);
+    close(a, b, tf32_relative, tf32_floor);
+}
+
 TEST(float32_reports_overflow_beyond_float_range) {
     kan::Layer l(1, 1, kan::ChebyshevConfig{2});
     l.set_parameters(std::vector<double>{0.0, 1e38}, std::vector<double>{0.0});

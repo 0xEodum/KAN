@@ -17,7 +17,7 @@ def network():
 
 class Precision(unittest.TestCase):
     def test_enum(self):
-        self.assertEqual({p.name for p in kan.Precision}, {"FLOAT64", "FLOAT32"})
+        self.assertEqual({p.name for p in kan.Precision}, {"FLOAT64", "FLOAT32", "TF32"})
 
     @unittest.skipUnless(CUDA, "CUDA build")
     def test_default_is_float64(self):

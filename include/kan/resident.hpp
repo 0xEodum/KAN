@@ -11,6 +11,9 @@ namespace kan::cuda {
 enum class Precision {
     Float64, // default: double storage and kernels, the parity reference
     Float32, // float storage and kernels, cuBLAS SGEMM; opt-in for training
+    // Float32 whose cuBLAS contractions use TF32 tensor cores (10-bit
+    // mantissa operands, FP32 accumulation): faster large GEMMs, looser tolerance.
+    TensorFloat32,
 };
 
 // Move-only GPU network. Construction reserves all device workspaces for the

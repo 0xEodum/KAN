@@ -249,6 +249,7 @@ PYBIND11_MODULE(_kan, module) {
                                           "Resident executor storage and arithmetic precision")
         .value("FLOAT64", kan::cuda::Precision::Float64, "double precision, the parity reference (default)")
         .value("FLOAT32", kan::cuda::Precision::Float32, "single precision for training")
+        .value("TF32", kan::cuda::Precision::TensorFloat32, "single precision with TF32 tensor-core contractions")
         .finalize();
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;

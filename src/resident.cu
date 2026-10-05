@@ -19,7 +19,8 @@
 // Precision policy (backlog C1): every kernel, plan and the execution engine
 // are templates over the device scalar T. Engine<double> is the FP64 executor
 // (the parity reference; its operations are those of C2), Engine<float> the
-// opt-in FP32 executor. Host data and the public API stay double.
+// opt-in FP32 executor, optionally with TF32 tensor-op cuBLAS GEMMs. Host
+// data and the public API stay double.
 
 namespace kan::cuda {
 namespace {
@@ -1331,7 +1332,8 @@ struct Engine final : ResidentExecutor, Context<T> {
     std::size_t allocations = 0, parameter_count = 0;
     std::vector<Plan<T>> plans;
     bool has_input = false, has_upstream = false, has_forward = false, has_backward = false;
-    explicit Engine(const Network& source, std::size_t maximum) : Context<T>{maximum}, model(source) {
+    // tensor_ops: cuBLAS TF32 tensor-op math for the FP32 GEMMs (Precision::TensorFloat32).
+    Engine(const Network& source, std::size_t maximum, bool tensor_ops = false) : Context<T>{maximum}, model(source) {
         if (model.layers().empty()) throw std::invalid_argument("resident network is empty or moved from");
         // Validate the copied CPU state and all shape arithmetic before CUDA allocation.
         model.forward({}, 0);
@@ -1366,6 +1368,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             check(cublasCreate(&blas), "resident cuBLAS handle create");
             check(cublasSetStream(blas, stream), "resident cuBLAS stream");
             check(cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes), "resident cuBLAS workspace");
+            if (tensor_ops) check(cublasSetMathMode(blas, CUBLAS_TF32_TENSOR_OP_MATH), "resident cuBLAS TF32 math");
             if (capacity) {
                 fill_kernel<<<blocks(capacity), 256, 0, stream>>>(ptr(ones), capacity, T(1));
                 check(cudaGetLastError(), "resident ones launch");
@@ -1482,6 +1485,8 @@ ResidentNetwork::ResidentNetwork(const Network& network, std::size_t capacity, P
     switch (precision) {
     case Precision::Float64: impl_ = std::make_unique<Impl>(Impl{precision, std::make_unique<Engine<double>>(network, capacity)}); break;
     case Precision::Float32: impl_ = std::make_unique<Impl>(Impl{precision, std::make_unique<Engine<float>>(network, capacity)}); break;
+    case Precision::TensorFloat32:
+        impl_ = std::make_unique<Impl>(Impl{precision, std::make_unique<Engine<float>>(network, capacity, true)}); break;
     default: throw std::invalid_argument("invalid resident precision");
     }
 }
