@@ -1321,6 +1321,76 @@ template<class T> NetworkLayer download_stage(Context<T>& s, const LayerNormPlan
     return map;
 }
 
+// Parameter upload into an existing executor (backlog R9). The active
+// parameter region is one dense vector of parameter_count values (each plan's
+// block at its offset), so the upload stages the whole region on the host,
+// converting and validating in one pass, and commits it with a single copy.
+
+// Structure: what the executor was built for and does not upload. Trainable
+// RBF centers/log widths and LayerNorm gain/bias are state (only their counts
+// are structure); every other configuration value is compared exactly.
+bool same_structure(const BasisEdges& a, const BasisEdges& b) { return a.basis == b.basis; }
+bool same_structure(const TrainableRbfEdges& a, const TrainableRbfEdges& b) {
+    return a.basis.centers.size() == b.basis.centers.size() && a.basis.log_widths.size() == b.basis.log_widths.size();
+}
+bool same_structure(const RationalEdges& a, const RationalEdges& b) { return a.config == b.config; }
+bool same_structure(const AffineMap& a, const AffineMap& b) { return a == b; }
+bool same_structure(const TanhMap& a, const TanhMap& b) { return a == b; }
+bool same_structure(const LayerNormMap& a, const LayerNormMap& b) {
+    return a.epsilon == b.epsilon && a.gain.size() == b.gain.size() && a.bias.size() == b.bias.size();
+}
+bool same_dimensions(const Layer& a, const Layer& b) { return a.inputs() == b.inputs() && a.outputs() == b.outputs(); }
+bool same_dimensions(const InputMap& a, const InputMap& b) { return a.features() == b.features(); }
+const Carrier& kind_of(const Layer& layer) { return layer.carrier(); }
+const InputMapKind& kind_of(const InputMap& map) { return map.map(); }
+[[noreturn]] void structure_mismatch(std::size_t j, const char* what) {
+    throw std::invalid_argument("resident parameter upload: layer " + std::to_string(j) +
+                                " differs from the executor's network in its " + what);
+}
+
+// Host image of the parameter region in T. put() checks the tensor length,
+// finiteness and (FP32) representability with the construction messages.
+template<class T>
+struct ParameterImage {
+    std::unique_ptr<T[]> values; // every element is written: the blocks tile the region
+    void put(std::size_t offset, std::span<const double> data, std::size_t expected) {
+        if (data.size() != expected) throw std::invalid_argument("resident parameter upload: parameter shape mismatch");
+        bool nonfinite = false, outside = false;
+        T* out = values.get()+offset;
+        for (std::size_t i = 0; i < data.size(); ++i) {
+            const double v = data[i];
+            nonfinite |= !std::isfinite(v);
+            if constexpr (!std::is_same_v<T, double>) outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
+            out[i] = static_cast<T>(outside ? 0.0 : v);
+        }
+        if (nonfinite) throw std::invalid_argument("resident data must be finite");
+        if (outside) throw std::invalid_argument("resident data is not representable in float32");
+    }
+};
+template<class T> void image_carrier(ParameterImage<T>&, const BasisPlan<T>&, const BasisEdges&) {}
+template<class T> void image_carrier(ParameterImage<T>& image, const TrainableRbfPlan<T>& plan, const TrainableRbfEdges& edges) {
+    check_basis<T>(edges.basis); // FP32: centers representable, exp(log width) finite and positive
+    const auto& b = plan.expansion.block;
+    image.put(b.nonlinear(), edges.basis.centers, b.terms);
+    image.put(b.nonlinear()+b.terms, edges.basis.log_widths, b.terms);
+}
+template<class T> void image_carrier(ParameterImage<T>& image, const RationalPlan<T>& plan, const RationalEdges& edges) {
+    image.put(plan.block.nonlinear(), edges.denominators, plan.block.nonlinear_count);
+}
+template<class T, class P, class Edges>
+void image_stage(ParameterImage<T>& image, const P& plan, const Layer& layer, const Edges& edges) {
+    const auto& b = block_of(plan);
+    image.put(b.offset, layer.coefficients(), b.coefficients);
+    image.put(b.bias(), layer.bias(), b.outputs);
+    image_carrier(image, plan, edges);
+}
+template<class T> void image_stage(ParameterImage<T>&, const AffinePlan<T>&, const InputMap&, const AffineMap&) {}
+template<class T> void image_stage(ParameterImage<T>&, const TanhPlan<T>&, const InputMap&, const TanhMap&) {}
+template<class T> void image_stage(ParameterImage<T>& image, const LayerNormPlan<T>& plan, const InputMap&, const LayerNormMap& map) {
+    image.put(plan.block.offset, map.gain, plan.block.half());
+    image.put(plan.block.offset+plan.block.half(), map.bias, plan.block.half());
+}
+
 // Applies f(plan, stage, kind) to a plan, its network layer and the matching
 // carrier (KAN layer) or map (input map) alternative.
 template<class T, class F> decltype(auto) with_stage(const Plan<T>& plan, const NetworkLayer& stage, F&& f) {
@@ -1335,6 +1405,23 @@ template<class T, class F> decltype(auto) with_stage(const Plan<T>& plan, const 
         }
     }, plan);
 }
+// Applies f(plan, stage, kind) to a plan and the matching alternatives of
+// `source`, after checking that source's layer j has the structure of the
+// executor's snapshot layer (std::invalid_argument otherwise).
+template<class T, class F>
+void with_matching_stage(const Plan<T>& plan, const NetworkLayer& snapshot, const NetworkLayer& source, std::size_t j, F&& f) {
+    with_stage(plan, snapshot, [&](const auto& p, const auto& expected, const auto& expected_kind) {
+        using Stage = std::decay_t<decltype(expected)>;
+        using Kind = std::decay_t<decltype(expected_kind)>;
+        const auto* actual = std::get_if<Stage>(&source);
+        if (!actual) structure_mismatch(j, "kind (KAN layer or input map)");
+        if (!same_dimensions(expected, *actual)) structure_mismatch(j, "dimensions");
+        const auto* actual_kind = std::get_if<Kind>(&kind_of(*actual));
+        if (!actual_kind) structure_mismatch(j, std::is_same_v<Stage, Layer> ? "carrier" : "map kind");
+        if (!same_structure(expected_kind, *actual_kind)) structure_mismatch(j, "fixed configuration");
+        f(p, *actual, *actual_kind);
+    });
+}
 } // namespace
 
 // Precision-independent interface of an execution engine (one per Precision).
@@ -1345,6 +1432,7 @@ struct ResidentExecutor {
     virtual void forward() = 0;
     virtual void backward(double coefficient_l2) = 0;
     virtual void sgd(double learning_rate) = 0;
+    virtual void upload_parameters(const Network& network) = 0;
     virtual std::vector<double> download_output() = 0;
     virtual NetworkGradients download_gradients() = 0;
     virtual Network download_parameters() = 0;
@@ -1487,6 +1575,29 @@ struct Engine final : ResidentExecutor, Context<T> {
         std::swap(parameters, candidates);
         has_forward = has_backward = false;
     }
+    void upload_parameters(const Network& source) override {
+        const auto stages = source.layers();
+        if (stages.size() != plans.size())
+            throw std::invalid_argument("resident parameter upload: the layer count differs from the executor's network");
+        // Host only until every layer is checked and staged: structure first,
+        // then values with the construction rules. Nothing on the device or
+        // in the lifecycle state changes before the commit below.
+        for (std::size_t j = 0; j < plans.size(); ++j)
+            with_matching_stage(plans[j], model.layers()[j], stages[j], j, [](const auto&, const auto&, const auto&) {});
+        ParameterImage<T> image{std::make_unique_for_overwrite<T[]>(parameter_count)};
+        for (std::size_t j = 0; j < plans.size(); ++j)
+            with_matching_stage(plans[j], model.layers()[j], stages[j], j, [&](const auto& plan, const auto& stage, const auto& kind) {
+                image_stage(image, plan, stage, kind);
+            });
+        // Commit: one copy into the active region. The stream is idle (every
+        // call completes before returning); outputs and gradients of the old
+        // parameters become stale, the input and upstream stay valid.
+        has_forward = has_backward = false;
+        if (parameter_count)
+            check(cudaMemcpyAsync(ptr(parameters), image.values.get(), parameter_count*sizeof(T), cudaMemcpyHostToDevice, stream),
+                  "resident parameter upload");
+        sync();
+    }
     std::vector<double> download_output() override {
         if (!has_forward) throw std::logic_error("resident output requires current forward");
         std::vector<double> output(product(batch, extent(plans.back()).outputs));
@@ -1543,6 +1654,7 @@ void ResidentNetwork::upload_output_gradient(std::span<const double> gradient) {
 void ResidentNetwork::forward() { state().engine->forward(); }
 void ResidentNetwork::backward(double coefficient_l2) { state().engine->backward(coefficient_l2); }
 void ResidentNetwork::sgd(double learning_rate) { state().engine->sgd(learning_rate); }
+void ResidentNetwork::upload_parameters(const Network& network) { state().engine->upload_parameters(network); }
 std::vector<double> ResidentNetwork::download_output() { return state().engine->download_output(); }
 NetworkGradients ResidentNetwork::download_gradients() { return state().engine->download_gradients(); }
 Network ResidentNetwork::download_parameters() { return state().engine->download_parameters(); }

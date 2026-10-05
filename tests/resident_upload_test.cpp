@@ -248,7 +248,7 @@ std::vector<std::pair<std::string, kan::Network>> mismatches() {
     }
     {
         std::vector<kan::NetworkLayer> layers(base.layers().begin()+1, base.layers().end());
-        result.emplace_back("shifted layers", kan::Network(std::move(layers)));
+        result.emplace_back("leading layer removed", kan::Network(std::move(layers)));
     }
     result.emplace_back("layer instead of input map", replaced(4, seeded(kan::Layer(4, 4, kan::ChebyshevConfig{2}), 0.3)));
     result.emplace_back("input map instead of layer", replaced(6, kan::InputMap(3, kan::TanhMap{1.0})));

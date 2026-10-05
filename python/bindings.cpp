@@ -593,6 +593,8 @@ PYBIND11_MODULE(_kan, module) {
             }
             return NetworkGradient{std::move(gradient), model.value.batch(), model.topology};
         })
+        .def("upload_parameters", [](Resident& model, const kan::Network& network) { model.value.upload_parameters(network); },
+             py::arg("network"), py::call_guard<py::gil_scoped_release>())
         .def("download_parameters", [](Resident& model) { return model.value.download_parameters(); },
              py::call_guard<py::gil_scoped_release>());
 #endif
