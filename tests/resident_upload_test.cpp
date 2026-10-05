@@ -495,6 +495,45 @@ TEST(upload_invalidates_forward_state_and_keeps_input_and_upstream) {
     }
 }
 
+TEST(upload_of_parameter_regions_above_one_mebibyte) {
+    // FP64 regions above 1 MiB are copied tensor by tensor without host
+    // staging; FP32 always stages. Offsets of every block kind must hold.
+    std::vector<kan::NetworkLayer> layers;
+    layers.emplace_back(seeded(kan::Layer(48, 64, kan::ChebyshevConfig{48}), 0.3)); // 147456 coefficients
+    layers.emplace_back(kan::InputMap(64, kan::LayerNormMap{1e-3, wave(64, 0.1, 0.3, 1.0), wave(64, 0.05, 0.7)}));
+    layers.emplace_back(seeded(kan::Layer(64, 8, family(test::Family::TrainableRbf)), 0.6));
+    layers.emplace_back(rational(8, 2, kan::DenominatorPolicy::Smooth));
+    const kan::Network initial(std::move(layers));
+    REQUIRE(flat(initial).size()*sizeof(double) > (std::size_t{1} << 20));
+    const auto trained = cpu_trained(initial, 2, 0.01);
+    for (const auto p : precisions) {
+        ResidentNetwork gpu(initial, batch, p);
+        gpu.upload_parameters(trained);
+        REQUIRE(flat(gpu.download_parameters()) == rounded(flat(trained), p));
+        matches_cpu(gpu, trained, p);
+        // Rejections still leave everything unchanged.
+        std::vector<kan::NetworkLayer> stages(trained.layers().begin(), trained.layers().end());
+        stages[1] = kan::InputMap(64, kan::LayerNormMap{1e-2, wave(64, 0.1, 0.3, 1.0), wave(64, 0.05, 0.7)});
+        const auto before = flat(gpu.download_parameters());
+        test::throws<std::invalid_argument>([&] { gpu.upload_parameters(kan::Network(std::move(stages))); });
+        REQUIRE(flat(gpu.download_parameters()) == before);
+    }
+    // Validation precedes every copy: an invalid tensor after valid ones (FP32
+    // representability; FP64 values of a Network are always finite) uploads nothing.
+    auto huge = trained;
+    {
+        std::vector<kan::NetworkLayer> stages(huge.layers().begin(), huge.layers().end());
+        auto& last = std::get<kan::Layer>(stages[3]);
+        std::vector<double> bias(last.bias().begin(), last.bias().end()); bias[1] = 1e39;
+        last.set_parameters(std::vector<double>(last.coefficients().begin(), last.coefficients().end()), bias);
+        huge = kan::Network(std::move(stages));
+    }
+    ResidentNetwork gpu(initial, batch, Precision::Float32);
+    const auto before = flat(gpu.download_parameters());
+    test::throws<std::invalid_argument>([&] { gpu.upload_parameters(huge); });
+    REQUIRE(flat(gpu.download_parameters()) == before);
+}
+
 TEST(upload_needs_no_allocation_and_handles_parameter_free_networks) {
     const auto initial = mixed();
     ResidentNetwork gpu(initial, batch);

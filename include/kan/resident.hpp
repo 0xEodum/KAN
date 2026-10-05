@@ -48,7 +48,8 @@ public:
     // violation raises std::invalid_argument and leaves the executor
     // unchanged. Success invalidates the output and gradients (backward needs
     // a new forward) and keeps the uploaded input and upstream. No device
-    // allocation; one host-to-device copy.
+    // allocation; one host-to-device copy, or for FP64 parameters above 1 MiB
+    // one per parameter tensor (copied without host staging).
     void upload_parameters(const Network& network);
     std::vector<double> download_output();
     NetworkGradients download_gradients();

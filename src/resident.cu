@@ -1323,8 +1323,8 @@ template<class T> NetworkLayer download_stage(Context<T>& s, const LayerNormPlan
 
 // Parameter upload into an existing executor (backlog R9). The active
 // parameter region is one dense vector of parameter_count values (each plan's
-// block at its offset), so the upload stages the whole region on the host,
-// converting and validating in one pass, and commits it with a single copy.
+// block at its offset). Every source tensor is validated on the host before
+// the commit copies anything.
 
 // Structure: what the executor was built for and does not upload. Trainable
 // RBF centers/log widths and LayerNorm gain/bias are state (only their counts
@@ -1350,21 +1350,62 @@ const InputMapKind& kind_of(const InputMap& map) { return map.map(); }
 
 // Host image of the parameter region in T. put() checks the tensor length,
 // finiteness and (FP32) representability with the construction messages.
+// Packed: the tensors are converted into one host buffer covering the region
+// (the blocks tile it, so every element is written), committed with a single
+// copy; always for FP32, which must convert. Direct (FP64 regions above
+// direct_upload_bytes): nothing to convert, so the validated source tensors
+// are copied directly, one copy per nonempty tensor (at most four per KAN
+// layer, two per LayerNorm map). R9 profiling: packing a 117 MB FP64 region
+// was 40% of its upload (62 -> 45 ms direct, the copy alone 36 ms), while for
+// a 0.4 MB region the six direct copies cost more than packing (0.16 -> 0.24 ms).
+constexpr std::size_t direct_upload_bytes = std::size_t{1} << 20;
 template<class T>
 struct ParameterImage {
-    std::unique_ptr<T[]> values; // every element is written: the blocks tile the region
+    static constexpr bool may_copy_directly = std::is_same_v<T, double>; // no conversion needed
+    bool direct;
+    std::unique_ptr<T[]> values;                                          // packed
+    std::vector<std::pair<std::size_t, std::span<const double>>> sources; // direct
+    explicit ParameterImage(std::size_t count)
+        : direct(may_copy_directly && count > direct_upload_bytes/sizeof(T)) {
+        if (!direct) values = std::make_unique_for_overwrite<T[]>(count);
+    }
     void put(std::size_t offset, std::span<const double> data, std::size_t expected) {
         if (data.size() != expected) throw std::invalid_argument("resident parameter upload: parameter shape mismatch");
-        bool nonfinite = false, outside = false;
-        T* out = values.get()+offset;
-        for (std::size_t i = 0; i < data.size(); ++i) {
-            const double v = data[i];
-            nonfinite |= !std::isfinite(v);
-            if constexpr (!std::is_same_v<T, double>) outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
-            out[i] = static_cast<T>(outside ? 0.0 : v);
+        if constexpr (may_copy_directly) {
+            if (direct) {
+                finite(data);
+                if (!data.empty()) sources.emplace_back(offset, data);
+                return;
+            }
         }
-        if (nonfinite) throw std::invalid_argument("resident data must be finite");
-        if (outside) throw std::invalid_argument("resident data is not representable in float32");
+        {
+            bool nonfinite = false, outside = false;
+            T* out = values.get()+offset;
+            for (std::size_t i = 0; i < data.size(); ++i) {
+                const double v = data[i];
+                nonfinite |= !std::isfinite(v);
+                if constexpr (!std::is_same_v<T, double>) outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
+                out[i] = static_cast<T>(outside ? 0.0 : v);
+            }
+            if (nonfinite) throw std::invalid_argument("resident data must be finite");
+            if (outside) throw std::invalid_argument("resident data is not representable in float32");
+        }
+    }
+    // Asynchronous on the context's stream; the caller synchronizes before
+    // the sources (the caller's network) or the buffer go away.
+    void commit(Context<T>& s, std::size_t region, std::size_t count) const {
+        if constexpr (may_copy_directly) {
+            if (direct) {
+                for (const auto& [offset, data] : sources)
+                    check(cudaMemcpyAsync(s.ptr(region+offset), data.data(), data.size_bytes(), cudaMemcpyHostToDevice, s.stream),
+                          "resident parameter upload");
+                return;
+            }
+        }
+        if (count) {
+            check(cudaMemcpyAsync(s.ptr(region), values.get(), count*sizeof(T), cudaMemcpyHostToDevice, s.stream),
+                  "resident parameter upload");
+        }
     }
 };
 template<class T> void image_carrier(ParameterImage<T>&, const BasisPlan<T>&, const BasisEdges&) {}
@@ -1584,18 +1625,16 @@ struct Engine final : ResidentExecutor, Context<T> {
         // in the lifecycle state changes before the commit below.
         for (std::size_t j = 0; j < plans.size(); ++j)
             with_matching_stage(plans[j], model.layers()[j], stages[j], j, [](const auto&, const auto&, const auto&) {});
-        ParameterImage<T> image{std::make_unique_for_overwrite<T[]>(parameter_count)};
+        ParameterImage<T> image(parameter_count);
         for (std::size_t j = 0; j < plans.size(); ++j)
             with_matching_stage(plans[j], model.layers()[j], stages[j], j, [&](const auto& plan, const auto& stage, const auto& kind) {
                 image_stage(image, plan, stage, kind);
             });
-        // Commit: one copy into the active region. The stream is idle (every
-        // call completes before returning); outputs and gradients of the old
+        // Commit into the active region. The stream is idle (every call
+        // completes before returning); outputs and gradients of the old
         // parameters become stale, the input and upstream stay valid.
         has_forward = has_backward = false;
-        if (parameter_count)
-            check(cudaMemcpyAsync(ptr(parameters), image.values.get(), parameter_count*sizeof(T), cudaMemcpyHostToDevice, stream),
-                  "resident parameter upload");
+        image.commit(*this, parameters, parameter_count);
         sync();
     }
     std::vector<double> download_output() override {
