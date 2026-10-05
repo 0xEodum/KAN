@@ -1,7 +1,7 @@
 #include "kan/families.hpp"
 #include "kan/network.hpp"
+#include "kan/resident.hpp" // kan::cuda::Precision is declared in every build
 #ifdef KAN_PYTHON_CUDA
-#include "kan/resident.hpp"
 #include "kan/cuda.hpp"
 #endif
 #include <pybind11/native_enum.h>
@@ -222,9 +222,9 @@ struct Resident {
     std::vector<kan::NetworkLayer> topology;
     std::size_t inputs, outputs;
     kan::cuda::ResidentNetwork value;
-    Resident(const kan::Network& network, std::size_t capacity)
+    Resident(const kan::Network& network, std::size_t capacity, kan::cuda::Precision precision)
         : topology(network.layers().begin(), network.layers().end()), inputs(network.inputs()),
-          outputs(network.outputs()), value(network, capacity) {}
+          outputs(network.outputs()), value(network, capacity, precision) {}
 };
 #endif
 } // namespace
@@ -245,6 +245,11 @@ PYBIND11_MODULE(_kan, module) {
         .def_readwrite("scale", &kan::RationalConfig::scale)
         .def_readwrite("epsilon", &kan::RationalConfig::epsilon)
         .def_readwrite("denominator_policy", &kan::RationalConfig::denominator_policy);
+    py::native_enum<kan::cuda::Precision>(module, "Precision", "enum.Enum",
+                                          "Resident executor storage and arithmetic precision")
+        .value("FLOAT64", kan::cuda::Precision::Float64, "double precision, the parity reference (default)")
+        .value("FLOAT32", kan::cuda::Precision::Float32, "single precision for training")
+        .finalize();
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;
 #else
@@ -545,10 +550,11 @@ PYBIND11_MODULE(_kan, module) {
         }, py::arg("gradients"), py::arg("learning_rate"));
 #ifdef KAN_PYTHON_CUDA
     py::class_<Resident>(module, "ResidentNetwork")
-        .def(py::init([](const kan::Network& network, std::size_t capacity) {
+        .def(py::init([](const kan::Network& network, std::size_t capacity, kan::cuda::Precision precision) {
             py::gil_scoped_release release;
-            return std::make_unique<Resident>(network, capacity);
-        }), py::arg("network"), py::arg("capacity"))
+            return std::make_unique<Resident>(network, capacity, precision);
+        }), py::arg("network"), py::arg("capacity"), py::arg("precision") = kan::cuda::Precision::Float64)
+        .def_property_readonly("precision", [](const Resident& model) { return model.value.precision(); })
         .def_property_readonly("capacity", [](const Resident& model) { return model.value.capacity(); })
         .def_property_readonly("batch", [](const Resident& model) { return model.value.batch(); })
         .def_property_readonly("workspace_allocations", [](const Resident& model) {

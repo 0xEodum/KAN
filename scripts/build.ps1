@@ -5,6 +5,7 @@ param(
     [switch]$Python,
     [switch]$Benchmarks,
     [switch]$AllowUnsupportedCudaCompiler,
+    [switch]$CudaFma,
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Release',
     [string]$BuildDirectory = '',
     [string]$PythonExecutable = '',
@@ -30,12 +31,13 @@ $asanFlag = if ($Asan) { 'ON' } else { 'OFF' }
 $overrideFlag = if ($AllowUnsupportedCudaCompiler) { 'ON' } else { 'OFF' }
 $pythonFlag = if ($Python) { 'ON' } else { 'OFF' }
 $benchmarkFlag = if ($Benchmarks) { 'ON' } else { 'OFF' }
+$fmaFlag = if ($CudaFma) { 'ON' } else { 'OFF' }
 $pythonArgs = @()
 if ($Python) {
     if (-not $PythonExecutable) { $PythonExecutable = Join-Path $root '.venv\Scripts\python.exe' }
     $pythonArgs += "-DPython_EXECUTABLE=$PythonExecutable"
 }
-& cmake -S $root -B $buildPath -G Ninja "-DCMAKE_MAKE_PROGRAM=$ninja" '-DCMAKE_CXX_COMPILER=cl' "-DCMAKE_BUILD_TYPE=$Configuration" "-DKAN_ENABLE_CUDA=$cudaFlag" "-DKAN_ENABLE_ASAN=$asanFlag" "-DKAN_ALLOW_UNSUPPORTED_CUDA_COMPILER=$overrideFlag" "-DCMAKE_CUDA_ARCHITECTURES=$CudaArchitectures" "-DKAN_BUILD_PYTHON=$pythonFlag" "-DKAN_BUILD_BENCHMARKS=$benchmarkFlag" @pythonArgs
+& cmake -S $root -B $buildPath -G Ninja "-DCMAKE_MAKE_PROGRAM=$ninja" '-DCMAKE_CXX_COMPILER=cl' "-DCMAKE_BUILD_TYPE=$Configuration" "-DKAN_ENABLE_CUDA=$cudaFlag" "-DKAN_ENABLE_ASAN=$asanFlag" "-DKAN_ALLOW_UNSUPPORTED_CUDA_COMPILER=$overrideFlag" "-DCMAKE_CUDA_ARCHITECTURES=$CudaArchitectures" "-DKAN_BUILD_PYTHON=$pythonFlag" "-DKAN_BUILD_BENCHMARKS=$benchmarkFlag" "-DKAN_CUDA_FMA=$fmaFlag" @pythonArgs
 if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
 & cmake --build $buildPath --parallel
 if ($LASTEXITCODE -ne 0) { throw 'Build failed' }

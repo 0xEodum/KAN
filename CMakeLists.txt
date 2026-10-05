@@ -10,6 +10,9 @@ option(KAN_BUILD_EXAMPLES "Build standalone C++ examples" ON)
 option(KAN_BUILD_PYTHON "Build optional pybind11/NumPy bindings" OFF)
 option(KAN_BUILD_BENCHMARKS "Build frozen matched full-call benchmarks" OFF)
 option(KAN_BENCH_RESIDENT "Include M2 resident backend in benchmarks" ON)
+# Backlog C10: OFF is the parity build (CUDA kernels compiled with --fmad=false,
+# the C2 behaviour); ON is the performance build (nvcc contracts a*b+c into FMA).
+option(KAN_CUDA_FMA "Allow fused multiply-add contraction in the CUDA kernels (performance build)" OFF)
 
 add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp src/input_map.cpp
             src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp)
@@ -52,9 +55,15 @@ if(KAN_ENABLE_CUDA)
     add_library(kan_cuda STATIC src/cuda.cu src/resident.cu)
     add_library(kan::cuda ALIAS kan_cuda)
     set_target_properties(kan_cuda PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON EXPORT_NAME cuda POSITION_INDEPENDENT_CODE ON)
-    # Preserve CPU overflow checks: fusion can hide an overflowing product
-    # through cancellation with a finite accumulator.
-    target_compile_options(kan_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+    # Parity build (default): no FMA contraction in the kernels, preserving the
+    # CPU's unfused intermediates and overflow checks (fusion can hide an
+    # overflowing product through cancellation with a finite accumulator).
+    # Performance build (KAN_CUDA_FMA=ON): nvcc's default --fmad=true.
+    if(KAN_CUDA_FMA)
+        target_compile_options(kan_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=true>)
+    else()
+        target_compile_options(kan_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+    endif()
     target_link_libraries(kan_cuda PUBLIC kan PRIVATE CUDA::cudart CUDA::cublas)
 endif()
 

@@ -5,11 +5,19 @@
 
 namespace kan::cuda {
 
+// Storage and arithmetic precision of a resident executor (backlog C1). Host
+// data stays double in both: uploads are rounded to the executor precision
+// and downloads are exact conversions of the device values.
+enum class Precision {
+    Float64, // default: double storage and kernels, the parity reference
+    Float32, // float storage and kernels, cuBLAS SGEMM; opt-in for training
+};
+
 // Move-only GPU network. Construction reserves all device workspaces for the
 // maximum batch; execution and SGD never allocate device storage.
 class ResidentNetwork {
 public:
-    ResidentNetwork(const Network& network, std::size_t capacity);
+    ResidentNetwork(const Network& network, std::size_t capacity, Precision precision = Precision::Float64);
     ~ResidentNetwork();
     ResidentNetwork(ResidentNetwork&&) noexcept;
     ResidentNetwork& operator=(ResidentNetwork&&) noexcept;
@@ -30,6 +38,7 @@ public:
     std::size_t capacity() const;
     std::size_t batch() const;
     std::size_t workspace_allocations() const;
+    Precision precision() const;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

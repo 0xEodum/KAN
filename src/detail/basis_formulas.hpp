@@ -3,7 +3,13 @@
 // Single source of the linear-carrier basis formulas for the CPU backend and
 // the resident CUDA kernels. Callers validate configuration and finite input.
 //
-// Guard: callable `double(double)` returning its argument. It is invoked on
+// Scalar (backlog C1): every formula is a template over the floating-point
+// type of its data. The CPU and the FP64 resident executor instantiate double,
+// the FP32 resident executor float. Literals are written as Scalar(...) so a
+// float instantiation never promotes to double; the double instantiation
+// performs exactly the operations it performed before C1.
+//
+// Guard: callable `Scalar(Scalar)` returning its argument. It is invoked on
 // every value the contract requires to be finite; the CPU guard throws, the
 // device guard records a status bit and execution continues.
 
@@ -22,56 +28,64 @@ inline constexpr std::size_t max_spline_degree = 16;
 
 // Non-owning view of one validated basis. Pointer fields are read only for the
 // families that use them; `log_widths` is read only when `trainable` is set.
-struct BasisView {
+template<class Scalar>
+struct BasisViewOf {
     BasisKind kind;
     std::size_t terms;
-    double alpha, beta, frequency, width;
-    const double* centers;
-    const double* log_widths;
-    const double* scales;
-    const double* knots;
+    Scalar alpha, beta, frequency, width;
+    const Scalar* centers;
+    const Scalar* log_widths;
+    const Scalar* scales;
+    const Scalar* knots;
     std::size_t degree;
     bool trainable;
 };
+using BasisView = BasisViewOf<double>;
 
 // Output rows of length `terms`. The nonlinear RBF rows may be null.
-struct BasisRow {
-    double* values;
-    double* derivatives;
-    double* center_derivatives;
-    double* log_width_derivatives;
+template<class Scalar>
+struct BasisRowOf {
+    Scalar* values;
+    Scalar* derivatives;
+    Scalar* center_derivatives;
+    Scalar* log_width_derivatives;
 };
+using BasisRow = BasisRowOf<double>;
 
 // Overflow in x-center is possible only for opposite signs. Divide before
 // subtracting in that case, retaining a wide kernel's tail.
-KAN_HOST_DEVICE inline double normalized_distance(double x, double center, double width) {
-    const double distance = x - center;
+template<class Scalar>
+KAN_HOST_DEVICE inline Scalar normalized_distance(Scalar x, Scalar center, Scalar width) {
+    const Scalar distance = x - center;
     return math::finite(distance) ? distance / width : x / width - center / width;
 }
 
 // Ratios on a huge domain remain finite even when its length overflows.
-KAN_HOST_DEVICE inline double interval_ratio(double numerator_right, double numerator_left,
-                                             double right, double left) {
-    const double denominator = right - left;
+template<class Scalar>
+KAN_HOST_DEVICE inline Scalar interval_ratio(Scalar numerator_right, Scalar numerator_left,
+                                             Scalar right, Scalar left) {
+    const Scalar denominator = right - left;
     if (denominator == 0) return 0;
     if (math::finite(denominator)) return (numerator_right - numerator_left) / denominator;
-    return (0.5 * numerator_right - 0.5 * numerator_left) / (0.5 * right - 0.5 * left);
+    return (Scalar(0.5) * numerator_right - Scalar(0.5) * numerator_left) /
+           (Scalar(0.5) * right - Scalar(0.5) * left);
 }
 
-KAN_HOST_DEVICE inline double spline_slope_term(double value, std::size_t degree, double right,
-                                                double left) {
+template<class Scalar>
+KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree, Scalar right,
+                                                Scalar left) {
     if (value == 0 || right == left) return 0;
-    const double denominator = right - left;
-    const double p = static_cast<double>(degree);
+    const Scalar denominator = right - left;
+    const Scalar p = static_cast<Scalar>(degree);
     return math::finite(denominator) ? (p * value) / denominator
-                                     : (0.5 * p * value) / (0.5 * right - 0.5 * left);
+                                     : (Scalar(0.5) * p * value) / (Scalar(0.5) * right - Scalar(0.5) * left);
 }
 
 // Clamped B-spline by Cox-de Boor on the single active span. Only degree+1
 // terms can be nonzero, so fixed scratch covers every admissible degree.
-template<class Guard>
-KAN_HOST_DEVICE void spline_terms(const double* t, std::size_t terms, std::size_t degree, double x,
-                                  double* v, double* d, const Guard& guard) {
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                  Scalar* v, Scalar* d, const Guard& guard) {
     for (std::size_t k = 0; k < terms; ++k) {
         v[k] = 0;
         d[k] = 0;
@@ -89,14 +103,14 @@ KAN_HOST_DEVICE void spline_terms(const double* t, std::size_t terms, std::size_
         }
         span = lo - 1;
     }
-    double lower[max_spline_degree + 2] = {};
-    double next[max_spline_degree + 2] = {};
+    Scalar lower[max_spline_degree + 2] = {};
+    Scalar next[max_spline_degree + 2] = {};
     lower[degree] = 1;
     const auto start = span - degree;
     for (std::size_t p = 1; p <= degree; ++p) {
         for (std::size_t r = degree - p; r <= degree; ++r) {
             const auto i = start + r;
-            double value = 0;
+            Scalar value = 0;
             if (lower[r] != 0) value += interval_ratio(x, t[i], t[i + p], t[i]) * lower[r];
             if (lower[r + 1] != 0)
                 value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
@@ -110,48 +124,51 @@ KAN_HOST_DEVICE void spline_terms(const double* t, std::size_t terms, std::size_
     for (std::size_t r = 0; r <= degree; ++r) v[start + r] = lower[r];
 }
 
+// log(2/sqrt(3)) - log(pi)/4 per scalar type, as literals so device code does
+// not evaluate three transcendental functions per input.
+template<class Scalar> inline constexpr Scalar mexican_hat_log_normalization = Scalar(-0x1.2383e809a67e3p-3);
+
 // L2-normalized Mexican hat (Ricker) wavelets, evaluated in log space.
-template<class Guard>
-KAN_HOST_DEVICE void mexican_hat_terms(const double* centers, const double* scales,
-                                       std::size_t terms, double x, double* v, double* d,
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void mexican_hat_terms(const Scalar* centers, const Scalar* scales,
+                                       std::size_t terms, Scalar x, Scalar* v, Scalar* d,
                                        const Guard& guard) {
-    // log(2/sqrt(3)) - log(pi)/4, as a literal so device code does not
-    // evaluate three transcendental functions per input.
-    constexpr double log_normalization = -0x1.2383e809a67e3p-3;
+    constexpr Scalar log_normalization = mexican_hat_log_normalization<Scalar>;
     for (std::size_t k = 0; k < terms; ++k) {
         v[k] = 0;
         d[k] = 0;
-        const double scale = scales[k];
-        const double q = normalized_distance(x, centers[k], scale), q2 = q * q;
+        const Scalar scale = scales[k];
+        const Scalar q = normalized_distance(x, centers[k], scale), q2 = q * q;
         // An infinite distance is an exact zero tail, not an inf*zero NaN.
         if (!math::finite(q2)) continue;
-        const double log_scale = math::log(scale);
-        const double envelope = log_normalization - 0.5 * log_scale - 0.5 * q2;
+        const Scalar log_scale = math::log(scale);
+        const Scalar envelope = log_normalization - Scalar(0.5) * log_scale - Scalar(0.5) * q2;
         if (q2 != 1)
             v[k] = guard(math::copysign(math::exp(envelope + math::log(math::abs(1 - q2))), 1 - q2));
         if (q != 0 && q2 != 3)
             d[k] = guard(math::copysign(
                 math::exp(envelope + math::log(math::abs(q)) + math::log(math::abs(q2 - 3)) - log_scale),
-                q * (q2 > 3 ? 1 : -1)));
+                q * Scalar(q2 > 3 ? 1 : -1)));
     }
 }
 
 // Gaussian RBF exp(-((x-c)/w)^2). With trainable parameters w = exp(log_width)
 // and the nonlinear center/log-width derivatives are produced when requested.
-template<class Guard>
-KAN_HOST_DEVICE void gaussian_terms(const BasisView& basis, double x, const BasisRow& row,
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void gaussian_terms(const BasisViewOf<Scalar>& basis, Scalar x, const BasisRowOf<Scalar>& row,
                                     const Guard& guard) {
+    constexpr Scalar min_normal = math::constants<Scalar>::min_normal, ln2 = math::constants<Scalar>::ln2;
     for (std::size_t k = 0; k < basis.terms; ++k) {
-        const double width = basis.trainable ? math::exp(basis.log_widths[k]) : basis.width;
-        const double q = normalized_distance(x, basis.centers[k], width);
-        const double value = math::exp(-q * q);
+        const Scalar width = basis.trainable ? math::exp(basis.log_widths[k]) : basis.width;
+        const Scalar q = normalized_distance(x, basis.centers[k], width);
+        const Scalar value = math::exp(-q * q);
         row.values[k] = value;
-        double derivative = 0;
+        Scalar derivative = 0;
         if (q != 0 && math::finite(q)) {
-            if (value < math::min_normal) {
+            if (value < min_normal) {
                 // A tiny width can amplify a value that underflows to zero
                 // into a representable derivative. Preserve it in log space.
-                const double log_magnitude = math::ln2 + math::log(math::abs(q)) - q * q - math::log(width);
+                const Scalar log_magnitude = ln2 + math::log(math::abs(q)) - q * q - math::log(width);
                 derivative = -math::copysign(math::exp(log_magnitude), q);
             } else {
                 derivative = (-2 * q * value) / width;
@@ -162,21 +179,21 @@ KAN_HOST_DEVICE void gaussian_terms(const BasisView& basis, double x, const Basi
         if (row.log_width_derivatives) {
             // Log space avoids q*q * zero in remote tails.
             row.log_width_derivatives[k] =
-                q != 0 && math::finite(q) ? guard(math::exp(math::ln2 + 2 * math::log(math::abs(q)) - q * q)) : 0;
+                q != 0 && math::finite(q) ? guard(math::exp(ln2 + 2 * math::log(math::abs(q)) - q * q)) : Scalar(0);
         }
     }
 }
 
-template<class Guard>
-KAN_HOST_DEVICE void fourier_terms(double frequency, std::size_t terms, double x, double* v,
-                                   double* d, const Guard& guard) {
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void fourier_terms(Scalar frequency, std::size_t terms, Scalar x, Scalar* v,
+                                   Scalar* d, const Guard& guard) {
     v[0] = 1;
     d[0] = 0;
     for (std::size_t k = 1; k <= terms / 2; ++k) {
-        const double angular = guard(static_cast<double>(k) * frequency);
-        const double phase = guard(angular * x);
-        const double cosine = math::cos(phase);
-        const double sine = math::sin(phase);
+        const Scalar angular = guard(static_cast<Scalar>(k) * frequency);
+        const Scalar phase = guard(angular * x);
+        const Scalar cosine = math::cos(phase);
+        const Scalar sine = math::sin(phase);
         v[2 * k - 1] = cosine;
         v[2 * k] = sine;
         d[2 * k - 1] = guard(-angular * sine);
@@ -185,40 +202,41 @@ KAN_HOST_DEVICE void fourier_terms(double frequency, std::size_t terms, double x
 }
 
 // Chebyshev, Legendre, physicists' Hermite and Jacobi three-term recurrences.
-template<class Guard>
-KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, double alpha, double beta, std::size_t terms,
-                                      double x, double* v, double* d, const Guard& guard) {
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, Scalar alpha, Scalar beta, std::size_t terms,
+                                      Scalar x, Scalar* v, Scalar* d, const Guard& guard) {
+    constexpr Scalar half = Scalar(0.5);
     v[0] = 1;
     d[0] = 0;
     if (terms == 1) return;
     const bool jacobi = kind == BasisKind::Jacobi;
     // Half-sums avoid overflow in Jacobi's valid, very large parameters.
-    const double half_sum = jacobi ? 0.5 * alpha + 0.5 * beta : 0;
+    const Scalar half_sum = jacobi ? half * alpha + half * beta : Scalar(0);
     // Preserve distance from the admissible boundary alpha,beta > -1.
     // Adding one after summing the parameters can erase that distance.
-    const double shifted_half_sum = jacobi ? 0.5 * (alpha + 1) + 0.5 * (beta + 1) : 0;
-    const double half_difference = jacobi ? 0.5 * alpha - 0.5 * beta : 0;
+    const Scalar shifted_half_sum = jacobi ? half * (alpha + 1) + half * (beta + 1) : Scalar(0);
+    const Scalar half_difference = jacobi ? half * alpha - half * beta : Scalar(0);
     if (jacobi && (x == -1 || x == 1)) {
         // DLMF 18.6.T1: endpoint rising-factorial values. The general
         // three-term recurrence can cancel a small endpoint against huge terms.
-        const double parameter = x == 1 ? alpha : beta;
-        double endpoint = 1;
-        double shifted_endpoint = 1;
+        const Scalar parameter = x == 1 ? alpha : beta;
+        Scalar endpoint = 1;
+        Scalar shifted_endpoint = 1;
         for (std::size_t k = 1; k < terms; ++k) {
-            const double n = static_cast<double>(k);
+            const Scalar n = static_cast<Scalar>(k);
             endpoint = guard(endpoint * ((parameter + n) / n));
             v[k] = x < 0 && k % 2 ? -endpoint : endpoint;
             if (k > 1) shifted_endpoint = guard(shifted_endpoint * ((parameter + n) / (n - 1)));
             // DLMF 18.9.E15: P'_n = (n+alpha+beta+1)/2 * P_(n-1)^(alpha+1,beta+1).
             // Half-sums keep a finite slope representable even when alpha+beta
             // would overflow.
-            const double derivative = guard((shifted_half_sum + 0.5 * (n - 1)) * shifted_endpoint);
+            const Scalar derivative = guard((shifted_half_sum + half * (n - 1)) * shifted_endpoint);
             d[k] = x < 0 && k % 2 == 0 ? -derivative : derivative;
         }
         return;
     }
-    double first_slope = kind == BasisKind::Hermite ? 2 : 1;
-    double first_offset = 0;
+    Scalar first_slope = kind == BasisKind::Hermite ? 2 : 1;
+    Scalar first_offset = 0;
     if (jacobi) {
         first_slope = shifted_half_sum;
         first_offset = half_difference;
@@ -226,8 +244,8 @@ KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, double alpha, double beta,
     v[1] = guard(first_slope * x + first_offset);
     d[1] = guard(first_slope);
     for (std::size_t k = 1; k < terms - 1; ++k) {
-        const double n = static_cast<double>(k);
-        double a = 2, b = 0, c = 1; // Chebyshev
+        const Scalar n = static_cast<Scalar>(k);
+        Scalar a = 2, b = 0, c = 1; // Chebyshev
         if (kind == BasisKind::Legendre) {
             a = (2 * n + 1) / (n + 1);
             c = n / (n + 1);
@@ -236,13 +254,13 @@ KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, double alpha, double beta,
         } else if (jacobi) {
             // NIST DLMF 18.9.2, rearranged into ratios to avoid squaring
             // large parameters. P1 above handles alpha+beta = -1 or 0.
-            const double t = shifted_half_sum + (n - 1);
-            const double denominator_half = shifted_half_sum + 0.5 * (n - 1);
-            a = ((t + 0.5) / (n + 1)) * ((t + 1) / denominator_half);
-            b = (half_difference / (n + 1)) * (half_sum / t) * ((t + 0.5) / denominator_half);
-            c = 0.5 * ((n + alpha) / (n + 1)) * ((n + beta) / t) * ((t + 1) / denominator_half);
+            const Scalar t = shifted_half_sum + (n - 1);
+            const Scalar denominator_half = shifted_half_sum + half * (n - 1);
+            a = ((t + half) / (n + 1)) * ((t + 1) / denominator_half);
+            b = (half_difference / (n + 1)) * (half_sum / t) * ((t + half) / denominator_half);
+            c = half * ((n + alpha) / (n + 1)) * ((n + beta) / t) * ((t + 1) / denominator_half);
         }
-        const double factor = a * x + b;
+        const Scalar factor = a * x + b;
         v[k + 1] = guard(factor * v[k] - c * v[k - 1]);
         d[k + 1] = guard(a * v[k] + factor * d[k] - c * d[k - 1]);
     }
@@ -250,8 +268,8 @@ KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, double alpha, double beta,
 
 // Family fixed at compile time: device kernels instantiate one family each, so
 // no kernel carries another family's code, registers or spline scratch.
-template<BasisKind Kind, class Guard>
-KAN_HOST_DEVICE void basis_terms_for(const BasisView& basis, double x, const BasisRow& row,
+template<BasisKind Kind, class Scalar, class Guard>
+KAN_HOST_DEVICE void basis_terms_for(const BasisViewOf<Scalar>& basis, Scalar x, const BasisRowOf<Scalar>& row,
                                      const Guard& guard) {
     if constexpr (Kind == BasisKind::BSpline)
         spline_terms(basis.knots, basis.terms, basis.degree, x, row.values, row.derivatives, guard);
@@ -293,8 +311,8 @@ void visit_basis_family(BasisKind kind, Visitor&& visit) {
     throw std::logic_error("unvalidated basis kind");
 }
 
-template<class Guard>
-void basis_terms(const BasisView& basis, double x, const BasisRow& row, const Guard& guard) {
+template<class Scalar, class Guard>
+void basis_terms(const BasisViewOf<Scalar>& basis, Scalar x, const BasisRowOf<Scalar>& row, const Guard& guard) {
     visit_basis_family(basis.kind, [&](auto family) {
         basis_terms_for<decltype(family)::value>(basis, x, row, guard);
     });
