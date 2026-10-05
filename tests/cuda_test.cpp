@@ -1,5 +1,17 @@
+// Legacy M1 synchronous API (kan::cuda::forward/backward), deprecated since
+// backlog R7 and routed through the resident executor. This suite exercises
+// it on purpose, so the deprecation warning is suppressed for the whole file.
+#if defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include "kan/cuda.hpp"
+#include "kan/families.hpp"
 #include "support/test.hpp"
+#include <cuda_runtime.h>
+#include <algorithm>
+#include <cmath>
 #include <future>
 #include <limits>
 
@@ -13,9 +25,46 @@ kan::Layer make_layer(std::size_t inputs, std::size_t outputs, std::size_t terms
     layer.set_parameters(coefficients, bias);
     return layer;
 }
+// Accepted legacy/CPU tolerance since R7 (the resident contract of C2), per entry:
+// |a-e| <= 1e-12|e| + 1e-13 max|e|. The floor covers entries that cancel in long
+// reductions; the CPU stays the FP64 reference.
 void compare(std::span<const double> actual, std::span<const double> expected) {
     REQUIRE(actual.size() == expected.size());
-    for (std::size_t j = 0; j < actual.size(); ++j) test::near(actual[j], expected[j], 2e-11);
+    double scale = 0;
+    for (double value : expected) scale = std::max(scale, std::abs(value));
+    for (std::size_t j = 0; j < actual.size(); ++j) {
+        if (!std::isfinite(actual[j]) ||
+            std::abs(actual[j] - expected[j]) > 1e-12 * std::abs(expected[j]) + 1e-13 * scale + 1e-300)
+            throw std::runtime_error("entry " + std::to_string(j) + ": actual=" + std::to_string(actual[j]) +
+                                     " expected=" + std::to_string(expected[j]));
+    }
+}
+void compare(const kan::NonlinearGradients& actual, const kan::NonlinearGradients& expected) {
+    REQUIRE(actual.index() == expected.index());
+    if (const auto* rbf = std::get_if<kan::TrainableRbfGradients>(&expected)) {
+        compare(std::get<kan::TrainableRbfGradients>(actual).centers, rbf->centers);
+        compare(std::get<kan::TrainableRbfGradients>(actual).log_widths, rbf->log_widths);
+    } else if (const auto* rational = std::get_if<kan::RationalGradients>(&expected)) {
+        compare(std::get<kan::RationalGradients>(actual).denominators, rational->denominators);
+    }
+}
+void compare(const kan::LayerGradients& actual, const kan::LayerGradients& expected) {
+    compare(actual.input, expected.input);
+    compare(actual.coefficients, expected.coefficients);
+    compare(actual.bias, expected.bias);
+    compare(actual.nonlinear, expected.nonlinear);
+}
+std::vector<double> data(std::size_t count, double scale, int seed) {
+    std::vector<double> values(count);
+    for (std::size_t j = 0; j < count; ++j)
+        values[j] = scale * (static_cast<double>((j * 7 + static_cast<std::size_t>(seed)) % 19) - 9.0) / 9.5;
+    return values;
+}
+void parity(const kan::Layer& layer, std::size_t batch, double input_scale = 0.9) {
+    const auto input = data(batch * layer.inputs(), input_scale, 1);
+    const auto upstream = data(batch * layer.outputs(), 0.5, 4);
+    compare(kan::cuda::forward(layer, input, batch), layer.forward(input, batch));
+    compare(kan::cuda::backward(layer, input, batch, upstream), layer.backward(input, batch, upstream));
 }
 void parity(std::size_t inputs, std::size_t outputs, std::size_t terms, std::size_t batch) {
     auto layer = make_layer(inputs, outputs, terms);
@@ -25,11 +74,46 @@ void parity(std::size_t inputs, std::size_t outputs, std::size_t terms, std::siz
     for (std::size_t j = 0; j < upstream.size(); ++j)
         upstream[j] = (static_cast<double>(j % 11) - 5.0) / 9.0;
     compare(kan::cuda::forward(layer, input, batch), layer.forward(input, batch));
-    const auto actual = kan::cuda::backward(layer, input, batch, upstream);
-    const auto expected = layer.backward(input, batch, upstream);
-    compare(actual.input, expected.input);
-    compare(actual.coefficients, expected.coefficients);
-    compare(actual.bias, expected.bias);
+    compare(kan::cuda::backward(layer, input, batch, upstream), layer.backward(input, batch, upstream));
+}
+kan::Layer with_parameters(kan::Layer layer) {
+    layer.set_parameters(data(layer.coefficients().size(), 0.3, 3), data(layer.outputs(), 0.2, 5));
+    return layer;
+}
+kan::Layer rational_layer(std::size_t inputs, std::size_t outputs, kan::DenominatorPolicy policy) {
+    kan::RationalConfig config;
+    config.numerator_degree = 3; config.denominator_degree = 2; config.center = 0.1; config.scale = 1.3;
+    config.denominator_policy = policy;
+    kan::Layer layer(inputs, outputs, config);
+    const auto denominators = inputs * outputs * config.denominator_degree;
+    kan::set_rational_parameters(layer, data(layer.coefficients().size(), 0.2, 3), data(denominators, 0.05, 6),
+                                 data(outputs, 0.1, 5));
+    return layer;
+}
+// Every carrier the resident executor supports, with nontrivial parameters.
+std::vector<kan::Layer> every_carrier(std::size_t inputs, std::size_t outputs) {
+    std::vector<kan::Layer> layers;
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::ChebyshevConfig{6})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::LegendreConfig{5})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::JacobiConfig{5, 0.5, -0.3})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::HermiteConfig{4})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::FourierConfig{5, 1.5})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::GaussianRbfConfig{{-0.8, -0.2, 0.3, 0.9}, 0.6})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs,
+                                                kan::BSplineConfig{3, {-1, -1, -1, -1, -0.4, 0.2, 0.7, 1, 1, 1, 1}})));
+    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::MexicanHatConfig{{-0.5, 0.0, 0.6}, {0.4, 0.7, 0.5}})));
+    auto rbf = with_parameters(kan::Layer(inputs, outputs, kan::TrainableRbfConfig{{-0.6, 0.1, 0.7}, {-0.5, -0.2, 0.1}}));
+    kan::set_rbf_parameters(rbf, std::vector<double>{-0.55, 0.15, 0.65}, std::vector<double>{-0.4, -0.3, 0.2});
+    layers.push_back(std::move(rbf));
+    for (const auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute,
+                              kan::DenominatorPolicy::Smooth})
+        layers.push_back(rational_layer(inputs, outputs, policy));
+    return layers;
+}
+std::size_t free_device_bytes() {
+    std::size_t free = 0, total = 0;
+    if (cudaMemGetInfo(&free, &total) != cudaSuccess) throw std::runtime_error("cudaMemGetInfo failed");
+    return free;
 }
 }
 
@@ -88,11 +172,32 @@ TEST(cuda_checks_dimension_multiplication_before_allocation) {
     });
 }
 
-TEST(cuda_rejects_unsupported_families) {
-    const kan::Layer layer(1, 1, kan::LegendreConfig{3});
-    test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
-    test::throws<std::invalid_argument>([&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
-    test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, {}, 0); });
+// R7 contract change: the legacy API runs every carrier through the resident
+// executor (M1 accepted Chebyshev only and rejected the rest).
+TEST(cuda_legacy_api_supports_every_resident_carrier) {
+    for (const auto& layer : every_carrier(3, 2)) {
+        parity(layer, 1);
+        parity(layer, 37);
+    }
+    for (const auto& layer : every_carrier(5, 4)) parity(layer, 129);
+}
+
+TEST(cuda_legacy_empty_batch_shapes_every_carrier) {
+    for (const auto& layer : every_carrier(3, 2)) {
+        REQUIRE(kan::cuda::forward(layer, {}, 0).empty());
+        compare(kan::cuda::backward(layer, {}, 0, {}), layer.backward({}, 0, {}));
+    }
+}
+
+TEST(cuda_legacy_reports_unsafe_rational_denominator) {
+    kan::RationalConfig config;
+    config.numerator_degree = 1; config.denominator_degree = 1;
+    kan::Layer layer(1, 1, config);
+    kan::set_rational_parameters(layer, std::vector<double>{1, -1}, std::vector<double>{-1}, std::vector<double>{0});
+    const std::vector<double> pole{1.0}, upstream{1.0};
+    test::throws<std::domain_error>([&] { layer.forward(pole, 1); });
+    test::throws<std::domain_error>([&] { kan::cuda::forward(layer, pole, 1); });
+    test::throws<std::domain_error>([&] { kan::cuda::backward(layer, pole, 1, upstream); });
 }
 
 TEST(cuda_reports_nonfinite_computed_results) {
@@ -123,19 +228,36 @@ TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
     for (int repeat = 0; repeat < 3; ++repeat) parity(3, 2, 6, 41);
     auto first = std::async(std::launch::async, [] { parity(2, 3, 5, 79); });
     auto second = std::async(std::launch::async, [] { parity(5, 1, 9, 53); });
+    auto third = std::async(std::launch::async, [] { for (const auto& l : every_carrier(2, 3)) parity(l, 17); });
     first.get();
     second.get();
+    third.get();
 }
 
-TEST(cuda_preserves_unfused_intermediate_overflow_contract) {
-    kan::Layer layer(1, 1, kan::ChebyshevConfig{2});
-    const auto maximum = std::numeric_limits<double>::max();
-    layer.set_parameters(std::vector<double>{-maximum, maximum}, std::vector<double>{0.0});
-    const std::vector<double> input{2.0};
-    // The second coefficient multiplication overflows before addition.
-    // A fused multiply-add would hide that overflow and return DBL_MAX.
-    test::throws<std::overflow_error>([&] { layer.forward(input, 1); });
-    test::throws<std::overflow_error>([&] { kan::cuda::forward(layer, input, 1); });
+// Each call owns its device storage (now one resident executor) and releases
+// it on return and on exceptions. A leak of the ~8 MiB per call would lose
+// hundreds of MiB here; the bound tolerates other processes on a shared GPU.
+TEST(cuda_legacy_calls_release_device_storage) {
+    const auto layer = make_layer(64, 64, 8);
+    const auto input = data(256 * 64, 0.9, 1), upstream = data(256 * 64, 0.1, 2);
+    kan::Layer overflow(1, 1, kan::ChebyshevConfig{2});
+    overflow.set_parameters(std::vector<double>{0.0, 1e308}, std::vector<double>{0.0});
+    const auto cycle = [&] {
+        for (int call = 0; call < 40; ++call) {
+            (void)kan::cuda::forward(layer, input, 256);
+            (void)kan::cuda::backward(layer, input, 256, upstream);
+            test::throws<std::overflow_error>([&] { kan::cuda::forward(overflow, std::vector<double>{2.0}, 1); });
+        }
+    };
+    cycle(); // first use loads the runtime and cuBLAS
+    constexpr std::size_t bound = 64u << 20;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const auto before = free_device_bytes();
+        cycle();
+        const auto after = free_device_bytes();
+        if (after + bound >= before) return;
+    }
+    throw std::runtime_error("legacy calls did not release device storage");
 }
 
 void cuda_no_device_failure_is_explicit() {

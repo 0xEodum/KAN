@@ -1,0 +1,19 @@
+# R7 RED: tests at the test commit against the unchanged src/cuda.cu (build-r7)
+## cuda_test.exe
+CUDA device available: yes
+PASS cuda_forward_and_backward_match_cpu_across_shapes
+PASS cuda_endpoint_derivatives_and_unclipped_values
+PASS cuda_empty_batch_has_zero_parameter_gradients
+PASS cuda_rejects_invalid_shapes_and_nonfinite_data
+PASS cuda_checks_dimension_multiplication_before_allocation
+FAIL cuda_legacy_api_supports_every_resident_carrier: CUDA M1 supports Chebyshev only
+FAIL cuda_legacy_empty_batch_shapes_every_carrier: CUDA M1 supports Chebyshev only
+FAIL cuda_legacy_reports_unsafe_rational_denominator: CUDA M1 supports Chebyshev only
+PASS cuda_reports_nonfinite_computed_results
+FAIL cuda_repeated_and_concurrent_calls_have_independent_storage: CUDA M1 supports Chebyshev only
+PASS cuda_legacy_calls_release_device_storage
+7/11 passed
+## ctest -R deprecation
+1/2 Test #16: cuda_deprecation_available .......   Passed    0.07 sec
+2/2 Test #17: cuda_deprecation_legacy ..........***Failed  Required regular expression not found. Regex=[C4996.*ResidentNetwork
+50% tests passed, 1 tests failed out of 2
