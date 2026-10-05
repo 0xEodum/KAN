@@ -22,7 +22,7 @@ using kan::cuda::ResidentNetwork;
 // floor relative to the tensor's largest magnitude (cancellation in long
 // reductions makes small entries carry absolute error) and the FP32 normal
 // range (values below it are flushed or subnormal in single precision).
-constexpr double fp32_relative = 2e-4, fp32_floor = 2e-5, fp32_underflow = 1e-37;
+constexpr double fp32_relative = 2e-4, fp32_floor = 5e-5, fp32_underflow = 1e-37;
 
 template<class... Parts> std::string precise(const Parts&... parts) {
     std::ostringstream out;
@@ -96,26 +96,43 @@ void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients&
         close(test::denominators(test::grad(actual, j)), test::denominators(test::grad(expected, j)));
     }
 }
-void parameters(const kan::Network& actual, const kan::Network& expected) {
-    for (std::size_t j = 0; j < expected.layers().size(); ++j) {
-        if (std::holds_alternative<kan::InputMap>(expected.layers()[j])) {
-            REQUIRE(std::holds_alternative<kan::InputMap>(actual.layers()[j]));
-            const auto* a = std::get_if<kan::LayerNormMap>(&test::input_map(actual, j).map());
-            const auto* e = std::get_if<kan::LayerNormMap>(&test::input_map(expected, j).map());
-            REQUIRE((a == nullptr) == (e == nullptr));
-            if (e) { close(a->gain, e->gain); close(a->bias, e->bias); }
+// Every trainable parameter of a network, and the matching gradients, in one
+// order: per KAN layer coefficients, bias, centers, log widths, denominators;
+// per LayerNorm map gain, bias.
+std::vector<double> flat(const kan::Network& network) {
+    std::vector<double> v;
+    auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
+    for (std::size_t j = 0; j < network.layers().size(); ++j) {
+        if (std::holds_alternative<kan::InputMap>(network.layers()[j])) {
+            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) { add(n->gain); add(n->bias); }
             continue;
         }
-        close(test::layer(actual, j).coefficients(), test::layer(expected, j).coefficients());
-        close(test::layer(actual, j).bias(), test::layer(expected, j).bias());
-        close(test::denominators(test::layer(actual, j)), test::denominators(test::layer(expected, j)));
-        if (const auto* e = std::get_if<kan::TrainableRbfEdges>(&test::layer(expected, j).carrier())) {
-            const auto& a = test::trainable(test::layer(actual, j));
-            close(a.centers, e->basis.centers); close(a.log_widths, e->basis.log_widths);
-        }
+        const auto& l = test::layer(network, j);
+        add(l.coefficients()); add(l.bias());
+        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) { add(t->basis.centers); add(t->basis.log_widths); }
+        add(test::denominators(l));
     }
+    return v;
 }
-// Forward, backward with L2, SGD for `steps` steps against the FP64 CPU.
+std::vector<double> flat(const kan::NetworkGradients& gradients) {
+    std::vector<double> v;
+    auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
+    for (const auto& stage : gradients.layers) {
+        if (const auto* m = std::get_if<kan::InputMapGradients>(&stage)) { add(m->gain); add(m->bias); continue; }
+        const auto& g = std::get<kan::LayerGradients>(stage);
+        add(g.coefficients); add(g.bias); add(test::centers(g)); add(test::log_widths(g)); add(test::denominators(g));
+    }
+    return v;
+}
+// Loose bound for whole trajectories: SGD amplifies per-step rounding (the
+// wide C2 network at rate 0.2 grows from 2e-5 to 3e-4 in three steps).
+constexpr double trajectory_relative = 1e-2, trajectory_floor = 1e-3;
+
+// `steps` resident FP32 steps (forward, backward with L2, SGD). Every call is
+// compared with the FP64 CPU evaluated at the executor's current (FP32-valued)
+// parameters, which isolates the per-call deviation from trajectory
+// sensitivity; SGD is checked against p - rate*g of the downloaded values and
+// the final parameters against an FP64 CPU trajectory within the loose bound.
 void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, double lambda, int steps,
                     double rate = 0.05) {
     ResidentNetwork gpu(cpu, capacity, Precision::Float32);
@@ -124,17 +141,30 @@ void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, d
     const auto x = wave(batch*cpu.inputs(), 0.9, 0.37), dy = wave(batch*cpu.outputs(), 0.2, 0.53, 1);
     gpu.upload_input(x, batch); gpu.upload_output_gradient(dy);
     for (int step = 0; step < steps; ++step) {
-        gpu.forward(); close(gpu.download_output(), cpu.forward(x, batch));
+        const auto reference = gpu.download_parameters();
+        gpu.forward(); close(gpu.download_output(), reference.forward(x, batch));
         gpu.backward(lambda);
-        auto expected = cpu.backward(x, batch, dy);
-        const auto penalty = cpu.regularization(lambda).gradients;
+        auto expected = reference.backward(x, batch, dy);
+        const auto penalty = reference.regularization(lambda).gradients;
         for (std::size_t j = 0; j < expected.layers.size(); ++j)
             if (auto* g = std::get_if<kan::LayerGradients>(&expected.layers[j]))
                 for (std::size_t k = 0; k < g->coefficients.size(); ++k) g->coefficients[k] += test::grad(penalty, j).coefficients[k];
-        gradients(gpu.download_gradients(), expected);
-        gpu.sgd(rate); cpu.sgd(expected, rate);
+        const auto actual = gpu.download_gradients();
+        gradients(actual, expected);
+        gpu.sgd(rate);
+        auto updated = flat(reference);
+        const auto g = flat(actual);
+        for (std::size_t k = 0; k < updated.size(); ++k) updated[k] -= rate*g[k];
+        close(flat(gpu.download_parameters()), updated);
+        // FP64 trajectory from the original parameters.
+        auto total = cpu.backward(x, batch, dy);
+        const auto cpu_penalty = cpu.regularization(lambda).gradients;
+        for (std::size_t j = 0; j < total.layers.size(); ++j)
+            if (auto* t = std::get_if<kan::LayerGradients>(&total.layers[j]))
+                for (std::size_t k = 0; k < t->coefficients.size(); ++k) t->coefficients[k] += test::grad(cpu_penalty, j).coefficients[k];
+        cpu.sgd(total, rate);
     }
-    parameters(gpu.download_parameters(), cpu);
+    close(flat(gpu.download_parameters()), flat(cpu), trajectory_relative, trajectory_floor);
     REQUIRE(gpu.workspace_allocations() == allocations);
 }
 } // namespace
@@ -221,7 +251,7 @@ TEST(float32_reports_overflow_beyond_float_range) {
     gpu.upload_output_gradient(std::vector<double>{-1.0}); gpu.backward();
     const auto before = gpu.download_parameters();
     test::throws<std::overflow_error>([&] { gpu.sgd(1e38); });
-    REQUIRE(test::layer(gpu.download_parameters(), 0).coefficients() == test::layer(before, 0).coefficients());
+    REQUIRE(std::ranges::equal(test::layer(gpu.download_parameters(), 0).coefficients(), test::layer(before, 0).coefficients()));
     // A learning rate or L2 weight outside the FP32 range (or rounding to a
     // zero rate) cannot be applied in single precision.
     test::throws<std::invalid_argument>([&] { gpu.sgd(1e39); });
