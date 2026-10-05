@@ -3,7 +3,6 @@
 // ResidentNetwork with capacity `batch`, runs it once and releases it.
 #include "kan/cuda.hpp"
 #include "kan/resident.hpp"
-#include <cuda_runtime.h>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -35,11 +34,6 @@ ResidentNetwork prepare(const Layer& layer, std::span<const double> input, std::
     gpu.upload_input(input, batch);
     return gpu;
 }
-}
-
-bool available() noexcept {
-    int count = 0;
-    return cudaGetDeviceCount(&count) == cudaSuccess && count > 0;
 }
 
 std::vector<double> forward(const Layer& layer, std::span<const double> input, std::size_t batch) {

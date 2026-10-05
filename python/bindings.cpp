@@ -1,9 +1,8 @@
 #include "kan/families.hpp"
 #include "kan/network.hpp"
-#include "kan/resident.hpp" // kan::cuda::Precision is declared in every build
-#ifdef KAN_PYTHON_CUDA
-#include "kan/cuda.hpp"
-#endif
+// kan::cuda::Precision and kan::cuda::available() (kan/cuda_runtime.hpp) are
+// declared in every build; available() is called only with KAN_PYTHON_CUDA.
+#include "kan/resident.hpp"
 #include <pybind11/native_enum.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>

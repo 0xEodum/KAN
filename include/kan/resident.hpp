@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kan/cuda_runtime.hpp" // kan::cuda::available()
 #include "kan/network.hpp"
 #include <memory>
 

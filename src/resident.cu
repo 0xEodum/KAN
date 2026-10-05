@@ -1,5 +1,4 @@
 #include "kan/resident.hpp"
-#include "kan/cuda.hpp"
 #include "detail/basis_view.hpp"
 #include "detail/rational_formulas.hpp"
 #include "detail/input_map_formulas.hpp"

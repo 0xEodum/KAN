@@ -1,12 +1,9 @@
 #pragma once
 
+#include "kan/cuda_runtime.hpp" // kan::cuda::available(), not deprecated
 #include "kan/layer.hpp"
 
 namespace kan::cuda {
-
-// Whether a CUDA device is usable. Not deprecated: it is the device query of
-// the resident executor (kan/resident.hpp) as well.
-bool available() noexcept;
 
 // Legacy M1 synchronous single-layer API (deprecated by backlog R7). Each call
 // builds a kan::cuda::ResidentNetwork for the layer with capacity `batch`,

@@ -2,6 +2,7 @@
 #include <kan/network.hpp>
 #ifdef KAN_CONSUMER_CUDA
 #include <kan/cuda.hpp>
+#include <kan/cuda_runtime.hpp>
 #include <kan/resident.hpp>
 #endif
 #include <cmath>

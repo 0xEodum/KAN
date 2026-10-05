@@ -52,7 +52,7 @@ if(KAN_ENABLE_CUDA)
     enable_language(CUDA)
     # The resident contraction engine uses the 64-bit cuBLAS API (CUDA 12+).
     find_package(CUDAToolkit 12 REQUIRED)
-    add_library(kan_cuda STATIC src/cuda.cu src/resident.cu)
+    add_library(kan_cuda STATIC src/cuda_runtime.cpp src/cuda.cu src/resident.cu)
     add_library(kan::cuda ALIAS kan_cuda)
     set_target_properties(kan_cuda PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON EXPORT_NAME cuda POSITION_INDEPENDENT_CODE ON)
     # Parity build (default): no FMA contraction in the kernels, preserving the
