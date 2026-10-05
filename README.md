@@ -116,6 +116,16 @@ loader path at run time; the Python package registers the build's CUDA toolkit
 directories and `CUDA_PATH`, so a module copied to another machine needs a CUDA runtime
 there). GPU results match the CPU reference within floating-point tolerance, not bitwise.
 
+The executor computes in double precision by default. For training throughput pass
+`kan::cuda::Precision::Float32` (FP32 storage, kernels and cuBLAS SGEMM; on an RTX 3090 the
+256-wide review step is about 26x faster than FP64) or `Precision::TensorFloat32` (FP32 with
+TF32 tensor-core contractions, looser tolerance) as the third constructor argument
+(`precision=kan.Precision.FLOAT32` in Python). Host data stays `double`; values FP32 cannot
+represent are rejected, and results follow the FP32 tolerance of
+[the contract](docs/CONTRACT.md). Configure with `-DKAN_CUDA_FMA=ON`
+(`scriptsuild.ps1 -CudaFma`) for the performance build, which lets nvcc fuse multiply-adds
+in the kernels; the default parity build keeps `--fmad=false`.
+
 Parameters initialize to zero. Initialize multilayer parameters to nonzero
 values explicitly so gradients can propagate. Polynomial inputs are not
 automatically normalized or clipped; use an explicit input map (below). Fourier uses angular frequency and the

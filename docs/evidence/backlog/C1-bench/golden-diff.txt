@@ -1,0 +1,12 @@
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden_c2.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden_c2_layers.txt
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden_build-b-c1.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden_build-b-c1_layers.txt
+13c4cdb4724bbbab24fed4d34ca2219f57cfa3752af858fda6dd1ae00796e5c4 *golden_build-b-c1-fma.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden_build-b-c1-fma_layers.txt
+== C2 vs C1 parity build (FP64 resident)
+lines: 3052, identical: 3052, numerically different: 0, structural: 0
+== C2 vs C1 FMA build (FP64 resident)
+lines: 3052, identical: 2951, numerically different: 101, structural: 0
+  resident mixed                                max deviation / line scale = 2.295e-14
+  resident endpoints                            max deviation / line scale = 2.234e-16

@@ -1,0 +1,13 @@
+shape,product,math,us,tflops
+256-wide,forward Y=Phi*C^T,fp32,502.1,14.97
+256-wide,coefficient dC=U^T*Phi,fp32,311.8,24.11
+256-wide,input W=U*C,fp32,339.3,22.16
+256-wide,forward Y=Phi*C^T,tf32,383.8,19.58
+256-wide,coefficient dC=U^T*Phi,tf32,615.6,12.21
+256-wide,input W=U*C,tf32,268.8,27.96
+1024-wide,forward Y=Phi*C^T,fp32,2995.9,20.07
+1024-wide,coefficient dC=U^T*Phi,fp32,2740.1,21.94
+1024-wide,input W=U*C,fp32,2503.9,24.01
+1024-wide,forward Y=Phi*C^T,tf32,1976.1,30.43
+1024-wide,coefficient dC=U^T*Phi,tf32,2058.3,29.21
+1024-wide,input W=U*C,tf32,1892.7,31.77

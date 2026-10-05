@@ -1,0 +1,4 @@
+Mon Oct  5 15:13:45 RTZST 2026
+utilization.gpu [%], memory.used [MiB]
+23 %, 1972 MiB
+no compute processes besides desktop (C+G)

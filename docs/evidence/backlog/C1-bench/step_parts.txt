@@ -1,0 +1,4 @@
+== FMA build, FP32
+forward 6.21  upload 9.46  backward 11.11  sgd 0.29  ms (best of 6)
+== FMA build, FP64
+forward 242.93  upload 13.24  backward 476.12  sgd 0.50  ms (best of 6)

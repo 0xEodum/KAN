@@ -66,7 +66,8 @@ entry, not bitwise (see [R7 evidence](evidence/backlog/R7.md)).
 
 `kan::cuda::ResidentNetwork` is a move-only executor built from an owned snapshot
 of a CPU `Network`, with a fixed maximum batch capacity. It supports every M1
-basis family and mixed compatible networks. All storage remains double precision.
+basis family and mixed compatible networks. Storage is double precision unless the
+opt-in FP32 precision policy below (backlog C1) is selected.
 Since R7 the deprecated M1 layer functions are a thin adapter over this executor.
 
 Each resident executor owns its CUDA stream and preallocated device storage for
@@ -120,6 +121,46 @@ input VJPs); an intermediate product that overflows inside a fused contraction a
 cancelled by the accumulator is not reported if the computed result is finite.
 `kan::cuda` therefore links `CUDA::cublas` and requires CUDA 12 or newer; the installed
 package finds it through `CUDAToolkit`.
+
+**Precision policy (backlog C1).** `ResidentNetwork(network, capacity, precision)` takes a
+`kan::cuda::Precision`: `Float64` (default; unchanged FP64 storage and kernels, the parity
+reference), `Float32` (FP32 storage of parameters, gradients, activations and workspaces;
+every basis, rational and input-map formula evaluated in FP32 from the same shared
+`KAN_HOST_DEVICE` source, now templated on the scalar type; cuBLAS SGEMM/SGEMV) or
+`TensorFloat32` (`Float32` whose cuBLAS contractions use TF32 tensor-op math: operands
+rounded to 10 mantissa bits, FP32 accumulation). `precision()` reports it. The host
+interface stays `double` for every precision: uploads round to the executor precision,
+downloads (outputs, gradients, `download_parameters`) are exact widenings of the device
+values, so a downloaded FP32 network holds FP32-representable parameters. FP32 additionally
+requires, with `std::invalid_argument` at construction or upload: every uploaded value and
+every configuration scalar the kernels read has magnitude at most `FLT_MAX` (values below
+the FP32 range round to subnormals or zero); quantities the CPU requires to be positive
+(widths, scales, frequency, LayerNorm epsilon, tanh scale, exponentiated RBF log widths,
+the learning rate) stay positive after rounding; affine scales stay nonzero; Jacobi
+`alpha, beta > -1`; distinct B-spline knots stay distinct. A learning rate or L2 weight
+beyond the FP32 range is rejected the same way. Nonfinite FP32 results (including any
+result beyond `FLT_MAX`, finite in FP64) raise `std::overflow_error` as before; the
+log-space paths use the FP32 normal range. The guarded rational pole test uses the relative
+threshold `max(epsilon, n*2^-23)` (n the denominator degree): FP32 Horner evaluation cannot
+resolve `|Q|` below about `n*2^-24` of the guard bound, so FP32 reports poles that the FP64
+executor at `epsilon = 1e-8` accepts. FP32 results agree with the FP64 CPU reference evaluated
+at the executor's parameters per entry within `2e-4*|e| + 5e-5*max|e| + 1e-37`, TF32 within
+`1e-2*|e| + 1e-2*max|e|` (the suite's tolerances; measured deviations in the
+[C1 evidence](evidence/backlog/C1.md)); trajectories over several SGD steps diverge further
+because SGD amplifies rounding. The FP32 small-kernel thresholds are `2^24` forward
+multiply-adds and, for the parameter VJP, at most `2^15` coefficients plus outputs and at
+most `2^22` `batch*(coefficients+outputs)`. Python: `kan.Precision.FLOAT64/FLOAT32/TF32`
+(declared in every build) and `kan.ResidentNetwork(network, capacity, precision=...)`; arrays
+stay strict float64.
+
+**FMA build option (backlog C10).** CMake `KAN_CUDA_FMA` (default `OFF`): `OFF` is the parity
+build, compiling the CUDA kernels with `--fmad=false` as before; `ON` is the performance
+build, where nvcc contracts multiply-adds into FMA (`scriptsuild.ps1 -CudaFma`). In the
+performance build an overflowing intermediate product can be cancelled inside an FMA without
+being reported, as already stated for the cuBLAS contractions, and FP64 resident results move
+within the existing tolerance. (The `cuda_preserves_unfused_intermediate_overflow_contract`
+case still passes in the performance build only because the warp kernel accumulates its two
+products in different lanes; that is not a guarantee.) cuBLAS always uses FMA.
 
 Python bindings expose the same mathematics through an optional `kan` module.
 Numerical tensor arguments must be NumPy C-contiguous float64 arrays of the declared

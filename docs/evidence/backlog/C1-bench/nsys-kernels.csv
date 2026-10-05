@@ -1,0 +1,160 @@
+build,precision,case,kernel,time_pct,instances,median_us
+fma,f64,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_nn_align1>(T1::Params)",44.7,15,72.1
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::parameter_partial_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, ",17.7,15,58.7
+fma,f64,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_tn_align1>(T1::Params)",17.3,6,156.3
+fma,f64,cheb-64x64x32x16-b1024,"void dgemm_largek<(bool)1, (bool)0, (int)4, (int)4, (int)4, (int)3, (int)3, (int)18>(double *, const double *,",7.4,6,67.3
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, double>(const T2 *, T2 *, T2 *, T2 *, unsig",4.7,18,15.8
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::backward_finish_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, un",3.6,15,13.3
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::forward_dot_kernel<double>(const T1 *, const T1 *, const T1 *, T1 *, unsigned long ",3.5,6,31.7
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::bias_kernel<double>(T1 *, const T1 *, unsigned long long, unsigned long long, int *",0.6,12,2.4
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::candidate_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int ",0.3,5,2.9
+fma,f64,cheb-64x64x32x16-b1024,"void scal_kernel<double, double, (int)1, (bool)1, (int)6, (int)4, (int)4, (int)4>(cublasTransposeParams<T2>, c",0.2,6,1.6
+fma,f64,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::fill_kernel<double>(T1 *, unsigned long long, T1)",0.0,1,1.4
+fma,f64,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_tn_align1>(T1::Params)",36.7,12,27318.4
+fma,f64,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_nt_align1>(T1::Params)",28.8,10,27149.4
+fma,f64,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)",28.8,10,26007.9
+fma,f64,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x64_16x4_tn_align1>(T1::Params)",2.4,6,3945.8
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, double>(const T2 *, T2 *, T2 *, T2 *, unsig",1.0,18,323.6
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, un",0.9,15,629.7
+fma,f64,cheb-256x256x256x10-b8192,"ampere_dgemm_64x64_nn",0.8,5,1433.4
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::parameter_partial_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, ",0.5,5,943.6
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<double>(T1 *, const T1 *, unsigned long long, unsigned long long, int *",0.1,18,42.0
+fma,f64,cheb-256x256x256x10-b8192,"void gemvNSP_kernel<double, double, double, double, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvPar",0.0,10,26.4
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int ",0.0,5,28.1
+fma,f64,cheb-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, double, double, double, double, (bool)0, double, dou",0.0,10,2.9
+fma,f64,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<double>(T1 *, unsigned long long, T1)",0.0,1,1.5
+fma,f64,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)",39.5,8,197479.1
+fma,f64,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x64_16x4_nt_align1>(T1::Params)",30.5,6,206656.2
+fma,f64,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_nn_align1>(T1::Params)",29.4,6,194829.9
+fma,f64,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, double>(const T2 *, T2 *, T2 *, T2 *, unsig",0.2,8,966.0
+fma,f64,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::backward_finish_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, un",0.2,6,1334.4
+fma,f64,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::candidate_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int ",0.1,3,691.7
+fma,f64,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::bias_kernel<double>(T1 *, const T1 *, unsigned long long, unsigned long long, int *",0.0,8,82.7
+fma,f64,cheb-1024x1024x1024-b4096,"void gemvNSP_kernel<double, double, double, double, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvPar",0.0,6,50.6
+fma,f64,cheb-1024x1024x1024-b4096,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, double, double, double, double, (bool)0, double, dou",0.0,6,3.4
+fma,f64,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::fill_kernel<double>(T1 *, unsigned long long, T1)",0.0,1,1.3
+fma,f64,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_tn_align1>(T1::Params)",28.1,12,27421.8
+fma,f64,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_nt_align1>(T1::Params)",23.2,10,26640.0
+fma,f64,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)",22.9,10,26394.5
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)5, double>(const T2 *, T2 *, T2 *, T2 *, unsig",20.2,18,13174.7
+fma,f64,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x64_16x4_tn_align1>(T1::Params)",2.1,6,4056.2
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_staged_kernel<double>(const T1 *, const T1 *, const T1 *, T1 *, unsigned ",1.4,15,1100.0
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, un",0.8,15,633.3
+fma,f64,trbf-256x256x256x10-b8192,"ampere_dgemm_64x64_nn",0.7,5,1587.6
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::parameter_partial_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, ",0.4,5,992.4
+fma,f64,trbf-256x256x256x10-b8192,"void gemvNSP_kernel<double, double, double, double, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvPar",0.1,10,26.5
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<double>(T1 *, const T1 *, unsigned long long, unsigned long long, int *",0.0,18,41.9
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int ",0.0,5,28.0
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_finish_kernel<double>(const T1 *, T1 *, unsigned long long, unsigned int,",0.0,15,3.8
+fma,f64,trbf-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, double, double, double, double, (bool)0, double, dou",0.0,10,2.9
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::validate_width_kernel<double>(const T1 *, unsigned long long, int *)",0.0,15,1.8
+fma,f64,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<double>(T1 *, unsigned long long, T1)",0.0,1,1.4
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, u",22.1,10,17.1
+fma,f32,cheb-64x64x32x16-b1024,"ampere_sgemm_32x32_sliced1x4_tn",14.5,12,9.5
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",12.7,15,6.5
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",11.2,18,5.5
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const T1 *, const T1 *, T1 *, unsigned long l",8.4,6,11.0
+fma,f32,cheb-64x64x32x16-b1024,"ampere_sgemm_32x128_nn",6.6,10,5.2
+fma,f32,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nt_align1>(T1::Params)",5.8,5,9.1
+fma,f32,cheb-64x64x32x16-b1024,"ampere_sgemm_128x32_nn",5.6,5,8.8
+fma,f32,cheb-64x64x32x16-b1024,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",5.3,17,2.5
+fma,f32,cheb-64x64x32x16-b1024,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",3.2,5,4.9
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",3.0,12,2.0
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",1.4,5,2.2
+fma,f32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.2,1,1.4
+fma,f32,cheb-256x256x256x10-b8192,"ampere_sgemm_128x64_tn",29.9,12,743.1
+fma,f32,cheb-256x256x256x10-b8192,"ampere_sgemm_128x64_nn",20.6,10,705.4
+fma,f32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)",19.7,10,658.1
+fma,f32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",15.2,15,153.4
+fma,f32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",8.6,18,155.5
+fma,f32,cheb-256x256x256x10-b8192,"ampere_sgemm_32x128_tn",1.7,6,92.4
+fma,f32,cheb-256x256x256x10-b8192,"ampere_sgemm_128x32_nt",1.2,5,78.3
+fma,f32,cheb-256x256x256x10-b8192,"ampere_sgemm_128x32_nn",1.1,5,70.9
+fma,f32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",0.8,18,21.6
+fma,f32,cheb-256x256x256x10-b8192,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",0.4,5,27.5
+fma,f32,cheb-256x256x256x10-b8192,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.4,10,12.9
+fma,f32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",0.2,5,14.4
+fma,f32,cheb-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",0.1,15,2.0
+fma,f32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.6
+fma,f32,cheb-1024x1024x1024-b4096,"ampere_sgemm_128x128_tn",42.0,8,5477.2
+fma,f32,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1::Params)",24.8,6,4383.3
+fma,f32,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1::Params)",24.0,6,4199.5
+fma,f32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",4.3,6,813.6
+fma,f32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",3.6,8,310.3
+fma,f32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",0.6,3,210.1
+fma,f32,cheb-1024x1024x1024-b4096,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.4,6,23.9
+fma,f32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",0.3,8,41.4
+fma,f32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.3
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_staged_kernel<float>(const T1 *, const T1 *, const T1 *, T1 *, unsigned l",22.7,15,766.1
+fma,f32,trbf-256x256x256x10-b8192,"ampere_sgemm_128x64_tn",18.0,12,842.0
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)5, float>(const T2 *, T2 *, T2 *, T2 *, unsign",17.4,18,640.3
+fma,f32,trbf-256x256x256x10-b8192,"ampere_sgemm_128x64_nn",15.1,10,833.2
+fma,f32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)",14.6,10,844.6
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",8.7,15,153.5
+fma,f32,trbf-256x256x256x10-b8192,"ampere_sgemm_32x128_tn",1.0,6,92.6
+fma,f32,trbf-256x256x256x10-b8192,"ampere_sgemm_128x32_nt",0.7,5,77.4
+fma,f32,trbf-256x256x256x10-b8192,"ampere_sgemm_128x32_nn",0.7,5,73.7
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",0.5,18,21.0
+fma,f32,trbf-256x256x256x10-b8192,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",0.2,5,27.7
+fma,f32,trbf-256x256x256x10-b8192,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.2,10,12.9
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",0.1,5,14.5
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_finish_kernel<float>(const T1 *, T1 *, unsigned long long, unsigned int, ",0.1,15,3.0
+fma,f32,trbf-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",0.1,15,2.0
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::validate_width_kernel<float>(const T1 *, unsigned long long, int *)",0.0,15,1.4
+fma,f32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.4
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, u",23.7,10,17.1
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",12.8,15,6.2
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",12.3,18,5.5
+fma,tf32,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x64_16x6_tn_align4>(T1::Params)",12.2,12,7.4
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const T1 *, const T1 *, T1 *, unsigned long l",9.2,6,11.1
+fma,tf32,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x64_16x6_nn_align4>(T1::Params)",8.0,10,5.9
+fma,tf32,cheb-64x64x32x16-b1024,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x64_16x6_nt_align4>(T1::Params)",5.7,5,8.2
+fma,tf32,cheb-64x64x32x16-b1024,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",4.9,17,2.1
+fma,tf32,cheb-64x64x32x16-b1024,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",3.4,5,4.7
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",3.2,12,1.9
+fma,tf32,cheb-64x64x32x16-b1024,"ampere_sgemm_32x128_nn",2.8,5,4.1
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",1.6,5,2.3
+fma,tf32,cheb-64x64x32x16-b1024,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.2,1,1.4
+fma,tf32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nt_align4>(T1::Params)",31.8,10,613.9
+fma,tf32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x5_tn_align4>(T1::Params)",17.2,12,275.8
+fma,tf32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",14.6,18,155.6
+fma,tf32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x5_nn_align4>(T1::Params)",13.9,10,269.1
+fma,tf32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",11.9,15,153.4
+fma,tf32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x64_32x3_nt_align1>(T1::Params)",2.8,5,106.3
+fma,tf32,cheb-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_32x3_tn_align1>(T1::Params)",2.6,6,81.9
+fma,tf32,cheb-256x256x256x10-b8192,"ampere_sgemm_128x64_nn",1.9,5,74.1
+fma,tf32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",1.4,18,21.6
+fma,tf32,cheb-256x256x256x10-b8192,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",0.7,5,27.6
+fma,tf32,cheb-256x256x256x10-b8192,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.7,10,12.8
+fma,tf32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",0.3,5,12.3
+fma,tf32,cheb-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",0.2,15,1.9
+fma,tf32,cheb-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.6
+fma,tf32,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_tn_align4>(T1::Params)",35.0,8,1837.1
+fma,tf32,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nt_align4>(T1::Params)",26.0,6,1843.7
+fma,tf32,cheb-1024x1024x1024-b4096,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nn_align4>(T1::Params)",25.2,6,1767.9
+fma,tf32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",5.7,6,333.2
+fma,tf32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsign",5.6,8,310.1
+fma,tf32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",1.4,3,207.3
+fma,tf32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",0.8,8,41.8
+fma,tf32,cheb-1024x1024x1024-b4096,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.3,6,24.0
+fma,tf32,cheb-1024x1024x1024-b4096,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.4
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_staged_kernel<float>(const T1 *, const T1 *, const T1 *, T1 *, unsigned l",24.2,15,678.7
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, uns",15.2,15,632.1
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)5, float>(const T2 *, T2 *, T2 *, T2 *, unsign",14.6,18,232.2
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nt_align4>(T1::Params)",12.3,5,1141.7
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_32x3_nt_align1>(T1::Params)",7.9,5,689.3
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_32x3_tn_align1>(T1::Params)",7.8,6,588.7
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x5_tn_align4>(T1::Params)",6.8,6,541.2
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nn_align1>(T1::Params)",3.4,5,308.3
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x5_nn_align4>(T1::Params)",3.0,5,268.3
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x64_32x3_nt_align1>(T1::Params)",1.2,5,108.8
+fma,tf32,trbf-256x256x256x10-b8192,"void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_32x3_tn_align1>(T1::Params)",1.1,6,82.6
+fma,tf32,trbf-256x256x256x10-b8192,"ampere_sgemm_128x64_nn",0.8,5,73.6
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)",0.6,18,21.7
+fma,tf32,trbf-256x256x256x10-b8192,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE",0.3,5,27.5
+fma,tf32,trbf-256x256x256x10-b8192,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1",0.3,10,12.9
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *",0.2,5,14.5
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::nonlinear_finish_kernel<float>(const T1 *, T1 *, unsigned long long, unsigned int, ",0.1,15,3.0
+fma,tf32,trbf-256x256x256x10-b8192,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f",0.1,15,1.9
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::validate_width_kernel<float>(const T1 *, unsigned long long, int *)",0.0,15,1.3
+fma,tf32,trbf-256x256x256x10-b8192,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)",0.0,1,1.4

@@ -1,0 +1,16 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,1.037,0.905,1.491
+m2,m1_host_full,4,1.024,0.577,1.987
+m2,m2_resident_full,24,1.018,0.891,1.178
+m2,m2_transfer_full,24,1.017,0.698,1.563
+m3,cpu_full,12,1.019,0.983,1.082
+m3,m3_resident_full,12,1.088,0.852,3.470
+m3,m3_transfer_full,12,1.078,0.850,2.183
+m4,cpu_full,12,0.959,0.774,1.050
+m4,m4_resident_full,12,1.010,0.942,1.230
+m4,m4_transfer_full,12,0.982,0.928,1.061
+checksum mismatches: 4
+   ('m2', '0', 'chebyshev', '16x24x8', '32', 'm1_host_full')
+   ('m2', '1', 'chebyshev', '16x24x8', '1024', 'm1_host_full')
+   ('m2', '2', 'chebyshev', '64x64x32x16', '32', 'm1_host_full')
+   ('m2', '3', 'chebyshev', '64x64x32x16', '1024', 'm1_host_full')
