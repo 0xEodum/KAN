@@ -83,10 +83,12 @@ const std::vector<double> upstream{0.1, -0.2, 0.1};
 model.sgd(model.backward(input, 3, upstream), 0.01);
 ```
 
-Include `<kan/cuda.hpp>` and link `kan::cuda` to call
-`kan::cuda::forward(layer, input, batch)` or `kan::cuda::backward(...)`.
-Query `kan::cuda::available()` for runtime availability. CUDA accepts Chebyshev
-layers only; other families are rejected explicitly.
+Include `<kan/cuda.hpp>` and link `kan::cuda` to query `kan::cuda::available()`
+for runtime availability. The M1 single-layer calls `kan::cuda::forward(layer, input, batch)`
+and `kan::cuda::backward(...)` in the same header are deprecated (backlog R7): each
+call builds a one-layer resident executor, runs it once and releases it, so it accepts
+every carrier but pays the executor construction on every call. Use the persistent
+executor below instead.
 
 For persistent execution, include `<kan/resident.hpp>` and link `kan::cuda`:
 

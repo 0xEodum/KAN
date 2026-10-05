@@ -1,0 +1,19 @@
+== memcheck --leak-check full cuda_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== racecheck  cuda_test
+11/11 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== initcheck  cuda_test
+FAIL cuda_legacy_calls_release_device_storage: legacy calls did not release device storage
+10/11 passed
+========= ERROR SUMMARY: 0 errors
+== synccheck  cuda_test
+11/11 passed
+========= ERROR SUMMARY: 0 errors
+== note: initcheck retains freed allocations (tool artifact, not a leak)
+initcheck_malloc_probe.cpp, 120 x (8 MiB cudaMalloc + cudaMemset + cudaFree), drop of cudaMemGetInfo free:
+  native 0 MiB; memcheck 0 MiB; initcheck 96 MiB (ERROR SUMMARY: 0 errors)
+cuda_legacy_calls_release_device_storage measures cudaMemGetInfo: meaningful natively and under memcheck
+(which also reports 0 bytes leaked), not under initcheck. The other 10 tests pass under initcheck.
