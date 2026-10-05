@@ -165,14 +165,18 @@ __global__ void forward_dot_kernel(const T* v, const T* c, const T* bias, T* out
 }
 // Largest forward contraction (batch*outputs*inputs*terms multiply-adds) run by
 // forward_dot_kernel; cuBLAS above. FP64: both are FP64-ALU bound on GA102 and
-// meet at a few million multiply-adds (C2 evidence, dot_vs_gemm). FP32: see
-// the C1 evidence (dot_vs_gemm FP32 measurements).
+// meet at a few million multiply-adds (C2 evidence, dot_vs_gemm). FP32: SGEMM
+// is about 20x faster than DGEMM, so the warp kernel only wins up to about
+// 4M multiply-adds (C1 evidence, small_shapes_f32).
 template<class T> constexpr std::size_t small_forward_contraction = std::size_t{1} << 23;
-template<> constexpr std::size_t small_forward_contraction<float> = std::size_t{1} << 23;
+template<> constexpr std::size_t small_forward_contraction<float> = std::size_t{1} << 22;
 // Largest coefficients+outputs whose VJP runs parameter_partial_kernel, in at
 // most parameter_tiles batch tiles of at least parameter_tile_rows samples.
+// FP32 also bounds the tiled reduction's work (batch*(coefficients+outputs)):
+// above 2^24 SGEMM+SGEMV is faster (64x1024x448: 60 vs 120 us; C1 evidence).
 template<class T> constexpr std::size_t small_parameter_vjp = std::size_t{1} << 15;
-template<> constexpr std::size_t small_parameter_vjp<float> = std::size_t{1} << 15;
+template<class T> constexpr std::size_t small_parameter_work = std::numeric_limits<std::size_t>::max();
+template<> constexpr std::size_t small_parameter_work<float> = std::size_t{1} << 24;
 constexpr std::size_t parameter_tile_rows = 64;
 constexpr unsigned parameter_tiles = 64;
 unsigned parameter_tile_count(std::size_t batch) {
@@ -1073,7 +1077,7 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
     T* db = s.ptr(s.gradients+b.bias());
     const T one = 1, zero = 0;
     const auto checked = b.coefficients+b.outputs;
-    const bool small = s.batch && checked <= small_parameter_vjp<T>;
+    const bool small = s.batch && checked <= small_parameter_vjp<T> && s.batch <= small_parameter_work<T>/checked;
     const auto tiles = parameter_tile_count(s.batch);
     if (small) {
         // Partial sums; backward_finish_kernel adds them with lambda*C.

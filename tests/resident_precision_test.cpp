@@ -232,6 +232,12 @@ TEST(float32_contraction_paths_match_fp64_cpu) {
     for (std::size_t batch : {1000u, 400u, 7u})
         train_like_cpu(kan::Network({layer(64, 80, kan::ChebyshevConfig{7}, 0.7),
                                      layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)}), batch, 1000, 0.01, 2, 0.01);
+    // FP32 thresholds: 64*448+64 = 28 736 coefficients+outputs take the tiled
+    // parameter VJP up to 2^24 / 28 736 = 583 samples (batch 400, 7) and
+    // SGEMM above (batch 1000); the forward (2^22 multiply-adds) takes SGEMM at
+    // batch 400 and 1000 and the warp kernel at batch 7.
+    for (std::size_t batch : {1000u, 400u, 7u})
+        train_like_cpu(kan::Network({layer(64, 64, kan::ChebyshevConfig{7}, 0.6)}), batch, 1000, 0.01, 2, 0.01);
 }
 
 // Results beyond the FP32 range are nonfinite in single precision and are
