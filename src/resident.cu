@@ -660,9 +660,19 @@ struct Context {
     // 13.5 ms). Host memory, not counted by workspace_allocations().
     T* pinned = nullptr;
     std::size_t pinned_size = 0;
+    // Validates (finite, then representable: std::invalid_argument) before any
+    // device change, in the same single pass that converts into the buffer.
     void upload_pinned(T* destination, std::span<const double> data) {
-        if (!pinned || data.size() > pinned_size) { upload(destination, data); return; }
-        std::transform(data.begin(), data.end(), pinned, [](double v) { return narrow<T>(v); });
+        if (!pinned || data.size() > pinned_size) { finite(data); upload(destination, data); return; }
+        bool nonfinite = false, outside = false;
+        for (std::size_t i = 0; i < data.size(); ++i) {
+            const double v = data[i];
+            nonfinite |= !std::isfinite(v);
+            outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
+            pinned[i] = static_cast<T>(outside ? 0.0 : v);
+        }
+        if (nonfinite) throw std::invalid_argument("resident data must be finite");
+        if (outside) throw std::invalid_argument("resident data is not representable in float32");
         if (!data.empty())
             check(cudaMemcpyAsync(destination, pinned, data.size()*sizeof(T), cudaMemcpyHostToDevice, stream), "resident upload");
     }
@@ -1432,14 +1442,17 @@ struct Engine final : ResidentExecutor, Context<T> {
     void upload_input(std::span<const double> input, std::size_t rows) override {
         const auto count = product(rows, extent(plans.front()).inputs);
         if (rows > capacity || input.size() != count) throw std::invalid_argument("resident input shape or capacity mismatch");
-        finite(input);
-        this->upload_pinned(ptr(activation.front()), input); sync();
+        if constexpr (std::is_same_v<T, double>) { finite(input); this->upload(ptr(activation.front()), input); }
+        else this->upload_pinned(ptr(activation.front()), input);
+        sync();
         batch = rows; has_input = true; has_upstream = has_forward = has_backward = false;
     }
     void upload_output_gradient(std::span<const double> gradient) override {
         if (!has_input) throw std::logic_error("resident input must be uploaded first");
         if (gradient.size() != product(batch, extent(plans.back()).outputs)) throw std::invalid_argument("resident upstream shape mismatch");
-        finite(gradient); this->upload_pinned(ptr(upstream.back()), gradient); sync();
+        if constexpr (std::is_same_v<T, double>) { finite(gradient); this->upload(ptr(upstream.back()), gradient); }
+        else this->upload_pinned(ptr(upstream.back()), gradient);
+        sync();
         has_upstream = true; has_backward = false;
     }
     void forward() override {
