@@ -1,0 +1,7 @@
+golden.cpp (docs/evidence/backlog/golden) linked against build-r7base (2598368) and build-r7 (R7)
+SHA-256                                                           bytes   dump
+6D6DC2E83717DA919ED94FB7E49CB367624B4E22FC753B24296DFAC48912797E  176087  golden_base.txt (default: CPU + resident)
+6D6DC2E83717DA919ED94FB7E49CB367624B4E22FC753B24296DFAC48912797E  176087  golden_r7.txt
+C1F44D97541FA79EE54544C32E33EB5AD067F8A9953643DEF1AA438AE6F27DC9   33628  golden_base_layers.txt (--layers, CPU)
+C1F44D97541FA79EE54544C32E33EB5AD067F8A9953643DEF1AA438AE6F27DC9   33628  golden_r7_layers.txt
+Both modes byte-identical; the --layers hash equals the value recorded for R2 and C2.

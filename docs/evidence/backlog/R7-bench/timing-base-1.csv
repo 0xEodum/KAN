@@ -1,0 +1,5 @@
+case,call,median_ms,min_ms,max_ms
+cheb-16x8-K8-b32,forward,0.4643,0.4076,0.544
+cheb-16x8-K8-b32,backward,0.6422,0.5781,0.9613
+cheb-128x128-K8-b4096,forward,28.4995,28.2449,29.5781
+cheb-128x128-K8-b4096,backward,177.606,175.573,187.889

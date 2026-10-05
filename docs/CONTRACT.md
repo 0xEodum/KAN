@@ -43,20 +43,31 @@ operations raise `std::invalid_argument`. A network rejects moved-from layer val
 Accessors are safe but their moved-from values are unspecified.
 
 CUDA is an optional separate `kan::cuda` target; CPU has no CUDA dependency.
-M1 CUDA supports Chebyshev only, with the same mathematical/validation contract.
-Other families raise `std::invalid_argument` rather than selecting another backend.
-The host API is synchronous and transfers inputs/parameters/results per call; it makes
-no performance claim. Device memory is owned per invocation, exceptions release it,
-and reductions have fixed summation order, without floating-point atomic accumulation.
 No device returns `available() == false`; actual operations fail explicitly with
-`std::runtime_error`. CPU/CUDA equivalence is tolerance-based, not bitwise promised.
+`std::runtime_error`. `available()` is the supported device query for every CUDA API.
+
+**Legacy synchronous layer API (M1, deprecated by backlog R7).** `kan::cuda::forward`
+and `kan::cuda::backward` keep their signatures and are `[[deprecated]]` in favour of
+`kan::cuda::ResidentNetwork`. Each call validates shapes and finiteness on the host
+(`std::invalid_argument`; size overflow raises `std::overflow_error`) before any device
+allocation, then builds a one-layer `ResidentNetwork` with capacity `batch`, uploads,
+runs forward (and, for `backward`, forward plus backward with no L2 term), downloads and
+releases it. Device memory is therefore owned per invocation and released on return and
+on exceptions; the call pays the executor construction (stream, arena, cuBLAS handle)
+each time and makes no performance claim. It accepts every carrier the resident
+executor supports, not only Chebyshev (contract change of R7; M1 rejected the other
+families with `std::invalid_argument`): `LayerGradients::nonlinear` holds the trainable
+RBF or rational VJPs, and unsafe guarded rational denominators raise `std::domain_error`.
+Numerics, summation order and the nonfinite-result contract are those of the resident
+executor (below); results match the CPU within `|a-e| <= 1e-12|e| + 1e-13 max|e|` per
+entry, not bitwise (see [R7 evidence](evidence/backlog/R7.md)).
 
 ## Persistent CUDA execution (M2)
 
 `kan::cuda::ResidentNetwork` is a move-only executor built from an owned snapshot
 of a CPU `Network`, with a fixed maximum batch capacity. It supports every M1
 basis family and mixed compatible networks. All storage remains double precision.
-The M1 synchronous Chebyshev layer functions keep their original contract.
+Since R7 the deprecated M1 layer functions are a thin adapter over this executor.
 
 Each resident executor owns its CUDA stream and preallocated device storage for
 parameters, inputs, upstream gradients, activations, basis values/derivatives,
@@ -256,8 +267,8 @@ Resident CUDA executes mixed rational/basis networks with persistent a/b storage
 analytic VJPs and atomic GPU SGD. Unsafe denominators are reported to the host as
 domain_error; a failed execution invalidates its output/gradient state. Numerical
 calls do not allocate GPU storage or fall back to CPU evaluation. CPU/GPU parity
-remains tolerance-based. The original synchronous Chebyshev CUDA API rejects
-rational layers.
+remains tolerance-based. Since R7 the deprecated synchronous layer API also runs
+rational layers, through this executor.
 
 Python exposes one class per basis configuration type (`kan.ChebyshevConfig(size=...)`,
 `kan.BSplineConfig(degree=..., knots=...)`, ...; each has a `size` property and value
@@ -391,7 +402,7 @@ loops in `src/carriers/`, family operations in `src/families.cpp`; input maps in
 with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
 dense contractions delegated to cuBLAS; the
-legacy M1 Chebyshev kernels in `src/cuda.cu`. No symbolic parser, Eigen, Torch,
+deprecated M1 layer API in `src/cuda.cu` is a kernel-free adapter over the resident executor. No symbolic parser, Eigen, Torch,
 Python runtime or imported KAN implementation is required. Quantum carriers need
 separate physical/measurement contracts at M5.
 

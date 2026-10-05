@@ -104,6 +104,15 @@ struct Result {
     double setup_ms = 0;
     std::size_t allocations = 0;
 };
+// The frozen m1_host_full protocol measures the legacy per-call API on purpose
+// (deprecated since backlog R7); suppress its deprecation warning here only.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 Result host(const Case& c, const std::vector<double>& input, const std::vector<double>& upstream,
             int warmups, int repeats, bool legacy) {
     auto start = Clock::now();
@@ -140,6 +149,11 @@ Result host(const Case& c, const std::vector<double>& input, const std::vector<d
     }
     return result;
 }
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #ifdef KAN_BENCH_RESIDENT
 Result resident(const Case& c, const std::vector<double>& input, const std::vector<double>& upstream,
                 int warmups, int repeats, bool transfers) {
