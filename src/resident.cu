@@ -88,9 +88,16 @@ struct CheckedEarlier {
 // shared budget) keeps the direct per-thread access.
 constexpr unsigned stage_threads = 256;
 constexpr std::size_t stage_bytes = std::size_t{32} << 10;
+// FP64 keeps the direct access (tile_rows = 0): its basis kernels are FP64-ALU
+// bound on GA102, and the 32 KiB stage per block costs them occupancy (m2
+// Gaussian RBF resident 1.9x slower); FP32 kernels are memory bound.
 template<class T> unsigned stage_rows(std::size_t terms, std::size_t planes) {
-    const auto rows = std::min<std::size_t>(stage_threads, stage_bytes/(terms*planes*sizeof(T)))/32*32;
-    return static_cast<unsigned>(rows);
+    if constexpr (std::is_same_v<T, double>) {
+        return 0;
+    } else {
+        const auto rows = std::min<std::size_t>(stage_threads, stage_bytes/(terms*planes*sizeof(T)))/32*32;
+        return static_cast<unsigned>(rows);
+    }
 }
 template<class T> __device__ T* stage_memory() {
     extern __shared__ __align__(16) unsigned char stage_raw[];
