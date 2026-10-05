@@ -1,0 +1,13 @@
+case,precision,operation,median_ms,repeats
+small 64x64x32x16 K7 cap1024,fp64,construct,2.2346,21
+small 64x64x32x16 K7 cap1024,fp64,upload_parameters,0.1601,21
+small 64x64x32x16 K7 cap1024,fp64,download_parameters,0.2466,21
+small 64x64x32x16 K7 cap1024,fp32,construct,1.7692,21
+small 64x64x32x16 K7 cap1024,fp32,upload_parameters,0.1154,21
+small 64x64x32x16 K7 cap1024,fp32,download_parameters,0.1808,21
+large 1024x1024x1024 K7 cap4096,fp64,construct,116.196,7
+large 1024x1024x1024 K7 cap4096,fp64,upload_parameters,45.3747,7
+large 1024x1024x1024 K7 cap4096,fp64,download_parameters,91.8669,7
+large 1024x1024x1024 K7 cap4096,fp32,construct,94.4737,7
+large 1024x1024x1024 K7 cap4096,fp32,upload_parameters,40.2829,7
+large 1024x1024x1024 K7 cap4096,fp32,download_parameters,95.6507,7

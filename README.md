@@ -83,9 +83,10 @@ const std::vector<double> upstream{0.1, -0.2, 0.1};
 model.sgd(model.backward(input, 3, upstream), 0.01);
 ```
 
-Include `<kan/cuda.hpp>` and link `kan::cuda` to query `kan::cuda::available()`
-for runtime availability. The M1 single-layer calls `kan::cuda::forward(layer, input, batch)`
-and `kan::cuda::backward(...)` in the same header are deprecated (backlog R7): each
+Link `kan::cuda` and query `kan::cuda::available()` for runtime availability; it is
+declared in `<kan/cuda_runtime.hpp>`, which `<kan/resident.hpp>` and `<kan/cuda.hpp>` both
+include (backlog R8). The M1 single-layer calls `kan::cuda::forward(layer, input, batch)`
+and `kan::cuda::backward(...)` in `<kan/cuda.hpp>` are deprecated (backlog R7): each
 call builds a one-layer resident executor, runs it once and releases it, so it accepts
 every carrier but pays the executor construction on every call. Use the persistent
 executor below instead.
@@ -102,7 +103,19 @@ gpu.backward();
 gpu.sgd(0.01); // validate and update all parameters on the GPU
 // Inputs/upstream remain resident; forward/backward/SGD can be repeated.
 auto trained = gpu.download_parameters(); // owned CPU snapshot when requested
+// Reuse the executor with weights trained or restored elsewhere (same structure):
+gpu.upload_parameters(model); // then forward() again before backward()
 ```
+
+`upload_parameters(network)` (backlog R9; Python `gpu.upload_parameters(network)`) replaces
+every trainable parameter of the executor without reallocating anything: coefficients,
+biases, trainable RBF centers/log widths, rational denominators and LayerNorm gain/bias.
+The network must have the structure the executor was built for (layer kinds and sizes,
+carriers, basis and rational configuration including spline knots, fixed input maps);
+anything else, or a value the executor precision cannot represent, raises
+`std::invalid_argument` (`ValueError`) and changes nothing. After `insert_knot`/`adapt_grid`
+the structure differs: build a new executor. Uploading costs a host-to-device copy of the
+parameters, a small fraction of construction for small networks (see the contract).
 
 Each executor owns its stream and storage. Uploads/downloads and numerical calls
 complete before returning; numerical calls transfer a small error status to check

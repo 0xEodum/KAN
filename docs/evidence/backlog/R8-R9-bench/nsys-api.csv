@@ -1,0 +1,13 @@
+case,precision,api,calls,total_ms,median_us
+0,fp64,cudaProfilerStart,1,456.127,456126.8
+0,fp64,cudaStreamSynchronize,10,1.219,122.5
+0,fp64,cudaMemcpyAsync,10,0.219,17.1
+0,fp32,cudaProfilerStart,1,378.541,378540.8
+0,fp32,cudaStreamSynchronize,10,0.645,65.3
+0,fp32,cudaMemcpyAsync,10,0.197,14.2
+1,fp64,cudaProfilerStart,1,379.889,379889.2
+1,fp64,cudaMemcpyAsync,40,360.462,8883.1
+1,fp64,cudaStreamSynchronize,10,5.551,570.0
+1,fp32,cudaProfilerStart,1,369.792,369791.8
+1,fp32,cudaMemcpyAsync,10,180.039,17981.9
+1,fp32,cudaStreamSynchronize,10,2.874,307.7

@@ -45,6 +45,9 @@ Accessors are safe but their moved-from values are unspecified.
 CUDA is an optional separate `kan::cuda` target; CPU has no CUDA dependency.
 No device returns `available() == false`; actual operations fail explicitly with
 `std::runtime_error`. `available()` is the supported device query for every CUDA API.
+It is declared in `kan/cuda_runtime.hpp` (backlog R8), which both `kan/resident.hpp` and
+the legacy `kan/cuda.hpp` include, so resident code needs no legacy header; the header has
+no CUDA dependency and the definition (`src/cuda_runtime.cpp`) is in `kan::cuda`.
 
 **Legacy synchronous layer API (M1, deprecated by backlog R7).** `kan::cuda::forward`
 and `kan::cuda::backward` keep their signatures and are `[[deprecated]]` in favour of
@@ -92,12 +95,49 @@ upstream. Upstream upload invalidates gradients. SGD requires current gradients
 and a finite positive learning rate. It validates every candidate parameter on
 the GPU before committing any layer, preserving network-wide atomicity. Successful
 SGD invalidates output/gradients while retaining input/upstream for another iteration.
+A successful `upload_parameters` (below) does the same.
 Batch zero produces empty outputs/input gradients and zero parameter gradients.
 Invalid lifecycle and moved-from operations raise `std::logic_error`; invalid
 host shapes/data raise `std::invalid_argument`, dimension/numerical overflow raises
 `std::overflow_error`, and absent hardware/runtime failures raise `std::runtime_error`.
 All M1 mathematical domain and finite-result
 requirements apply; CPU/GPU equivalence is tolerance-based.
+
+**Parameter upload (backlog R9).** `upload_parameters(network)` replaces the executor's
+trainable state with the parameters of a host `Network`, so one executor can be reused for
+weights trained on the CPU or restored from elsewhere: KAN-layer coefficients (rational
+numerators included) and biases, trainable RBF centers and log widths, rational
+denominators, and LayerNorm gain and bias. Structure is what the executor was built for and
+is never uploaded; it must match exactly, otherwise `std::invalid_argument` names the first
+differing layer: the number of layers; per position the kind (KAN layer or input map) and
+dimensions; the carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`) or map kind;
+and the fixed configuration, compared with `operator==`: the whole `BasisConfig` of a
+`BasisEdges` layer (family, size, Jacobi alpha/beta, Fourier frequency, Gaussian centers and
+width, B-spline degree and knots, Mexican-hat centers and scales), the term count of a
+trainable RBF, the whole `RationalConfig` (degrees, center, scale, epsilon, denominator
+policy), `AffineMap` and `TanhMap` values, the LayerNorm epsilon and whether it has
+gain/bias. Spline knots are configuration, not state: `insert_knot`/`adapt_grid` change the
+term count, and knots moved at an equal count (`set_carrier`) change the fixed function
+space the coefficients refer to; both are rejected, and such a model needs a new executor.
+A `download_parameters()` result always matches its executor, and the round trip is exact
+in every precision (downloads are exact widenings). Values are validated with the
+construction rules of the executor's precision: finite, and in FP32 magnitudes at most
+`FLT_MAX` and trainable RBF widths positive after rounding (values below the FP32 range round
+as at construction), with the construction messages. All checks run on the host before
+anything changes: a rejected call leaves parameters, outputs, gradients, input, upstream and
+batch unchanged. A CUDA runtime failure during the copy raises `std::runtime_error` and
+leaves the parameters unspecified. Success invalidates the output and gradients (`backward()`
+and `download_output()` need a new `forward()`) and keeps the uploaded input and upstream,
+like SGD. The call is valid at any point after construction, also before any input. It
+allocates no device memory (`workspace_allocations()` is unchanged) and writes the active
+parameter region: FP32 executors and FP64 regions up to 1 MiB convert on the host and make
+one host-to-device copy; larger FP64 regions are copied tensor by tensor without host
+staging (at most four copies per KAN layer, two per LayerNorm map) after validating all of
+them. Measured on the RTX 3090: 0.16 ms (FP64) / 0.12 ms (FP32) for a 0.4 MB
+64x64x32x16 Chebyshev network, about 7% of construction; 45 ms / 40 ms for the 117 MB
+1024x1024x1024 network, about 40% of construction, of which the PCIe copy is 36 / 18 ms
+([R8/R9 evidence](evidence/backlog/R8-R9.md)). Python: `ResidentNetwork.upload_parameters(network)`
+(`ValueError` for rejections, `RuntimeError` for lifecycle errors), releasing the GIL.
 
 **Contraction engine (backlog C2).** For `BasisEdges` and `TrainableRbfEdges` layers the
 resident executor computes the dense contraction and its VJPs with cuBLAS:
@@ -227,7 +267,7 @@ Add this VJP to a loss VJP explicitly before CPU SGD. Resident `backward(lambda=
 adds coefficient L2 gradients on GPU. Resident execution supports all eight
 families, nonlinear VJPs and candidate width validation with persistent storage.
 Grid refinement changes storage shape: explicitly download a model, refine it,
-and reconstruct the resident executor. Numerical execution never reallocates or
+and reconstruct the resident executor (`upload_parameters` rejects a refined network). Numerical execution never reallocates or
 silently falls back to the host. Python exposes these operations and snapshots;
 `regularization` returns `(value, gradients)`. Its compatible `evaluate_basis`
 continues returning `(values,input_derivatives)`; nonlinear gradients are
@@ -442,7 +482,7 @@ the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
 loops in `src/carriers/`, family operations in `src/families.cpp`; input maps in `src/input_map.cpp`
 with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
-dense contractions delegated to cuBLAS; the
+dense contractions delegated to cuBLAS; the device query in `src/cuda_runtime.cpp`; the
 deprecated M1 layer API in `src/cuda.cu` is a kernel-free adapter over the resident executor. No symbolic parser, Eigen, Torch,
 Python runtime or imported KAN implementation is required. Quantum carriers need
 separate physical/measurement contracts at M5.

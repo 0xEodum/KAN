@@ -1,0 +1,21 @@
+== memcheck --leak-check full resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== memcheck --leak-check full cuda_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== memcheck --leak-check full resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== racecheck resident_upload_test
+9/9 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== synccheck resident_upload_test
+9/9 passed
+========= ERROR SUMMARY: 0 errors
+== initcheck resident_upload_test
+9/9 passed
+========= ERROR SUMMARY: 0 errors

@@ -1,0 +1,8 @@
+m2_benchmark --case 23 --backend resident --warmups 2 --repeats 15, alternating, median / IQR (ms)
+(gaussian_rbf 64x64x32x16 batch 1024; one R8/R9 run of each ABBA round showed 3.75 ms)
+build-base   2.608 0.092 | build-b-r8r9 2.571 0.056
+build-base   2.615 0.084 | build-b-r8r9 2.818 0.292
+build-base   2.619 0.095 | build-b-r8r9 2.652 0.296
+build-base   2.843 0.294 | build-b-r8r9 2.676 0.333
+build-base   2.612 0.057 | build-b-r8r9 2.835 0.197
+build-base   2.618 0.037 | build-b-r8r9 2.720 0.297

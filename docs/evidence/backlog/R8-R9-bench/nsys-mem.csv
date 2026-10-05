@@ -1,0 +1,5 @@
+case,precision,operation,count,total_ms,median_us,total_mb
+0,fp64,[CUDA memcpy Host-to-Device],10,1.158,115.8,3.7
+0,fp32,[CUDA memcpy Host-to-Device],10,0.590,59.0,1.9
+1,fp64,[CUDA memcpy Host-to-Device],40,363.408,9069.3,1174.6
+1,fp32,[CUDA memcpy Host-to-Device],10,181.654,18155.5,587.3
