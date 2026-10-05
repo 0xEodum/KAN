@@ -654,6 +654,18 @@ struct Context {
     // device values are widened into their double destinations, at sync().
     std::vector<std::vector<T>> staged;
     std::vector<std::pair<std::span<double>, std::vector<T>>> pending;
+    // FP32: page-locked host buffer for the per-step input/upstream uploads
+    // (capacity * widest end of the network), converted in place: pageable
+    // copies ran at about 2.4 GB/s (32 MiB upstream of the 1024-wide step:
+    // 13.5 ms). Host memory, not counted by workspace_allocations().
+    T* pinned = nullptr;
+    std::size_t pinned_size = 0;
+    void upload_pinned(T* destination, std::span<const double> data) {
+        if (!pinned || data.size() > pinned_size) { upload(destination, data); return; }
+        std::transform(data.begin(), data.end(), pinned, [](double v) { return narrow<T>(v); });
+        if (!data.empty())
+            check(cudaMemcpyAsync(destination, pinned, data.size()*sizeof(T), cudaMemcpyHostToDevice, stream), "resident upload");
+    }
     T* ptr(std::size_t offset) const { return arena+offset; }
     void sync() {
         check(cudaStreamSynchronize(stream), "resident synchronize");
@@ -1338,7 +1350,7 @@ struct Engine final : ResidentExecutor, Context<T> {
     using Context<T>::capacity; using Context<T>::batch; using Context<T>::parameters; using Context<T>::gradients;
     using Context<T>::candidates; using Context<T>::scratch; using Context<T>::ones; using Context<T>::blas_workspace;
     using Context<T>::partials; using Context<T>::activation; using Context<T>::upstream; using Context<T>::arena;
-    using Context<T>::status; using Context<T>::stream; using Context<T>::blas; using Context<T>::ptr; using Context<T>::sync;
+    using Context<T>::status; using Context<T>::stream; using Context<T>::pinned_size; using Context<T>::blas; using Context<T>::ptr; using Context<T>::sync;
     Network model;
     std::size_t allocations = 0, parameter_count = 0;
     std::vector<Plan<T>> plans;
@@ -1374,6 +1386,10 @@ struct Engine final : ResidentExecutor, Context<T> {
             check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "resident stream create");
             check(cudaMalloc(&arena, bytes), "resident arena allocation"); ++allocations;
             check(cudaMalloc(&status, sizeof(int)), "resident status allocation"); ++allocations;
+            if constexpr (!std::is_same_v<T, double>) {
+                pinned_size = product(capacity, std::max(extent(plans.front()).inputs, extent(plans.back()).outputs));
+                if (pinned_size) check(cudaMallocHost(&this->pinned, pinned_size*sizeof(T)), "resident pinned staging allocation");
+            }
             // The handle runs on the network stream with a workspace inside the
             // arena (set after the stream: cublasSetStream resets it).
             check(cublasCreate(&blas), "resident cuBLAS handle create");
@@ -1400,7 +1416,8 @@ struct Engine final : ResidentExecutor, Context<T> {
         if (arena) cudaFree(arena);
         if (status) cudaFree(status);
         if (stream) cudaStreamDestroy(stream);
-        arena = nullptr; status = nullptr; stream = nullptr; blas = nullptr;
+        if (this->pinned) cudaFreeHost(this->pinned);
+        arena = nullptr; status = nullptr; stream = nullptr; blas = nullptr; this->pinned = nullptr;
     }
     void reset_status() { check(cudaMemsetAsync(status, 0, sizeof(int), stream), "resident status reset"); }
     void result() {
@@ -1416,13 +1433,13 @@ struct Engine final : ResidentExecutor, Context<T> {
         const auto count = product(rows, extent(plans.front()).inputs);
         if (rows > capacity || input.size() != count) throw std::invalid_argument("resident input shape or capacity mismatch");
         finite(input);
-        this->upload(ptr(activation.front()), input); sync();
+        this->upload_pinned(ptr(activation.front()), input); sync();
         batch = rows; has_input = true; has_upstream = has_forward = has_backward = false;
     }
     void upload_output_gradient(std::span<const double> gradient) override {
         if (!has_input) throw std::logic_error("resident input must be uploaded first");
         if (gradient.size() != product(batch, extent(plans.back()).outputs)) throw std::invalid_argument("resident upstream shape mismatch");
-        finite(gradient); this->upload(ptr(upstream.back()), gradient); sync();
+        finite(gradient); this->upload_pinned(ptr(upstream.back()), gradient); sync();
         has_upstream = true; has_backward = false;
     }
     void forward() override {
