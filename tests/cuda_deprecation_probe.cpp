@@ -1,8 +1,13 @@
-// Backlog R7 compile probe, built with deprecation warnings as errors.
-// cuda_deprecation_available (no KAN_PROBE_LEGACY) must compile: available()
-// and the resident executor are not deprecated. cuda_deprecation_legacy must
-// fail with the deprecation message pointing to kan::cuda::ResidentNetwork.
+// Backlog R7/R8 compile probe, built with deprecation warnings as errors.
+// cuda_deprecation_available (no macro) must compile: available() and the
+// resident executor are not deprecated. cuda_deprecation_resident_only
+// (KAN_PROBE_RESIDENT_ONLY) must compile with kan/resident.hpp as the only
+// CUDA header: the device query is declared in kan/cuda_runtime.hpp, which the
+// resident header includes (R8). cuda_deprecation_legacy (KAN_PROBE_LEGACY)
+// must fail with the deprecation message pointing to kan::cuda::ResidentNetwork.
+#ifndef KAN_PROBE_RESIDENT_ONLY
 #include "kan/cuda.hpp"
+#endif
 #include "kan/resident.hpp"
 
 int main() {

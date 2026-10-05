@@ -1,0 +1,4 @@
+# Backlog R8/R9 RED run at 6715723 + RED tests (build-b-r8r9, MSVC 19.50 + CUDA 13.1 + Python)
+## Build: resident_upload_test does not compile
+
+## CTest (remaining targets built with ninja -k 0)

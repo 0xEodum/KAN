@@ -109,7 +109,8 @@ if(BUILD_TESTING)
         set_tests_properties(cuda PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Backlog R7: kan::cuda::forward/backward are [[deprecated]], available() is not.
         # Probes compile with deprecation warnings as errors; the legacy one must fail.
-        foreach(probe available legacy)
+        # R8: resident_only includes kan/resident.hpp alone and must see available().
+        foreach(probe available resident_only legacy)
             add_executable(cuda_deprecation_${probe} EXCLUDE_FROM_ALL tests/cuda_deprecation_probe.cpp)
             target_link_libraries(cuda_deprecation_${probe} PRIVATE kan::cuda)
             target_compile_options(cuda_deprecation_${probe} PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/we4996,-Werror=deprecated-declarations>)
@@ -117,6 +118,7 @@ if(BUILD_TESTING)
             set_tests_properties(cuda_deprecation_${probe} PROPERTIES LABELS "cuda;build" TIMEOUT 300 RESOURCE_LOCK kan_build_tree)
         endforeach()
         target_compile_definitions(cuda_deprecation_legacy PRIVATE KAN_PROBE_LEGACY)
+        target_compile_definitions(cuda_deprecation_resident_only PRIVATE KAN_PROBE_RESIDENT_ONLY)
         set_tests_properties(cuda_deprecation_legacy PROPERTIES
             PASS_REGULAR_EXPRESSION "C4996.*ResidentNetwork;ResidentNetwork.*deprecated-declarations")
         add_executable(resident_test tests/resident_test.cpp)
@@ -161,6 +163,12 @@ if(BUILD_TESTING)
         target_link_libraries(resident_precision_test PRIVATE kan::cuda)
         add_test(NAME resident_precision COMMAND resident_precision_test)
         set_tests_properties(resident_precision PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog R9: parameter upload into an existing executor.
+        add_executable(resident_upload_test tests/resident_upload_test.cpp)
+        target_include_directories(resident_upload_test PRIVATE tests)
+        target_link_libraries(resident_upload_test PRIVATE kan::cuda)
+        add_test(NAME resident_upload COMMAND resident_upload_test)
+        set_tests_properties(resident_upload PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
@@ -237,6 +245,10 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/precision_python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(precision_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME resident_upload_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_upload_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(resident_upload_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 
