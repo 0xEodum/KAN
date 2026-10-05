@@ -73,6 +73,13 @@ int main() {
     for (std::size_t i = 0; i < reference.size(); ++i)
         if (std::abs(trained[i] - reference[i]) > 1e-12) return 1;
     std::cout << "Installed resident CUDA/SGD consumer passed\n";
+    // Backlog R9: reuse the executor with CPU-trained parameters.
+    resident.upload_parameters(net);
+    resident.forward();
+    const auto uploaded = resident.download_output();
+    for (std::size_t i = 0; i < reference.size(); ++i)
+        if (std::abs(uploaded[i] - reference[i]) > 1e-12) return 1;
+    std::cout << "Installed resident parameter-upload consumer passed\n";
     kan::Network localized({local,nonlinear});
     kan::cuda::ResidentNetwork adaptive(localized,1);
     adaptive.upload_input(std::vector<double>{0.3},1);adaptive.upload_output_gradient(std::vector<double>{0.2});
