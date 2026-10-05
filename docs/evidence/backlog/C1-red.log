@@ -1,0 +1,41 @@
+== MSVC build of tests/resident_precision_test.cpp against 2598368 (build-b-c1)
+tests/resident_precision_test.cpp(18): error C2039: 'Precision': is not a member of 'kan::cuda'
+tests/resident_precision_test.cpp(18): error C2873: 'Precision': symbol cannot be used in a using-declaration
+tests/resident_precision_test.cpp(121): error C2653: 'Precision': is not a class or namespace name
+tests/resident_precision_test.cpp(121): error C2065: 'Float32': undeclared identifier
+tests/resident_precision_test.cpp(122): error C2039: 'precision': is not a member of 'kan::cuda::ResidentNetwork'
+tests/resident_precision_test.cpp(122): error C2653: 'Precision': is not a class or namespace name
+tests/resident_precision_test.cpp(122): error C2065: 'Float32': undeclared identifier
+tests/resident_precision_test.cpp(144): error C2039: 'precision': is not a member of 'kan::cuda::ResidentNetwork'
+... (36 compiler errors)
+
+== tests/precision_python_test.py --cuda against the C2 module (build-b-c2/python)
+EEEE
+======================================================================
+ERROR: test_default_is_float64 (__main__.Precision.test_default_is_float64)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+AttributeError: '_kan.ResidentNetwork' object has no attribute 'precision'
+
+======================================================================
+ERROR: test_enum (__main__.Precision.test_enum)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+AttributeError: module 'kan' has no attribute 'Precision'
+
+======================================================================
+ERROR: test_float32_keeps_strict_float64_arrays (__main__.Precision.test_float32_keeps_strict_float64_arrays)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+AttributeError: module 'kan' has no attribute 'Precision'
+
+======================================================================
+ERROR: test_float32_trains_like_fp64_cpu (__main__.Precision.test_float32_trains_like_fp64_cpu)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+AttributeError: module 'kan' has no attribute 'Precision'
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.135s
+
+FAILED (errors=4)

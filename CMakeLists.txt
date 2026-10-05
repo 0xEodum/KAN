@@ -134,6 +134,12 @@ if(BUILD_TESTING)
         target_link_libraries(resident_contraction_test PRIVATE kan::cuda)
         add_test(NAME resident_contraction COMMAND resident_contraction_test)
         set_tests_properties(resident_contraction PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog C1: resident precision policy (FP32 executor).
+        add_executable(resident_precision_test tests/resident_precision_test.cpp)
+        target_include_directories(resident_precision_test PRIVATE tests)
+        target_link_libraries(resident_precision_test PRIVATE kan::cuda)
+        add_test(NAME resident_precision COMMAND resident_precision_test)
+        set_tests_properties(resident_precision PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
@@ -206,6 +212,10 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_map_python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(input_map_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME precision_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/precision_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(precision_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 
