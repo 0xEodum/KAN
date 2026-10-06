@@ -1742,10 +1742,12 @@ struct Engine final : ResidentExecutor, Context<T> {
         for (std::size_t j = plans.size(); j-- > 0;)
             std::visit([&](const auto& plan) { run_backward(*this, plan, j, lambda); }, plans[j]);
     }
-    void enqueue_update(T rate) {
+    // `node` (during capture only): receives the candidate kernel's graph node.
+    void enqueue_update(T rate, cudaGraphNode_t* node = nullptr) {
         if (parameter_count) { // zero only for networks of fixed input maps
             candidate_kernel<<<blocks(parameter_count), 256, 0, stream>>>(ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, status);
             check(cudaGetLastError(),"resident candidate launch");
+            if (node) *node = last_captured_node();
         }
         for (const auto& plan : plans) std::visit([&](const auto& p) { validate_candidates(*this, p); }, plan);
     }
@@ -1793,7 +1795,21 @@ struct Engine final : ResidentExecutor, Context<T> {
     }
     // Captures one training step on the stream (nothing executes): forward
     // and loss report into bits[0], backward into bits[1], SGD into bits[2].
-    cudaGraph_t record_step(Loss loss, T rate, T lambda, bool staged) {
+    // The node the next captured operation would depend on: right after a
+    // kernel launch, that kernel's node (CUDA 13 added an edge-data argument).
+    cudaGraphNode_t last_captured_node() {
+        cudaStreamCaptureStatus capturing{};
+        const cudaGraphNode_t* dependencies = nullptr;
+        std::size_t count = 0;
+#if CUDART_VERSION >= 13000
+        check(cudaStreamGetCaptureInfo(stream, &capturing, nullptr, nullptr, &dependencies, nullptr, &count), "resident capture info");
+#else
+        check(cudaStreamGetCaptureInfo(stream, &capturing, nullptr, nullptr, &dependencies, &count), "resident capture info");
+#endif
+        if (capturing != cudaStreamCaptureStatusActive || count != 1) throw std::runtime_error("resident step capture: SGD node not found");
+        return dependencies[0];
+    }
+    cudaGraph_t record_step(Loss loss, T rate, T lambda, bool staged, cudaGraphNode_t* candidate) {
         check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal), "resident step capture");
         try {
             status = control->bits;
@@ -1805,7 +1821,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             enqueue_backward(lambda);
             this->skip_network_input_gradient = false;
             status = control->bits+2;
-            enqueue_update(rate);
+            enqueue_update(rate, candidate);
             commit_kernel<<<parameter_count ? std::min(blocks(parameter_count), commit_max_blocks) : 1U, 256, 0, stream>>>(
                 ptr(parameters), ptr(candidates), parameter_count, control);
             check(cudaGetLastError(), "resident commit launch");
@@ -1823,29 +1839,11 @@ struct Engine final : ResidentExecutor, Context<T> {
         check(cudaStreamEndCapture(stream, &graph), "resident step capture");
         return graph;
     }
-    cudaGraphNode_t candidate_node(cudaGraph_t graph) {
-        std::size_t count = 0;
-        check(cudaGraphGetNodes(graph, nullptr, &count), "resident step graph nodes");
-        std::vector<cudaGraphNode_t> nodes(count);
-        check(cudaGraphGetNodes(graph, nodes.data(), &count), "resident step graph nodes");
-        cudaGraphNode_t found = nullptr;
-        for (auto node : nodes) {
-            cudaGraphNodeType type{};
-            if (cudaGraphNodeGetType(node, &type) != cudaSuccess || type != cudaGraphNodeTypeKernel) continue;
-            cudaKernelNodeParams p{};
-            if (cudaGraphKernelNodeGetParams(node, &p) == cudaSuccess && p.func == reinterpret_cast<void*>(&candidate_kernel<T>))
-                found = node;
-        }
-        cudaGetLastError(); // library kernel nodes may not report runtime parameters
-        if (!found) throw std::runtime_error("resident step graph: SGD candidate node not found");
-        return found;
-    }
     StepGraph& step_graph(const StepKey& key, T rate) {
         for (auto& g : graphs) if (g.key == key) { g.used = ++graph_clock; return g; }
         StepGraph entry{key};
-        entry.graph = record_step(key.loss, rate, key.lambda, key.staged);
+        entry.graph = record_step(key.loss, rate, key.lambda, key.staged, &entry.candidate);
         try {
-            if (parameter_count) entry.candidate = candidate_node(entry.graph);
             entry.args = {ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, control->bits+2};
             check(cudaGraphInstantiate(&entry.exec, entry.graph, 0), "resident step graph instantiate");
         } catch (...) { destroy(entry); throw; }
