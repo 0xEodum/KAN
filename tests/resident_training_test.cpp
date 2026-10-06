@@ -44,8 +44,8 @@ std::vector<double> wave(std::size_t count, double scale, double frequency, doub
     for (std::size_t i = 0; i < count; ++i) v[i] = scale*std::sin(frequency*static_cast<double>(i)+phase);
     return v;
 }
-kan::Layer seeded(kan::Layer l, double phase) {
-    const auto scale = 1.0/std::sqrt(static_cast<double>(l.inputs()*l.terms()));
+kan::Layer seeded(kan::Layer l, double phase, double amplitude = 1.0) {
+    const auto scale = amplitude/std::sqrt(static_cast<double>(l.inputs()*l.terms()));
     l.set_parameters(wave(l.coefficients().size(), scale, 0.731, phase), wave(l.outputs(), 0.05, 1.3, phase));
     return l;
 }
@@ -78,10 +78,11 @@ kan::Network mixed() {
     layers.emplace_back(seeded(kan::Layer(3, 2, kan::BSplineConfig{3, spline_knots}), 1.9));
     return kan::Network(std::move(layers));
 }
-// Crosses the cuBLAS thresholds of both precisions (C1/C2 contraction paths).
+// Crosses the cuBLAS thresholds of both precisions (C1/C2 contraction paths);
+// small coefficients keep the hidden activations inside [-1, 1].
 kan::Network wide() {
-    return kan::Network({seeded(kan::Layer(64, 80, kan::ChebyshevConfig{7}), 0.3),
-                         seeded(kan::Layer(80, 3, kan::ChebyshevConfig{7}), 0.9)});
+    return kan::Network({seeded(kan::Layer(64, 80, kan::ChebyshevConfig{7}), 0.3, 0.3),
+                         seeded(kan::Layer(80, 3, kan::ChebyshevConfig{7}), 0.9, 0.3)});
 }
 kan::Network small() {
     return kan::Network({seeded(kan::Layer(3, 5, kan::ChebyshevConfig{6}), 0.2),
@@ -91,9 +92,10 @@ struct Fixture {
     const char* name;
     kan::Network network;
     std::size_t batch;
+    double rate; // stable SGD rate for the fixture's data (the wide network diverges at 0.05)
 };
 std::vector<Fixture> fixtures() {
-    return {{"small", small(), 7}, {"mixed", mixed(), 9}, {"wide", wide(), 400}};
+    return {{"small", small(), 7, 0.05}, {"mixed", mixed(), 9, 0.05}, {"wide", wide(), 400, 0.005}};
 }
 std::vector<double> input_for(const kan::Network& n, std::size_t rows, double phase = 0.2) {
     return wave(rows*n.inputs(), 0.9, 0.37, phase);
@@ -101,8 +103,9 @@ std::vector<double> input_for(const kan::Network& n, std::size_t rows, double ph
 std::vector<double> target_for(const kan::Network& n, std::size_t rows, double phase = 0.4) {
     return wave(rows*n.outputs(), 0.5, 0.53, phase);
 }
+// The gradient of a batch-mean loss (scaled by 1/rows, as torch_reference.py).
 std::vector<double> upstream_for(const kan::Network& n, std::size_t rows) {
-    return wave(rows*n.outputs(), 1.0, 0.53, 0.4);
+    return wave(rows*n.outputs(), 1.0/static_cast<double>(std::max<std::size_t>(rows, 1)), 0.53, 0.4);
 }
 // Every trainable parameter of a network in a fixed order.
 std::vector<double> flat(const kan::Network& network) {
@@ -162,8 +165,8 @@ TEST(train_step_is_bitwise_the_eager_step) {
                 const auto x = input_for(f.network, f.batch), u = upstream_for(f.network, f.batch);
                 for (auto* r : {&graph, &eager}) { r->upload_input(x, f.batch); r->upload_output_gradient(u); }
                 for (int s = 0; s < 4; ++s) {
-                    graph.train_step(0.05, l2);
-                    eager.forward(); eager.backward(l2); eager.sgd(0.05);
+                    graph.train_step(f.rate, l2);
+                    eager.forward(); eager.backward(l2); eager.sgd(f.rate);
                 }
                 if (parameters(graph) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
                 REQUIRE(graph.trained_steps() == 4);
@@ -227,8 +230,8 @@ TEST(device_mse_matches_host_mse_bitwise_and_cpu) {
             for (int s = 0; s < 3; ++s) {
                 const auto cpu = eager.download_parameters();
                 const auto y_cpu = cpu.forward(x, f.batch);
-                const double expected = eager_mse_step(eager, x, t, f.batch, 0.05, 1e-3, p);
-                graph.train_step(0.05, 1e-3, Loss::MeanSquaredError);
+                const double expected = eager_mse_step(eager, x, t, f.batch, f.rate, 1e-3, p);
+                graph.train_step(f.rate, 1e-3, Loss::MeanSquaredError);
                 const double loss = graph.download_loss();
                 // Same value as the host reduction of the same outputs (order differs) ...
                 const double relative = p == Precision::Float64 ? 1e-13 : 1e-5;
@@ -238,7 +241,7 @@ TEST(device_mse_matches_host_mse_bitwise_and_cpu) {
                 if (parameters(graph) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
             }
             // The device-computed upstream is not an uploaded one.
-            test::throws<std::logic_error>([&] { graph.train_step(0.05); });
+            test::throws<std::logic_error>([&] { graph.train_step(f.rate); });
         }
     }
 }
@@ -257,9 +260,9 @@ TEST(staged_batches_match_resident_steps) {
                 auto x = input_for(f.network, rows[s], 0.1*static_cast<double>(s));
                 auto t = target_for(f.network, rows[s], 0.3*static_cast<double>(s));
                 const auto x_copy = x, t_copy = t;
-                staged.train_step(x, t, rows[s], 0.05, 1e-3);
+                staged.train_step(x, t, rows[s], f.rate, 1e-3);
                 std::fill(x.begin(), x.end(), 1e300); std::fill(t.begin(), t.end(), std::nan(""));
-                last = eager_mse_step(eager, x_copy, t_copy, rows[s], 0.05, 1e-3, p);
+                last = eager_mse_step(eager, x_copy, t_copy, rows[s], f.rate, 1e-3, p);
             }
             test::near(staged.download_loss(), last, p == Precision::Float64 ? 1e-13 : 1e-5);
             if (parameters(staged) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
@@ -269,8 +272,8 @@ TEST(staged_batches_match_resident_steps) {
             staged.forward(); eager.forward();
             REQUIRE(staged.download_output() == eager.download_output());
             // Resident MSE steps on the last staged batch continue the same trajectory.
-            staged.train_step(0.05, 1e-3, Loss::MeanSquaredError);
-            eager_mse_step(eager, input_for(f.network, capacity, 0.5), target_for(f.network, capacity, 1.5), capacity, 0.05, 1e-3, p);
+            staged.train_step(f.rate, 1e-3, Loss::MeanSquaredError);
+            eager_mse_step(eager, input_for(f.network, capacity, 0.5), target_for(f.network, capacity, 1.5), capacity, f.rate, 1e-3, p);
             if (parameters(staged) != parameters(eager)) throw std::runtime_error(std::string("resident mismatch: ") + f.name);
         }
     }
@@ -355,12 +358,15 @@ TEST(first_failure_of_an_interval_wins) {
         ResidentNetwork gpu(n, 3, p), reference(n, 3, p);
         gpu.set_status_interval(5);
         const std::vector<double> good{0.1, -0.4, 0.3}, pole{0.2, 1.0, -0.1}, t{0.1, 0.2, 0.3};
+        // A target whose squared error overflows the loss (forward phase).
+        const double far = p == Precision::Float64 ? 1e200 : 1e30;
+        const std::vector<double> t_far{0.1, far, 0.3};
         constexpr double rate = 1e-12; // keeps the denominator at the pole
         eager_mse_step(reference, good, t, 3, rate, 0.0, p);
         gpu.train_step(good, t, 3, rate);  // step 0: fine
         gpu.train_step(pole, t, 3, rate);  // step 1: pole
-        // Step 2: an SGD candidate overflow, reported only if it were first.
-        gpu.train_step(good, t, 3, p == Precision::Float64 ? 1e306 : 3e38);
+        // Step 2: a loss overflow, which would be reported only if it were first.
+        gpu.train_step(good, t_far, 3, rate);
         const auto text = message_of<std::domain_error>([&] { gpu.check_status(); });
         REQUIRE(contains(text, "unsafe resident rational denominator"));
         REQUIRE(contains(text, "training step 1"));
@@ -370,11 +376,9 @@ TEST(first_failure_of_an_interval_wins) {
         gpu.set_status_interval(1);
         test::throws<std::domain_error>([&] { gpu.train_step(pole, t, 3, rate); });
         REQUIRE(gpu.trained_steps() == 1);
-        // An SGD candidate overflow alone commits nothing either.
-        gpu.upload_input(good, 3); gpu.upload_target(t);
-        const auto overflow = message_of<std::overflow_error>([&] {
-            gpu.train_step(p == Precision::Float64 ? 1e306 : 3e38, 0.0, Loss::MeanSquaredError);
-        });
+        // The loss overflow alone commits nothing either (resident target).
+        gpu.upload_input(good, 3); gpu.upload_target(t_far);
+        const auto overflow = message_of<std::overflow_error>([&] { gpu.train_step(rate, 0.0, Loss::MeanSquaredError); });
         REQUIRE(contains(overflow, "training step 1"));
         REQUIRE(parameters(gpu) == parameters(reference));
     }
@@ -392,8 +396,9 @@ TEST(synchronous_calls_report_pending_failures) {
             [&](ResidentNetwork& g) { g.forward(); },
             [&](ResidentNetwork& g) { g.upload_input(x, 4); },
             [&](ResidentNetwork& g) { g.upload_parameters(n); },
-            [&](ResidentNetwork& g) { g.download_loss(); },
             [&](ResidentNetwork& g) { g.set_status_interval(2); },
+            // Reports the failure; the loss is stale afterwards (std::logic_error).
+            [&](ResidentNetwork& g) { try { g.download_loss(); } catch (const std::logic_error&) {} },
         };
         for (const auto& call : calls) {
             ResidentNetwork gpu(n, 4, p);
@@ -403,7 +408,7 @@ TEST(synchronous_calls_report_pending_failures) {
             gpu.train_step(x, t, 4, 0.05);
             test::throws<std::overflow_error>([&] { call(gpu); });
             REQUIRE(gpu.trained_steps() == 1);
-            call(gpu); // reported once; the call itself then works (download_loss: stale)
+            call(gpu); // reported once; the call itself then works
         }
     }
 }
@@ -426,20 +431,21 @@ TEST(graph_replay_sees_uploaded_parameters_and_changes) {
                 gpu.train_step(rate, l2);
                 eager.forward(); eager.backward(l2); eager.sgd(rate);
             };
-            step(0.05, 0.0); step(0.05, 0.0);
+            const double r = f.rate;
+            step(r, 0.0); step(r, 0.0);
             // Parameters replaced between replays.
             const auto other = ResidentNetwork(f.network, f.batch, p).download_parameters();
             gpu.upload_parameters(other); eager.upload_parameters(other);
-            step(0.05, 0.0);
+            step(r, 0.0);
             // Learning-rate schedule and L2 changes between replays.
-            step(0.02, 0.0); step(0.01, 1e-3); step(0.01, 1e-3); step(0.03, 0.0);
+            step(0.4*r, 0.0); step(0.2*r, 1e-3); step(0.2*r, 1e-3); step(0.6*r, 0.0);
             // A smaller batch, then the full batch again.
             const auto rows = f.batch/2+1;
             const auto x2 = input_for(f.network, rows, 0.7), u2 = upstream_for(f.network, rows);
-            for (auto* r : {&gpu, &eager}) { r->upload_input(x2, rows); r->upload_output_gradient(u2); }
-            step(0.05, 0.0); step(0.05, 0.0);
-            for (auto* r : {&gpu, &eager}) { r->upload_input(x, f.batch); r->upload_output_gradient(u); }
-            step(0.05, 0.0);
+            for (auto* e : {&gpu, &eager}) { e->upload_input(x2, rows); e->upload_output_gradient(u2); }
+            step(r, 0.0); step(r, 0.0);
+            for (auto* e : {&gpu, &eager}) { e->upload_input(x, f.batch); e->upload_output_gradient(u); }
+            step(r, 0.0);
             if (parameters(gpu) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
             REQUIRE(gpu.trained_steps() == 10);
         }
