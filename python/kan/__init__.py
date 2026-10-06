@@ -29,7 +29,7 @@ from _kan import DenominatorPolicy, RationalConfig, evaluate_basis, evaluate_rat
 from _kan import BasisEdges, TrainableRbfEdges, RationalEdges
 from _kan import insert_knot, adapt_grid, set_rbf_parameters, set_rational_parameters
 from _kan import AffineMap, TanhMap, LayerNormMap, InputMap, affine_from_range, affine_from_moments
-from _kan import LayerGradients, InputMapGradients, NetworkGradients, cuda_enabled, cuda_available, Precision
+from _kan import LayerGradients, InputMapGradients, NetworkGradients, cuda_enabled, cuda_available, Precision, Loss
 
 if cuda_enabled:
     from _kan import ResidentNetwork

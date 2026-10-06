@@ -250,6 +250,10 @@ PYBIND11_MODULE(_kan, module) {
         .value("FLOAT32", kan::cuda::Precision::Float32, "single precision for training")
         .value("TF32", kan::cuda::Precision::TensorFloat32, "single precision with TF32 tensor-core contractions")
         .finalize();
+    py::native_enum<kan::cuda::Loss>(module, "Loss", "enum.Enum", "Loss whose gradient a resident training step computes")
+        .value("OUTPUT_GRADIENT", kan::cuda::Loss::OutputGradient, "the uploaded output gradient of the caller's loss")
+        .value("MEAN_SQUARED_ERROR", kan::cuda::Loss::MeanSquaredError, "mean squared error against the resident target")
+        .finalize();
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;
 #else
@@ -596,6 +600,33 @@ PYBIND11_MODULE(_kan, module) {
         .def("upload_parameters", [](Resident& model, const kan::Network& network) { model.value.upload_parameters(network); },
              py::arg("network"), py::call_guard<py::gil_scoped_release>())
         .def("download_parameters", [](Resident& model) { return model.value.download_parameters(); },
-             py::call_guard<py::gil_scoped_release>());
+             py::call_guard<py::gil_scoped_release>())
+        // Backlog C9: graph-captured training steps and deferred status.
+        .def("upload_target", [](Resident& model, py::array target) {
+            const auto data = shaped(target, {axis(model.value.batch()), axis(model.outputs)});
+            py::gil_scoped_release release;
+            model.value.upload_target(data);
+        }, py::arg("target").noconvert())
+        .def("train_step", [](Resident& model, double learning_rate, double coefficient_l2, kan::cuda::Loss loss) {
+            model.value.train_step(learning_rate, coefficient_l2, loss);
+        }, py::arg("learning_rate"), py::arg("coefficient_l2") = 0.0, py::arg("loss") = kan::cuda::Loss::OutputGradient,
+           py::call_guard<py::gil_scoped_release>())
+        .def("train_step", [](Resident& model, py::array input, py::array target, double learning_rate, double coefficient_l2) {
+            const auto batch = input_batch(input, model.inputs, std::nullopt);
+            const auto data = array_data(input);
+            const auto target_data = shaped(target, {axis(batch), axis(model.outputs)});
+            py::gil_scoped_release release;
+            model.value.train_step(data, target_data, batch, learning_rate, coefficient_l2);
+        }, py::arg("input").noconvert(), py::arg("target").noconvert(), py::arg("learning_rate"),
+           py::arg("coefficient_l2") = 0.0)
+        .def("download_loss", [](Resident& model) { return model.value.download_loss(); },
+             py::call_guard<py::gil_scoped_release>())
+        .def_property("status_interval", [](const Resident& model) { return model.value.status_interval(); },
+                      [](Resident& model, std::size_t steps) {
+                          py::gil_scoped_release release;
+                          model.value.set_status_interval(steps);
+                      })
+        .def("check_status", [](Resident& model) { model.value.check_status(); }, py::call_guard<py::gil_scoped_release>())
+        .def_property_readonly("trained_steps", [](const Resident& model) { return model.value.trained_steps(); });
 #endif
 }

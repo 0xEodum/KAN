@@ -6,6 +6,7 @@
 #include <cublas_v2.h>
 #include <algorithm>
 #include <cfloat>
+#include <cstddef>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -344,7 +345,8 @@ template<class T>
 __global__ void validate_width_kernel(const T* next, std::size_t count, int* status) {
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for(auto k=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;k<count;k+=stride) {
-        const T width=detail::math::exp(next[k]);if(!isfinite(width)||width<=0)atomicExch(status,1);
+        // atomicOr (not Exch): the status bits accumulate (C9 deferred status).
+        const T width=detail::math::exp(next[k]);if(!isfinite(width)||width<=0)atomicOr(status,1);
     }
 }
 template<class T>
@@ -353,6 +355,83 @@ __global__ void candidate_kernel(const T* parameters, const T* gradients, T* nex
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < count; i += stride) {
         next[i] = parameters[i] - rate*gradients[i]; report(next[i], status);
+    }
+}
+
+// Device status of the executor (one allocation). bits[0] is the status word
+// of every eager call; a captured training step (backlog C9) reports its
+// forward + loss, backward and SGD phases into bits[0], bits[1] and bits[2],
+// which stay set (sticky) until the host's deferred check, so that the step
+// that failed first and its first failing phase can be told apart.
+struct DeviceControl {
+    int bits[3];
+    int first_bits;               // phase bits of the first failing step since the last check
+    unsigned ticket;              // last-block ticket of mse_kernel (reset by its last block)
+    unsigned reserved;
+    unsigned long long committed; // training steps whose update was committed
+};
+// Commit of a captured training step. The host swaps the parameter and
+// candidate regions after every step; this kernel makes the swap a commit or
+// a rollback on the device: with no status bit set the step counts as
+// committed, otherwise the first failing step records its phase bits and the
+// current parameters are copied over the candidates, so the region that
+// becomes active holds the parameters of the last good step. Bits stay set,
+// so every later step of the interval rolls back as well.
+template<class T>
+__global__ void commit_kernel(const T* parameters, T* candidates, std::size_t count, DeviceControl* control) {
+    const volatile int* bits = control->bits;
+    const int forward = bits[0], backward = bits[1], update = bits[2];
+    if (!(forward | backward | update)) {
+        if (blockIdx.x == 0 && threadIdx.x == 0) ++control->committed;
+        return;
+    }
+    if (blockIdx.x == 0 && threadIdx.x == 0 && control->first_bits == 0)
+        control->first_bits = forward ? forward : backward ? backward : update;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < count; i += stride)
+        candidates[i] = parameters[i];
+}
+constexpr unsigned commit_max_blocks = 160;
+
+// Mean squared error against the resident target (backlog C9): the upstream
+// u = (y - t)*scale (scale = 2/count in T) and L = sum (y - t)^2 / count.
+// Each block writes a fixed-order tree sum of its grid-stride rows; the last
+// block (ticket) adds the block sums in index order: deterministic for a
+// given grid, no floating-point atomics.
+constexpr unsigned mse_threads = 256, mse_max_blocks = 256;
+template<class T>
+__global__ void mse_kernel(const T* y, const T* t, T* upstream, std::size_t count, T scale, T divisor,
+                           T* partial, T* loss, unsigned* ticket, int* status) {
+    __shared__ T sums[mse_threads];
+    __shared__ bool last;
+    T sum = 0;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < count; i += stride) {
+        const T d = y[i]-t[i];
+        const T u = d*scale;
+        upstream[i] = u; report(u, status);
+        sum += d*d;
+    }
+    sums[threadIdx.x] = sum;
+    __syncthreads();
+    for (unsigned step = blockDim.x/2; step; step /= 2) {
+        if (threadIdx.x < step) sums[threadIdx.x] += sums[threadIdx.x+step];
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+        partial[blockIdx.x] = sums[0];
+        __threadfence();
+        last = atomicAdd(ticket, 1U) == gridDim.x-1;
+    }
+    __syncthreads();
+    if (last && threadIdx.x == 0) {
+        __threadfence();
+        const volatile T* blocks = partial;
+        T total = 0;
+        for (unsigned b = 0; b < gridDim.x; ++b) total += blocks[b];
+        const T value = total/divisor;
+        *loss = value; report(value, status);
+        *ticket = 0;
     }
 }
 // Distinct rational execution: caches are edge-major to expose contiguous
@@ -1474,6 +1553,15 @@ struct ResidentExecutor {
     virtual void backward(double coefficient_l2) = 0;
     virtual void sgd(double learning_rate) = 0;
     virtual void upload_parameters(const Network& network) = 0;
+    virtual void train_step(double learning_rate, double coefficient_l2, Loss loss) = 0;
+    virtual void train_batch(std::span<const double> input, std::span<const double> target, std::size_t batch,
+                             double learning_rate, double coefficient_l2) = 0;
+    virtual void upload_target(std::span<const double> target) = 0;
+    virtual double download_loss() = 0;
+    virtual void set_status_interval(std::size_t steps) = 0;
+    virtual std::size_t status_interval() const = 0;
+    virtual void check_status() = 0;
+    virtual std::size_t trained_steps() const = 0;
     virtual std::vector<double> download_output() = 0;
     virtual NetworkGradients download_gradients() = 0;
     virtual Network download_parameters() = 0;
@@ -1494,6 +1582,47 @@ struct Engine final : ResidentExecutor, Context<T> {
     std::size_t allocations = 0, parameter_count = 0;
     std::vector<Plan<T>> plans;
     bool has_input = false, has_upstream = false, has_forward = false, has_backward = false;
+    // Training steps (backlog C9). The input and target each have two arena
+    // regions: a staged batch is copied into the region the running steps do
+    // not read, and activation.front() / target() name the current one.
+    DeviceControl* control = nullptr; // the status allocation (status == control->bits)
+    std::size_t input_regions[2] = {}, target_regions[2] = {}, loss_value = 0, loss_partials = 0;
+    unsigned current = 0; // index of the current input/target region
+    bool has_target = false, has_loss = false;
+    // Deferred status: `pending` steps issued since the last check, which
+    // happens when it reaches `interval`; `confirmed` committed steps as of
+    // that check.
+    std::size_t interval = 1, pending = 0, confirmed = 0;
+    // Captured steps, keyed by everything a replay bakes in except the
+    // learning rate, which is a kernel parameter updated in place.
+    struct StepKey {
+        std::size_t batch, parameters, input, target;
+        Loss loss;
+        T lambda;
+        bool operator==(const StepKey&) const = default;
+    };
+    struct CandidateArgs { const T* parameters; const T* gradients; T* next; std::size_t count; T rate; int* status; };
+    struct StepGraph {
+        StepKey key;
+        cudaGraph_t graph = nullptr;
+        cudaGraphExec_t exec = nullptr;
+        cudaGraphNode_t candidate = nullptr; // the SGD candidate kernel (null without parameters)
+        CandidateArgs args{};
+        std::uint64_t used = 0;
+    };
+    static constexpr std::size_t max_graphs = 8;
+    std::vector<StepGraph> graphs;
+    std::uint64_t graph_clock = 0;
+    // Staged batches: a copy stream, two page-locked host slots (input then
+    // target, `stage_stride` elements each) and per-slot events: `copied`
+    // (copy stream, the slot's batch is on the device) and `released` (main
+    // stream, the last step reading the slot's device region has finished).
+    // Created on first use; host memory, not counted by workspace_allocations().
+    cudaStream_t copy_stream = nullptr;
+    cudaEvent_t copied[2] = {}, released[2] = {};
+    T* stage_host = nullptr;
+    std::size_t stage_stride = 0;
+    bool staging = false;
     // tensor_ops: cuBLAS TF32 tensor-op math for the FP32 GEMMs (Precision::TensorFloat32).
     Engine(const Network& source, std::size_t maximum, bool tensor_ops = false) : Context<T>{maximum}, model(source) {
         if (model.layers().empty()) throw std::invalid_argument("resident network is empty or moved from");
@@ -1519,12 +1648,22 @@ struct Engine final : ResidentExecutor, Context<T> {
         for (const auto& plan : plans) partial_size = std::max(partial_size, partial_extent(plan, capacity));
         scratch = reserve(scratch_size); partials = reserve(partial_size); ones = reserve(capacity);
         blas_workspace = reserve(blas_workspace_bytes/sizeof(T));
+        // C9 regions after every earlier one, so the pre-C9 layout (and the
+        // operands cuBLAS sees) is unchanged.
+        input_regions[0] = activation.front();
+        input_regions[1] = reserve(product(capacity, extent(plans.front()).inputs));
+        target_regions[0] = reserve(product(capacity, extent(plans.back()).outputs));
+        target_regions[1] = reserve(product(capacity, extent(plans.back()).outputs));
+        loss_value = reserve(1); loss_partials = reserve(mse_max_blocks);
+        graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
         try {
             if (!available()) throw std::runtime_error("no CUDA device available");
             check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "resident stream create");
             check(cudaMalloc(&arena, bytes), "resident arena allocation"); ++allocations;
-            check(cudaMalloc(&status, sizeof(int)), "resident status allocation"); ++allocations;
+            check(cudaMalloc(&control, sizeof(DeviceControl)), "resident status allocation"); ++allocations;
+            status = control->bits;
+            check(cudaMemsetAsync(control, 0, sizeof(DeviceControl), stream), "resident status reset");
             if constexpr (!std::is_same_v<T, double>) {
                 pinned_size = product(capacity, std::max(extent(plans.front()).inputs, extent(plans.back()).outputs));
                 if (pinned_size) check(cudaMallocHost(&this->pinned, pinned_size*sizeof(T)), "resident pinned staging allocation");
@@ -1551,6 +1690,13 @@ struct Engine final : ResidentExecutor, Context<T> {
     Engine& operator=(const Engine&) = delete;
     void cleanup() noexcept {
         if (stream) cudaStreamSynchronize(stream);
+        if (copy_stream) cudaStreamSynchronize(copy_stream);
+        for (auto& g : graphs) destroy(g);
+        graphs.clear();
+        for (auto* e : {&copied[0], &copied[1], &released[0], &released[1]}) if (*e) { cudaEventDestroy(*e); *e = nullptr; }
+        if (copy_stream) cudaStreamDestroy(copy_stream);
+        if (stage_host) cudaFreeHost(stage_host);
+        copy_stream = nullptr; stage_host = nullptr; staging = false; control = nullptr;
         if (blas) cublasDestroy(blas);
         if (arena) cudaFree(arena);
         if (status) cudaFree(status);
@@ -1559,24 +1705,197 @@ struct Engine final : ResidentExecutor, Context<T> {
         arena = nullptr; status = nullptr; stream = nullptr; blas = nullptr; this->pinned = nullptr;
     }
     void reset_status() { check(cudaMemsetAsync(status, 0, sizeof(int), stream), "resident status reset"); }
+    // Eager calls report through bits[0] and leave it clear, so that a
+    // training interval always starts with every status word zero.
     void result() {
         check(cudaGetLastError(), "resident kernel launch");
         int value = 0;
         check(cudaMemcpyAsync(&value, status, sizeof(int), cudaMemcpyDeviceToHost, stream), "resident status download");
         sync();
+        if (value) reset_status();
         if (value&1) throw std::overflow_error("nonfinite resident numerical result");
         if (value&2) throw std::domain_error("unsafe resident rational denominator");
     }
 
+    // Launch sequences shared by the eager calls and the captured steps, so
+    // that a replay runs exactly the eager kernels.
+    void enqueue_forward() {
+        for (std::size_t j = 0; j < plans.size() && batch; ++j)
+            std::visit([&](const auto& plan) { run_forward(*this, plan, j); }, plans[j]);
+    }
+    void enqueue_backward(T lambda) {
+        for (std::size_t j = plans.size(); j-- > 0;)
+            std::visit([&](const auto& plan) { run_backward(*this, plan, j, lambda); }, plans[j]);
+    }
+    void enqueue_update(T rate) {
+        if (parameter_count) { // zero only for networks of fixed input maps
+            candidate_kernel<<<blocks(parameter_count), 256, 0, stream>>>(ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, status);
+            check(cudaGetLastError(),"resident candidate launch");
+        }
+        for (const auto& plan : plans) std::visit([&](const auto& p) { validate_candidates(*this, p); }, plan);
+    }
+    void enqueue_loss() {
+        const auto count = batch*extent(plans.back()).outputs;
+        const auto grid = std::min(blocks(count, mse_threads), mse_max_blocks);
+        mse_kernel<<<grid, mse_threads, 0, stream>>>(ptr(activation.back()), ptr(target_regions[current]), ptr(upstream.back()),
+            count, narrow<T>(2.0/static_cast<double>(count)), static_cast<T>(count), ptr(loss_partials), ptr(loss_value),
+            &control->ticket, status);
+        check(cudaGetLastError(), "resident loss launch");
+    }
+
+    // Deferred status check (C9): reads the device control block once and
+    // raises the first failure of the interval, attributed to its step.
+    void flush() {
+        if (!pending) return;
+        const auto issued = pending;
+        pending = 0;
+        DeviceControl c{};
+        check(cudaMemcpyAsync(&c, control, sizeof c, cudaMemcpyDeviceToHost, stream), "resident status download");
+        sync();
+        const auto before = confirmed;
+        confirmed = static_cast<std::size_t>(c.committed);
+        if (!c.first_bits) return;
+        check(cudaMemsetAsync(control, 0, offsetof(DeviceControl, ticket), stream), "resident status reset");
+        sync();
+        has_forward = has_backward = has_loss = false;
+        const auto skipped = before + issued - confirmed - 1;
+        const auto where = " in training step " + std::to_string(confirmed) +
+            " (deferred status check; that step and the " + std::to_string(skipped) +
+            " later steps of the interval committed no update)";
+        if (c.first_bits&1) throw std::overflow_error("nonfinite resident numerical result" + where);
+        throw std::domain_error("unsafe resident rational denominator" + where);
+    }
+    static std::pair<T, T> step_scalars(double learning_rate, double coefficient_l2) {
+        if (!std::isfinite(learning_rate) || learning_rate <= 0) throw std::invalid_argument("learning rate must be finite and positive");
+        if (!std::isfinite(coefficient_l2) || coefficient_l2 < 0) throw std::invalid_argument("coefficient L2 must be finite and nonnegative");
+        return {narrow_positive<T>(learning_rate), narrow<T>(coefficient_l2)};
+    }
+
+    static void destroy(StepGraph& g) noexcept {
+        if (g.exec) cudaGraphExecDestroy(g.exec);
+        if (g.graph) cudaGraphDestroy(g.graph);
+        g.exec = nullptr; g.graph = nullptr;
+    }
+    // Captures one training step on the stream (nothing executes): forward
+    // and loss report into bits[0], backward into bits[1], SGD into bits[2].
+    cudaGraph_t record_step(Loss loss, T rate, T lambda) {
+        check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal), "resident step capture");
+        try {
+            status = control->bits;
+            enqueue_forward();
+            if (loss == Loss::MeanSquaredError) enqueue_loss();
+            status = control->bits+1;
+            enqueue_backward(lambda);
+            status = control->bits+2;
+            enqueue_update(rate);
+            commit_kernel<<<parameter_count ? std::min(blocks(parameter_count), commit_max_blocks) : 1U, 256, 0, stream>>>(
+                ptr(parameters), ptr(candidates), parameter_count, control);
+            check(cudaGetLastError(), "resident commit launch");
+        } catch (...) {
+            status = control->bits;
+            cudaGraph_t partial = nullptr;
+            cudaStreamEndCapture(stream, &partial);
+            if (partial) cudaGraphDestroy(partial);
+            cudaGetLastError();
+            throw;
+        }
+        status = control->bits;
+        cudaGraph_t graph = nullptr;
+        check(cudaStreamEndCapture(stream, &graph), "resident step capture");
+        return graph;
+    }
+    cudaGraphNode_t candidate_node(cudaGraph_t graph) {
+        std::size_t count = 0;
+        check(cudaGraphGetNodes(graph, nullptr, &count), "resident step graph nodes");
+        std::vector<cudaGraphNode_t> nodes(count);
+        check(cudaGraphGetNodes(graph, nodes.data(), &count), "resident step graph nodes");
+        cudaGraphNode_t found = nullptr;
+        for (auto node : nodes) {
+            cudaGraphNodeType type{};
+            if (cudaGraphNodeGetType(node, &type) != cudaSuccess || type != cudaGraphNodeTypeKernel) continue;
+            cudaKernelNodeParams p{};
+            if (cudaGraphKernelNodeGetParams(node, &p) == cudaSuccess && p.func == reinterpret_cast<void*>(&candidate_kernel<T>))
+                found = node;
+        }
+        cudaGetLastError(); // library kernel nodes may not report runtime parameters
+        if (!found) throw std::runtime_error("resident step graph: SGD candidate node not found");
+        return found;
+    }
+    StepGraph& step_graph(const StepKey& key, T rate) {
+        for (auto& g : graphs) if (g.key == key) { g.used = ++graph_clock; return g; }
+        StepGraph entry{key};
+        entry.graph = record_step(key.loss, rate, key.lambda);
+        try {
+            if (parameter_count) entry.candidate = candidate_node(entry.graph);
+            entry.args = {ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, control->bits+2};
+            check(cudaGraphInstantiate(&entry.exec, entry.graph, 0), "resident step graph instantiate");
+        } catch (...) { destroy(entry); throw; }
+        entry.used = ++graph_clock;
+        if (graphs.size() < max_graphs) { graphs.push_back(entry); return graphs.back(); }
+        auto& lru = *std::min_element(graphs.begin(), graphs.end(), [](const auto& a, const auto& b) { return a.used < b.used; });
+        destroy(lru);
+        lru = entry;
+        return lru;
+    }
+    // The learning rate is the candidate kernel's parameter: a schedule
+    // updates the instantiated node instead of re-capturing (future launches only).
+    void set_rate(StepGraph& g, T rate) {
+        if (!g.candidate || g.args.rate == rate) return;
+        cudaKernelNodeParams p{};
+        check(cudaGraphKernelNodeGetParams(g.candidate, &p), "resident step rate update");
+        auto args = g.args;
+        args.rate = rate;
+        void* values[] = {&args.parameters, &args.gradients, &args.next, &args.count, &args.rate, &args.status};
+        p.kernelParams = values; p.extra = nullptr;
+        check(cudaGraphExecKernelNodeSetParams(g.exec, g.candidate, &p), "resident step rate update");
+        g.args.rate = rate;
+    }
+    void launch_step(Loss loss, T rate, T lambda) {
+        const StepKey key{batch, parameters, activation.front(), target_regions[current], loss, lambda};
+        auto& graph = step_graph(key, rate);
+        set_rate(graph, rate);
+        check(cudaGraphLaunch(graph.exec, stream), "resident step launch");
+        if (staging) check(cudaEventRecord(released[current], stream), "resident staging event");
+        // Commit or rollback happened on the device (commit_kernel).
+        std::swap(parameters, candidates);
+        has_forward = has_backward = false;
+        has_loss = loss == Loss::MeanSquaredError;
+        if (has_loss) has_upstream = false;
+        if (++pending >= interval) flush();
+    }
+    void ensure_staging() {
+        if (staging) return;
+        stage_stride = product(capacity, extent(plans.front()).inputs) + product(capacity, extent(plans.back()).outputs);
+        if (!copy_stream) check(cudaStreamCreateWithFlags(&copy_stream, cudaStreamNonBlocking), "resident copy stream create");
+        for (auto* e : {&copied[0], &copied[1], &released[0], &released[1]})
+            if (!*e) check(cudaEventCreateWithFlags(e, cudaEventDisableTiming), "resident staging event create");
+        if (!stage_host) check(cudaMallocHost(&stage_host, product(product(stage_stride, 2), sizeof(T))), "resident staging allocation");
+        staging = true;
+    }
+    // Validating conversion into staging: finite, FP32 representable.
+    static void stage_values(T* out, std::span<const double> data) {
+        bool nonfinite = false, outside = false;
+        for (std::size_t i = 0; i < data.size(); ++i) {
+            const double v = data[i];
+            nonfinite |= !std::isfinite(v);
+            if constexpr (!std::is_same_v<T, double>) outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
+            out[i] = static_cast<T>(outside || nonfinite ? 0.0 : v);
+        }
+        if (nonfinite) throw std::invalid_argument("resident data must be finite");
+        if (outside) throw std::invalid_argument("resident data is not representable in float32");
+    }
+
     void upload_input(std::span<const double> input, std::size_t rows) override {
+        flush();
         const auto count = product(rows, extent(plans.front()).inputs);
         if (rows > capacity || input.size() != count) throw std::invalid_argument("resident input shape or capacity mismatch");
         if constexpr (std::is_same_v<T, double>) { finite(input); this->upload(ptr(activation.front()), input); }
         else this->upload_pinned(ptr(activation.front()), input);
         sync();
-        batch = rows; has_input = true; has_upstream = has_forward = has_backward = false;
+        batch = rows; has_input = true; has_upstream = has_forward = has_backward = has_target = false;
     }
     void upload_output_gradient(std::span<const double> gradient) override {
+        flush();
         if (!has_input) throw std::logic_error("resident input must be uploaded first");
         if (gradient.size() != product(batch, extent(plans.back()).outputs)) throw std::invalid_argument("resident upstream shape mismatch");
         if constexpr (std::is_same_v<T, double>) { finite(gradient); this->upload(ptr(upstream.back()), gradient); }
@@ -1584,39 +1903,97 @@ struct Engine final : ResidentExecutor, Context<T> {
         sync();
         has_upstream = true; has_backward = false;
     }
+    void upload_target(std::span<const double> target) override {
+        flush();
+        if (!has_input) throw std::logic_error("resident input must be uploaded first");
+        if (target.size() != product(batch, extent(plans.back()).outputs)) throw std::invalid_argument("resident target shape mismatch");
+        if constexpr (std::is_same_v<T, double>) { finite(target); this->upload(ptr(target_regions[current]), target); }
+        else this->upload_pinned(ptr(target_regions[current]), target);
+        sync();
+        has_target = true;
+    }
     void forward() override {
+        flush();
         if (!has_input) throw std::logic_error("resident input has not been uploaded");
         has_forward = has_backward = false; reset_status();
-        for (std::size_t j = 0; j < plans.size() && batch; ++j)
-            std::visit([&](const auto& plan) { run_forward(*this, plan, j); }, plans[j]);
+        enqueue_forward();
         result(); has_forward = true;
     }
     void backward(double coefficient_l2) override {
+        flush();
         if(!std::isfinite(coefficient_l2)||coefficient_l2<0)throw std::invalid_argument("coefficient L2 must be finite and nonnegative");
         const T lambda = narrow<T>(coefficient_l2);
         if (!has_forward || !has_upstream) throw std::logic_error("resident backward requires current forward and upstream");
         has_backward = false; reset_status();
-        for (std::size_t j = plans.size(); j-- > 0;)
-            std::visit([&](const auto& plan) { run_backward(*this, plan, j, lambda); }, plans[j]);
+        enqueue_backward(lambda);
         result(); has_backward = true;
     }
     void sgd(double learning_rate) override {
+        flush();
         if (!std::isfinite(learning_rate) || learning_rate <= 0) throw std::invalid_argument("learning rate must be finite and positive");
         const T rate = narrow_positive<T>(learning_rate);
         if (!has_backward) throw std::logic_error("resident SGD requires current gradients");
         reset_status();
-        if (parameter_count) { // zero only for networks of fixed input maps
-            candidate_kernel<<<blocks(parameter_count), 256, 0, stream>>>(ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, status);
-            check(cudaGetLastError(),"resident candidate launch");
-        }
-        for (const auto& plan : plans) std::visit([&](const auto& p) { validate_candidates(*this, p); }, plan);
+        enqueue_update(rate);
         result(); // All layers validated before any parameter mutation.
         // Both regions are permanently reserved and candidate execution is complete.
         // Changing the active region commits the whole network without a tensor copy.
         std::swap(parameters, candidates);
         has_forward = has_backward = false;
     }
+    void train_step(double learning_rate, double coefficient_l2, Loss loss) override {
+        const auto [rate, lambda] = step_scalars(learning_rate, coefficient_l2);
+        if (loss != Loss::OutputGradient && loss != Loss::MeanSquaredError) throw std::invalid_argument("invalid resident loss");
+        if (!has_input) throw std::logic_error("resident input has not been uploaded");
+        if (loss == Loss::OutputGradient && !has_upstream)
+            throw std::logic_error("resident output-gradient training step requires an uploaded upstream");
+        if (loss == Loss::MeanSquaredError) {
+            if (!has_target) throw std::logic_error("resident mean squared error requires an uploaded target");
+            if (!batch) throw std::invalid_argument("resident mean squared error requires a nonempty batch");
+        }
+        launch_step(loss, rate, lambda);
+    }
+    void train_batch(std::span<const double> input, std::span<const double> target, std::size_t rows,
+                     double learning_rate, double coefficient_l2) override {
+        const auto [rate, lambda] = step_scalars(learning_rate, coefficient_l2);
+        if (rows > capacity) throw std::invalid_argument("resident input shape or capacity mismatch");
+        const auto inputs = product(rows, extent(plans.front()).inputs), outputs = product(rows, extent(plans.back()).outputs);
+        if (input.size() != inputs) throw std::invalid_argument("resident input shape or capacity mismatch");
+        if (target.size() != outputs) throw std::invalid_argument("resident target shape mismatch");
+        if (!rows) throw std::invalid_argument("resident mean squared error requires a nonempty batch");
+        ensure_staging();
+        // Slot `next` was last read by the step two staged steps ago: wait for
+        // it (normally long done) before reusing its host and device buffers.
+        const unsigned next = 1-current;
+        check(cudaEventSynchronize(released[next]), "resident staging wait");
+        T* host = stage_host+next*stage_stride;
+        stage_values(host, input); stage_values(host+inputs, target); // throws before any change
+        check(cudaMemcpyAsync(ptr(input_regions[next]), host, inputs*sizeof(T), cudaMemcpyHostToDevice, copy_stream), "resident staged upload");
+        check(cudaMemcpyAsync(ptr(target_regions[next]), host+inputs, outputs*sizeof(T), cudaMemcpyHostToDevice, copy_stream), "resident staged upload");
+        check(cudaEventRecord(copied[next], copy_stream), "resident staging event");
+        check(cudaStreamWaitEvent(stream, copied[next], 0), "resident staging wait");
+        current = next; activation.front() = input_regions[next]; batch = rows;
+        has_input = has_target = true; has_upstream = false;
+        launch_step(Loss::MeanSquaredError, rate, lambda);
+    }
+    double download_loss() override {
+        flush();
+        if (!has_loss) throw std::logic_error("resident loss requires a current mean squared error training step");
+        T value{};
+        check(cudaMemcpyAsync(&value, ptr(loss_value), sizeof(T), cudaMemcpyDeviceToHost, stream), "resident loss download");
+        sync();
+        return static_cast<double>(value);
+    }
+    void set_status_interval(std::size_t steps) override {
+        if (!steps) throw std::invalid_argument("resident status interval must be positive");
+        flush();
+        interval = steps;
+    }
+    std::size_t status_interval() const override { return interval; }
+    void check_status() override { flush(); }
+    std::size_t trained_steps() const override { return confirmed; }
     void upload_parameters(const Network& source) override {
+        flush();
         const auto stages = source.layers();
         if (stages.size() != plans.size())
             throw std::invalid_argument("resident parameter upload: the layer count differs from the executor's network");
@@ -1633,16 +2010,19 @@ struct Engine final : ResidentExecutor, Context<T> {
         // Commit into the active region. The stream is idle (every call
         // completes before returning); outputs and gradients of the old
         // parameters become stale, the input and upstream stay valid.
+        // Captured training steps read the region at replay and see the values.
         has_forward = has_backward = false;
         image.commit(*this, parameters, parameter_count);
         sync();
     }
     std::vector<double> download_output() override {
+        flush();
         if (!has_forward) throw std::logic_error("resident output requires current forward");
         std::vector<double> output(product(batch, extent(plans.back()).outputs));
         this->download(output, ptr(activation.back())); sync(); return output;
     }
     NetworkGradients download_gradients() override {
+        flush();
         if (!has_backward) throw std::logic_error("resident gradients require current backward");
         NetworkGradients gradient; gradient.layers.reserve(plans.size());
         for (std::size_t j = 0; j < plans.size(); ++j)
@@ -1652,6 +2032,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         return gradient;
     }
     Network download_parameters() override {
+        flush();
         std::vector<NetworkLayer> layers;
         layers.reserve(plans.size());
         for (std::size_t j = 0; j < plans.size(); ++j)
@@ -1660,7 +2041,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             }));
         return Network(std::move(layers));
     }
-    void synchronize() override { sync(); }
+    void synchronize() override { flush(); sync(); }
     std::size_t max_batch() const override { return capacity; }
     std::size_t current_batch() const override { return batch; }
     std::size_t allocation_count() const override { return allocations; }
@@ -1694,6 +2075,19 @@ void ResidentNetwork::forward() { state().engine->forward(); }
 void ResidentNetwork::backward(double coefficient_l2) { state().engine->backward(coefficient_l2); }
 void ResidentNetwork::sgd(double learning_rate) { state().engine->sgd(learning_rate); }
 void ResidentNetwork::upload_parameters(const Network& network) { state().engine->upload_parameters(network); }
+void ResidentNetwork::train_step(double learning_rate, double coefficient_l2, Loss loss) {
+    state().engine->train_step(learning_rate, coefficient_l2, loss);
+}
+void ResidentNetwork::train_step(std::span<const double> input, std::span<const double> target, std::size_t batch,
+                                 double learning_rate, double coefficient_l2) {
+    state().engine->train_batch(input, target, batch, learning_rate, coefficient_l2);
+}
+void ResidentNetwork::upload_target(std::span<const double> target) { state().engine->upload_target(target); }
+double ResidentNetwork::download_loss() { return state().engine->download_loss(); }
+void ResidentNetwork::set_status_interval(std::size_t steps) { state().engine->set_status_interval(steps); }
+std::size_t ResidentNetwork::status_interval() const { return state().engine->status_interval(); }
+void ResidentNetwork::check_status() { state().engine->check_status(); }
+std::size_t ResidentNetwork::trained_steps() const { return state().engine->trained_steps(); }
 std::vector<double> ResidentNetwork::download_output() { return state().engine->download_output(); }
 NetworkGradients ResidentNetwork::download_gradients() { return state().engine->download_gradients(); }
 Network ResidentNetwork::download_parameters() { return state().engine->download_parameters(); }
