@@ -1,0 +1,44 @@
+# C9 RED: build-b-c9 at ba60bf5 + tests/resident_training_test.cpp, tests/training_python_test.py
+# resident_training_test does not compile: no kan::cuda::Loss, train_step, trained_steps, download_loss, ...
+FAILED: CMakeFiles/resident_training_test.dir/tests/resident_training_test.cpp.obj 
+tests\resident_training_test.cpp(36): error C2039: 'Loss': is not a member of 'kan::cuda'
+tests\resident_training_test.cpp(36): error C2873: 'Loss': symbol cannot be used in a using-declaration
+tests\resident_training_test.cpp(165): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(169): error C2039: 'trained_steps': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(183): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(185): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(186): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(186): error C2653: 'Loss': is not a class or namespace name
+tests\resident_training_test.cpp(186): error C2065: 'MeanSquaredError': undeclared identifier
+tests\resident_training_test.cpp(187): error C2039: 'download_loss': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(189): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(190): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(191): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(192): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(193): error C2187: syntax error: 'Loss' was unexpected here
+tests\resident_training_test.cpp(193): error C3878: syntax error: unexpected token '>' following 'expression'
+tests\resident_training_test.cpp(193): error C2760: syntax error: ')' was unexpected here; expected ';'
+tests\resident_training_test.cpp(193): error C3878: syntax error: unexpected token ')' following 'expression-statement'
+tests\resident_training_test.cpp(193): error C2059: syntax error: ')'
+tests\resident_training_test.cpp(194): error C2039: 'upload_target': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(195): error C2039: 'upload_target': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(196): error C2039: 'trained_steps': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(197): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(201): error C2039: 'download_loss': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(202): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(203): error C2039: 'trained_steps': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(206): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(207): error C2039: 'upload_target': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(209): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(209): error C2653: 'Loss': is not a class or namespace name
+tests\resident_training_test.cpp(209): error C2065: 'MeanSquaredError': undeclared identifier
+tests\resident_training_test.cpp(212): error C2039: 'upload_target': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(212): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(212): error C2653: 'Loss': is not a class or namespace name
+tests\resident_training_test.cpp(212): error C2065: 'MeanSquaredError': undeclared identifier
+tests\resident_training_test.cpp(213): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(216): error C2039: 'train_step': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(217): error C2039: 'trained_steps': is not a member of 'kan::cuda::ResidentNetwork'
+tests\resident_training_test.cpp(226): error C2039: 'upload_target': is not a member of 'kan::cuda::ResidentNetwork'
+...
+total errors: 101

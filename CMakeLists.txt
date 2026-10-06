@@ -169,6 +169,12 @@ if(BUILD_TESTING)
         target_link_libraries(resident_upload_test PRIVATE kan::cuda)
         add_test(NAME resident_upload COMMAND resident_upload_test)
         set_tests_properties(resident_upload PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog C9: graph-captured training steps, deferred status, on-device MSE.
+        add_executable(resident_training_test tests/resident_training_test.cpp)
+        target_include_directories(resident_training_test PRIVATE tests)
+        target_link_libraries(resident_training_test PRIVATE kan::cuda)
+        add_test(NAME resident_training COMMAND resident_training_test)
+        set_tests_properties(resident_training PROPERTIES LABELS "cuda" TIMEOUT 180)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
@@ -249,6 +255,10 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_upload_python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(resident_upload_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME training_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/training_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(training_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 
