@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -392,6 +393,8 @@ __global__ void commit_kernel(const T* parameters, T* candidates, std::size_t co
         candidates[i] = parameters[i];
 }
 constexpr unsigned commit_max_blocks = 160;
+// Host threads converting a staged batch: at most 8, at least 2^18 values each.
+constexpr std::size_t stage_threads_max = 8, stage_chunk = std::size_t{1} << 18;
 
 // Mean squared error against the resident target (backlog C9): the upstream
 // u = (y - t)*scale (scale = 2/count in T) and L = sum (y - t)^2 / count.
@@ -1599,6 +1602,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         std::size_t batch, parameters, input, target;
         Loss loss;
         T lambda;
+        bool staged; // waits for the staged target inside the graph
         bool operator==(const StepKey&) const = default;
     };
     struct CandidateArgs { const T* parameters; const T* gradients; T* next; std::size_t count; T rate; int* status; };
@@ -1614,12 +1618,15 @@ struct Engine final : ResidentExecutor, Context<T> {
     std::vector<StepGraph> graphs;
     std::uint64_t graph_clock = 0;
     // Staged batches: a copy stream, two page-locked host slots (input then
-    // target, `stage_stride` elements each) and per-slot events: `copied`
-    // (copy stream, the slot's batch is on the device) and `released` (main
-    // stream, the last step reading the slot's device region has finished).
+    // target, `stage_stride` elements each) and per-slot events on the copy
+    // stream, `input_copied` / `target_copied` (the slot's input / target is
+    // on the device), and on the main stream `released` (the last step reading
+    // the slot's device regions has finished). The step waits for its input
+    // before the graph launch and for its target inside the graph, before the
+    // loss, so the target copy overlaps the forward pass.
     // Created on first use; host memory, not counted by workspace_allocations().
     cudaStream_t copy_stream = nullptr;
-    cudaEvent_t copied[2] = {}, released[2] = {};
+    cudaEvent_t input_copied[2] = {}, target_copied[2] = {}, released[2] = {};
     T* stage_host = nullptr;
     std::size_t stage_stride = 0;
     bool staging = false;
@@ -1693,7 +1700,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         if (copy_stream) cudaStreamSynchronize(copy_stream);
         for (auto& g : graphs) destroy(g);
         graphs.clear();
-        for (auto* e : {&copied[0], &copied[1], &released[0], &released[1]}) if (*e) { cudaEventDestroy(*e); *e = nullptr; }
+        for (auto* e : {&input_copied[0], &input_copied[1], &target_copied[0], &target_copied[1], &released[0], &released[1]}) if (*e) { cudaEventDestroy(*e); *e = nullptr; }
         if (copy_stream) cudaStreamDestroy(copy_stream);
         if (stage_host) cudaFreeHost(stage_host);
         copy_stream = nullptr; stage_host = nullptr; staging = false; control = nullptr;
@@ -1778,11 +1785,12 @@ struct Engine final : ResidentExecutor, Context<T> {
     }
     // Captures one training step on the stream (nothing executes): forward
     // and loss report into bits[0], backward into bits[1], SGD into bits[2].
-    cudaGraph_t record_step(Loss loss, T rate, T lambda) {
+    cudaGraph_t record_step(Loss loss, T rate, T lambda, bool staged) {
         check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal), "resident step capture");
         try {
             status = control->bits;
             enqueue_forward();
+            if (staged) check(cudaStreamWaitEvent(stream, target_copied[current], cudaEventWaitExternal), "resident staged target wait");
             if (loss == Loss::MeanSquaredError) enqueue_loss();
             status = control->bits+1;
             enqueue_backward(lambda);
@@ -1824,7 +1832,7 @@ struct Engine final : ResidentExecutor, Context<T> {
     StepGraph& step_graph(const StepKey& key, T rate) {
         for (auto& g : graphs) if (g.key == key) { g.used = ++graph_clock; return g; }
         StepGraph entry{key};
-        entry.graph = record_step(key.loss, rate, key.lambda);
+        entry.graph = record_step(key.loss, rate, key.lambda, key.staged);
         try {
             if (parameter_count) entry.candidate = candidate_node(entry.graph);
             entry.args = {ptr(parameters), ptr(gradients), ptr(candidates), parameter_count, rate, control->bits+2};
@@ -1850,8 +1858,8 @@ struct Engine final : ResidentExecutor, Context<T> {
         check(cudaGraphExecKernelNodeSetParams(g.exec, g.candidate, &p), "resident step rate update");
         g.args.rate = rate;
     }
-    void launch_step(Loss loss, T rate, T lambda) {
-        const StepKey key{batch, parameters, activation.front(), target_regions[current], loss, lambda};
+    void launch_step(Loss loss, T rate, T lambda, bool staged = false) {
+        const StepKey key{batch, parameters, activation.front(), target_regions[current], loss, lambda, staged};
         auto& graph = step_graph(key, rate);
         set_rate(graph, rate);
         check(cudaGraphLaunch(graph.exec, stream), "resident step launch");
@@ -1867,22 +1875,47 @@ struct Engine final : ResidentExecutor, Context<T> {
         if (staging) return;
         stage_stride = product(capacity, extent(plans.front()).inputs) + product(capacity, extent(plans.back()).outputs);
         if (!copy_stream) check(cudaStreamCreateWithFlags(&copy_stream, cudaStreamNonBlocking), "resident copy stream create");
-        for (auto* e : {&copied[0], &copied[1], &released[0], &released[1]})
+        for (auto* e : {&input_copied[0], &input_copied[1], &target_copied[0], &target_copied[1], &released[0], &released[1]})
             if (!*e) check(cudaEventCreateWithFlags(e, cudaEventDisableTiming), "resident staging event create");
         if (!stage_host) check(cudaMallocHost(&stage_host, product(product(stage_stride, 2), sizeof(T))), "resident staging allocation");
         staging = true;
     }
-    // Validating conversion into staging: finite, FP32 representable.
+    // Validating conversion into staging: finite and (FP32) at most FLT_MAX
+    // in magnitude, with the upload messages. One branch-free pass (the clamp
+    // keeps the conversion defined for rejected values); large batches are
+    // split over host threads, because one core converts only about 1 GB/s
+    // of doubles (C9 profiling: 9.5 ms for the 1024-wide step's 8M values,
+    // 3-4 ms on 4-8 threads), which would otherwise serialize with the copy.
     static void stage_values(T* out, std::span<const double> data) {
-        bool nonfinite = false, outside = false;
-        for (std::size_t i = 0; i < data.size(); ++i) {
-            const double v = data[i];
-            nonfinite |= !std::isfinite(v);
-            if constexpr (!std::is_same_v<T, double>) outside |= !(std::abs(v) <= static_cast<double>(FLT_MAX));
-            out[i] = static_cast<T>(outside || nonfinite ? 0.0 : v);
+        constexpr double limit = std::is_same_v<T, double> ? DBL_MAX : static_cast<double>(FLT_MAX);
+        const auto convert = [&](std::size_t begin, std::size_t end) {
+            int bad = 0;
+            for (std::size_t i = begin; i < end; ++i) {
+                const double v = data[i];
+                bad |= !(std::abs(v) <= limit);
+                out[i] = static_cast<T>(std::clamp(v, -limit, limit));
+            }
+            return bad != 0;
+        };
+        bool bad = false;
+        const std::size_t hardware = std::max(1U, std::thread::hardware_concurrency());
+        const auto threads = std::min({stage_threads_max, hardware, data.size()/stage_chunk});
+        if (threads < 2) {
+            bad = convert(0, data.size());
+        } else {
+            std::vector<char> flags(threads, 0);
+            std::vector<std::thread> pool;
+            pool.reserve(threads-1);
+            const auto range = [&](std::size_t k) { return data.size()*k/threads; };
+            for (std::size_t k = 1; k < threads; ++k)
+                pool.emplace_back([&, k] { flags[k] = convert(range(k), range(k+1)); });
+            flags[0] = convert(0, range(1));
+            for (auto& thread : pool) thread.join();
+            bad = std::find(flags.begin(), flags.end(), char{1}) != flags.end();
         }
-        if (nonfinite) throw std::invalid_argument("resident data must be finite");
-        if (outside) throw std::invalid_argument("resident data is not representable in float32");
+        if (!bad) return;
+        for (double v : data) if (!std::isfinite(v)) throw std::invalid_argument("resident data must be finite");
+        throw std::invalid_argument("resident data is not representable in float32");
     }
 
     void upload_input(std::span<const double> input, std::size_t rows) override {
@@ -1967,14 +2000,20 @@ struct Engine final : ResidentExecutor, Context<T> {
         const unsigned next = 1-current;
         check(cudaEventSynchronize(released[next]), "resident staging wait");
         T* host = stage_host+next*stage_stride;
-        stage_values(host, input); stage_values(host+inputs, target); // throws before any change
+        // The input copy starts while the target converts. Slot `next` is not
+        // the executor's input until the switch below, so a rejected target
+        // leaves nothing observable (once the copy has drained).
+        stage_values(host, input);
         check(cudaMemcpyAsync(ptr(input_regions[next]), host, inputs*sizeof(T), cudaMemcpyHostToDevice, copy_stream), "resident staged upload");
+        check(cudaEventRecord(input_copied[next], copy_stream), "resident staging event");
+        try { stage_values(host+inputs, target); }
+        catch (...) { cudaStreamSynchronize(copy_stream); throw; }
         check(cudaMemcpyAsync(ptr(target_regions[next]), host+inputs, outputs*sizeof(T), cudaMemcpyHostToDevice, copy_stream), "resident staged upload");
-        check(cudaEventRecord(copied[next], copy_stream), "resident staging event");
-        check(cudaStreamWaitEvent(stream, copied[next], 0), "resident staging wait");
+        check(cudaEventRecord(target_copied[next], copy_stream), "resident staging event");
+        check(cudaStreamWaitEvent(stream, input_copied[next], 0), "resident staging wait");
         current = next; activation.front() = input_regions[next]; batch = rows;
         has_input = has_target = true; has_upstream = false;
-        launch_step(Loss::MeanSquaredError, rate, lambda);
+        launch_step(Loss::MeanSquaredError, rate, lambda, true);
     }
     double download_loss() override {
         flush();
