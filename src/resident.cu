@@ -105,6 +105,8 @@ template<class T> __device__ T* stage_memory() {
     return reinterpret_cast<T*>(stage_raw);
 }
 
+// derivatives = null (staged path only, backlog C3): Phi' is evaluated into the
+// stage but not written; the backward pass recomputes it.
 template<detail::BasisKind Kind, class T>
 __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_derivatives,
                              std::size_t count, detail::BasisViewOf<T> basis, unsigned tile_rows, int* status) {
@@ -135,7 +137,7 @@ __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_d
         const auto length = rows * terms, offset = base * terms;
         for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
             values[offset + i] = stage[i];
-            derivatives[offset + i] = stage[plane + i];
+            if (derivatives) derivatives[offset + i] = stage[plane + i];
             if (basis.trainable) log_derivatives[offset + i] = stage[2 * plane + i];
         }
         __syncthreads();
@@ -214,23 +216,45 @@ __global__ void parameter_partial_kernel(const T* v, const T* u, T* partial, std
         partial[blockIdx.y*count+c] = sum;
     }
 }
+// Source of the Phi' rows reduced by backward_finish_kernel: rows stored by
+// the forward basis_kernel, or (backlog C3) recomputed from the layer input in
+// the staged tile, which needs a third plane for the values the formulas
+// produce alongside. Recomputation evaluates the forward's formula on the same
+// input, so the rows are the forward's; the forward already checked them.
+template<class T> struct StoredDerivatives {
+    const T* rows;
+};
+template<detail::BasisKind Kind, class T> struct RecomputedDerivatives {
+    const T* input;
+    detail::BasisViewOf<T> basis;
+};
+template<class Source> constexpr bool stored_rows = true;
+template<detail::BasisKind Kind, class T> constexpr bool stored_rows<RecomputedDerivatives<Kind, T>> = false;
+template<class Source> constexpr detail::BasisKind recomputed_kind = detail::BasisKind::Chebyshev;
+template<detail::BasisKind Kind, class T> constexpr detail::BasisKind recomputed_kind<RecomputedDerivatives<Kind, T>> = Kind;
+// Stage planes: Phi' and W, plus the recomputed values.
+template<class Source> constexpr unsigned stage_planes = stored_rows<Source> ? 2 : 3;
+
 // One launch finishes a layer's backward: dx[r] = sum_k Phi'[r,k]*W[r,k] for
 // the rows r = (sample, input), then the `checked` parameter VJPs [dC | db]:
 // with partials, their fixed-order tile sum plus lambda*C; otherwise (written
 // by cuBLAS earlier on the stream) only the nonfinite check.
 // Rows are reduced from staged tiles of Phi' and W (tile_rows > 0, see
-// stage_rows) or directly; the parameter part is a grid-stride loop.
-template<class T>
-__global__ void backward_finish_kernel(const T* derivatives, const T* w, T* dx,
+// stage_rows) or directly (stored rows only); the parameter part is a
+// grid-stride loop.
+template<class Source, class T>
+__global__ void backward_finish_kernel(Source source, const T* w, T* dx,
                                        std::size_t rows, std::size_t terms, T* gradients, std::size_t checked,
                                        const T* partial, unsigned tiles, const T* c, std::size_t coefficients,
                                        T lambda, unsigned tile_rows, int* status) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     if (tile_rows == 0) {
-        for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
-            T sum = 0;
-            for (std::size_t k = 0; k < terms; ++k) sum += derivatives[index*terms+k]*w[index*terms+k];
-            dx[index] = sum; report(sum, status);
+        if constexpr (stored_rows<Source>) {
+            for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
+                T sum = 0;
+                for (std::size_t k = 0; k < terms; ++k) sum += source.rows[index*terms+k]*w[index*terms+k];
+                dx[index] = sum; report(sum, status);
+            }
         }
     } else {
         T* stage = stage_memory<T>();
@@ -240,7 +264,15 @@ __global__ void backward_finish_kernel(const T* derivatives, const T* w, T* dx,
             const auto count = rows-base < tile_rows ? rows-base : static_cast<std::size_t>(tile_rows);
             const auto length = count*terms, offset = base*terms;
             for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
-                stage[i] = derivatives[offset+i]; stage[plane+i] = w[offset+i];
+                if constexpr (stored_rows<Source>) stage[i] = source.rows[offset+i];
+                stage[plane+i] = w[offset+i];
+            }
+            if constexpr (!stored_rows<Source>) {
+                if (threadIdx.x < count) {
+                    const auto row = threadIdx.x*terms;
+                    detail::basis_terms_for<recomputed_kind<Source>>(source.basis, source.input[base+threadIdx.x],
+                        detail::BasisRowOf<T>{stage+2*plane+row, stage+row, nullptr, nullptr}, CheckedEarlier{});
+                }
             }
             __syncthreads();
             if (threadIdx.x < count) {
@@ -837,6 +869,9 @@ struct ExpansionPlan {
     ParameterBlock block;
     detail::BasisViewOf<T> view; // host scalars; vector pointers are set per launch
     std::size_t values = 0, derivatives = 0, centers = 0, scales = 0, knots = 0;
+    // Phi' rows kept from forward to backward; otherwise (backlog C3) the
+    // backward finish recomputes them from the layer input (no derivatives region).
+    bool stored_derivatives = true;
 };
 
 template<class T>
@@ -1010,10 +1045,18 @@ template<class T> Plan<T> make_plan(const InputMap& map, std::size_t offset) {
 // Workspaces, reserved in the order of the arena layout.
 template<class T> void reserve_rows(ExpansionPlan<T>& p, std::size_t capacity, Reservation<T>& reserve) {
     const auto rows = product(product(capacity, p.block.inputs), p.block.terms);
-    p.values = reserve(rows); p.derivatives = reserve(rows);
+    p.values = reserve(rows);
+    if (p.stored_derivatives) p.derivatives = reserve(rows);
+}
+// Fixed bases recompute Phi' in the backward finish (backlog C3) wherever its
+// three-plane stage fits: the FP32 executor. FP64 basis kernels are FP64-ALU
+// bound on GA102 and unstaged (stage_rows), so FP64 keeps the stored rows.
+template<class T> bool recompute_derivatives(const ExpansionPlan<T>& p) {
+    return !p.view.trainable && stage_rows<T>(p.block.terms, stage_planes<RecomputedDerivatives<detail::BasisKind::Chebyshev, T>>) > 0;
 }
 template<class T> void reserve_workspace(BasisPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
+    p.stored_derivatives = !recompute_derivatives(p);
     reserve_rows(p, capacity, reserve);
     if (p.view.kind == detail::BasisKind::GaussianRbf || p.view.kind == detail::BasisKind::MexicanHat)
         p.centers = reserve(p.block.terms);
@@ -1101,21 +1144,29 @@ template<class T> void upload_stage(Context<T>& s, const LayerNormPlan<T>& plan,
     s.upload(s.ptr(s.parameters+plan.block.offset+plan.block.half()), map.bias);
 }
 
+// Same scalars as the host view; vectors point into device storage.
+template<class T>
+detail::BasisViewOf<T> device_basis(const Context<T>& s, const ExpansionPlan<T>& p, std::type_identity_t<const T*> centers,
+                                    std::type_identity_t<const T*> log_widths) {
+    auto basis = p.view;
+    basis.centers = centers; basis.log_widths = log_widths;
+    basis.scales = s.ptr(p.scales); basis.knots = s.ptr(p.knots);
+    return basis;
+}
+
 // Forward of layer j: activation[j] -> activation[j+1].
 template<class T>
 void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, T* log_derivatives,
                        const T* centers, const T* log_widths) {
     const auto& b = p.block;
-    // Same scalars as the host view; vectors point into device storage.
-    auto basis = p.view;
-    basis.centers = centers; basis.log_widths = log_widths;
-    basis.scales = s.ptr(p.scales); basis.knots = s.ptr(p.knots);
+    const auto basis = device_basis(s, p, centers, log_widths);
     const auto count = s.batch*b.inputs;
     const auto tile_rows = stage_rows<T>(b.terms, basis.trainable ? 3 : 2);
     const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*(basis.trainable ? 3 : 2)*sizeof(T);
     detail::visit_basis_family(basis.kind, [&](auto family) {
         basis_kernel<decltype(family)::value><<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads, shared, s.stream>>>(
-            s.ptr(s.activation[j]), s.ptr(p.values), s.ptr(p.derivatives), log_derivatives, count, basis, tile_rows, s.status);
+            s.ptr(s.activation[j]), s.ptr(p.values), p.stored_derivatives ? s.ptr(p.derivatives) : nullptr, log_derivatives,
+            count, basis, tile_rows, s.status);
     });
     check(cudaGetLastError(), "resident basis launch");
     const auto outputs = s.batch*b.outputs, length = b.inputs*b.terms;
@@ -1226,12 +1277,23 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
               "resident input VJP contraction");
     }
     const auto rows = with_dx ? s.batch*b.inputs : 0;
-    const auto tile_rows = stage_rows<T>(b.terms, 2);
-    const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*2*sizeof(T);
-    const auto grid = std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
-    backward_finish_kernel<<<grid, stage_threads, shared, s.stream>>>(s.ptr(p.derivatives), s.ptr(s.scratch),
-        s.ptr(s.upstream[j]), rows, b.terms, dc, checked, small ? s.ptr(s.partials) : nullptr, tiles, c,
-        b.coefficients, lambda, tile_rows, s.status);
+    const auto finish = [&](auto source) {
+        constexpr auto planes = stage_planes<decltype(source)>;
+        const auto tile_rows = stage_rows<T>(b.terms, planes);
+        const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*planes*sizeof(T);
+        const auto grid = std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
+        backward_finish_kernel<<<grid, stage_threads, shared, s.stream>>>(source, s.ptr(s.scratch),
+            s.ptr(s.upstream[j]), rows, b.terms, dc, checked, small ? s.ptr(s.partials) : nullptr, tiles, c,
+            b.coefficients, lambda, tile_rows, s.status);
+    };
+    if (p.stored_derivatives) {
+        finish(StoredDerivatives<T>{s.ptr(p.derivatives)});
+    } else if constexpr (!std::is_same_v<T, double>) {
+        const auto basis = device_basis(s, p, s.ptr(p.centers), nullptr);
+        detail::visit_basis_family(basis.kind, [&](auto family) {
+            finish(RecomputedDerivatives<decltype(family)::value, T>{s.ptr(s.activation[j]), basis});
+        });
+    }
     check(cudaGetLastError(), "resident backward finish launch");
 }
 
