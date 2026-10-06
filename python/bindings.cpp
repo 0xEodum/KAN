@@ -18,6 +18,7 @@
 #include <variant>
 
 namespace py = pybind11;
+void bind_initializers(py::module_& module); // backlog M4, initializer_bindings.cpp
 namespace {
 using Shape = std::vector<py::ssize_t>;
 
@@ -548,6 +549,7 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release;
             model.sgd(gradient.value, learning_rate);
         }, py::arg("gradients"), py::arg("learning_rate"));
+    bind_initializers(module);
 #ifdef KAN_PYTHON_CUDA
     py::class_<Resident>(module, "ResidentNetwork")
         .def(py::init([](const kan::Network& network, std::size_t capacity, kan::cuda::Precision precision) {

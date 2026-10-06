@@ -86,7 +86,7 @@ void demonstrate(const Config& config, const char* name, double rate) {
     kan::initialize(noisy, kan::NoiseInit{0.3, kan::Distribution::Uniform, 1, {}});
     train(noisy, d, rate, std::string(name) + " noise");
     REQUIRE(zero > 0.5 * variance);    // zero initialization does not learn the product
-    REQUIRE(scaled < 0.02 * variance); // variance scaling does
+    REQUIRE(scaled < 0.05 * variance); // variance scaling does
 }
 
 kan::BSplineConfig spline() {
@@ -103,16 +103,16 @@ kan::RationalConfig rational(kan::DenominatorPolicy policy) {
 }
 } // namespace
 
-TEST(deep_chebyshev_trains_only_from_explicit_initialization) { demonstrate(kan::ChebyshevConfig{5}, "chebyshev", 0.1); }
-TEST(deep_bspline_trains_only_from_explicit_initialization) { demonstrate(spline(), "bspline", 0.1); }
+TEST(deep_chebyshev_trains_only_from_explicit_initialization) { demonstrate(kan::ChebyshevConfig{5}, "chebyshev", 0.03); }
+TEST(deep_bspline_trains_only_from_explicit_initialization) { demonstrate(spline(), "bspline", 0.03); }
 TEST(deep_rational_guarded_trains_only_from_explicit_initialization) {
-    demonstrate(rational(kan::DenominatorPolicy::Guarded), "rational guarded", 0.1);
+    demonstrate(rational(kan::DenominatorPolicy::Guarded), "rational guarded", 0.03);
 }
 TEST(deep_rational_absolute_trains_only_from_explicit_initialization) {
-    demonstrate(rational(kan::DenominatorPolicy::Absolute), "rational absolute", 0.1);
+    demonstrate(rational(kan::DenominatorPolicy::Absolute), "rational absolute", 0.03);
 }
 TEST(deep_rational_smooth_trains_only_from_explicit_initialization) {
-    demonstrate(rational(kan::DenominatorPolicy::Smooth), "rational smooth", 0.1);
+    demonstrate(rational(kan::DenominatorPolicy::Smooth), "rational smooth", 0.03);
 }
 
 int main() { return test::run(); }

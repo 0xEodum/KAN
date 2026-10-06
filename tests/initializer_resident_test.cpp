@@ -73,7 +73,7 @@ void resident_matches_cpu_training(const Config& config, const char* name) {
     kan::cuda::ResidentNetwork gpu(cpu, d.batch);
     gpu.upload_input(d.x, d.batch);
     double first = 0, last = 0;
-    for (int step = 0; step < 200; ++step) {
+    for (int step = 0; step < 300; ++step) {
         double cpu_loss = 0, gpu_loss = 0;
         const auto u = upstream(cpu.forward(d.x, d.batch), d, &cpu_loss);
         gpu.forward();
@@ -81,8 +81,8 @@ void resident_matches_cpu_training(const Config& config, const char* name) {
         test::near(gpu_loss, cpu_loss, 1e-8);
         gpu.upload_output_gradient(gu);
         gpu.backward();
-        gpu.sgd(0.1);
-        cpu.sgd(cpu.backward(d.x, d.batch, u), 0.1);
+        gpu.sgd(0.03);
+        cpu.sgd(cpu.backward(d.x, d.batch, u), 0.03);
         if (step == 0) first = cpu_loss;
         last = cpu_loss;
     }

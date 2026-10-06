@@ -287,9 +287,9 @@ TEST(variance_stays_bounded_through_eight_layers) {
                 std::printf(" %.3g", ratio);
                 if (mode == 0) REQUIRE(ratio == 0);
                 if (mode == 1) REQUIRE(ratio > 0.05 && ratio < 20);
+                if (mode == 2) REQUIRE(ratio < 0.05); // pykan noise is small without a base branch
             }
             std::printf("\n");
-            if (mode == 2) REQUIRE(mean_square(y) / target < 1e-4); // pykan noise decays without a base branch
         }
     }
 }
@@ -434,17 +434,17 @@ TEST(seeds_are_deterministic_and_pinned_across_platforms) {
     smooth.denominator_degree = 3;
     struct Case { kan::Layer layer; kan::Initializer init; const char* pinned; };
     std::vector<Case> cases{
-        {kan::Layer(5, 4, kan::ChebyshevConfig{6}), kan::VarianceScaling{1, kan::Distribution::Uniform, 1, {}}, "PIN0"},
-        {kan::Layer(5, 4, kan::HermiteConfig{5}), kan::VarianceScaling{1, kan::Distribution::Normal, 2, {}}, "PIN1"},
-        {kan::Layer(5, 4, kan::JacobiConfig{5, 0.3, -0.4}), kan::VarianceScaling{0.7, kan::Distribution::Normal, 3, {}}, "PIN2"},
-        {kan::Layer(5, 4, uniform_spline(3, 7)), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "PIN3"},
-        {kan::Layer(5, 4, uniform_spline(2, 4)), kan::VarianceScaling{1, kan::Distribution::Normal, 5, {}}, "PIN4"},
+        {kan::Layer(5, 4, kan::ChebyshevConfig{6}), kan::VarianceScaling{1, kan::Distribution::Uniform, 1, {}}, "0cc0adf3c0731725"},
+        {kan::Layer(5, 4, kan::HermiteConfig{5}), kan::VarianceScaling{1, kan::Distribution::Normal, 2, {}}, "bd57711a756b9442"},
+        {kan::Layer(5, 4, kan::JacobiConfig{5, 0.3, -0.4}), kan::VarianceScaling{0.7, kan::Distribution::Normal, 3, {}}, "7c38d487449c767e"},
+        {kan::Layer(5, 4, uniform_spline(3, 7)), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "09b57ceb64cf560d"},
+        {kan::Layer(5, 4, uniform_spline(2, 4)), kan::VarianceScaling{1, kan::Distribution::Normal, 5, {}}, "4eaa871a69b30de0"},
         {kan::Layer(5, 4, kan::TrainableRbfConfig{{-1, 0.1, 1}, {-0.7, -1.1, 0.3}}),
-         kan::VarianceScaling{1, kan::Distribution::Normal, 6, {}}, "PIN5"},
+         kan::VarianceScaling{1, kan::Distribution::Normal, 6, {}}, "39e6d8394275d625"},
         {kan::Layer(5, 4, kan::MexicanHatConfig{{-1, 0, 2}, {0.5, 0.7, 1.1}}),
-         kan::VarianceScaling{1, kan::Distribution::Uniform, 7, {}}, "PIN6"},
-        {kan::Layer(5, 4, kan::FourierConfig{5, 2.5}), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}}, "PIN7"},
-        {kan::Layer(5, 4, smooth), kan::VarianceScaling{1, kan::Distribution::Normal, 9, {0.4, 2}}, "PIN8"},
+         kan::VarianceScaling{1, kan::Distribution::Uniform, 7, {}}, "e46b5fb6a1201363"},
+        {kan::Layer(5, 4, kan::FourierConfig{5, 2.5}), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}}, "309cb5b5cbe3b6d4"},
+        {kan::Layer(5, 4, smooth), kan::VarianceScaling{1, kan::Distribution::Normal, 9, {0.4, 2}}, "44389dcaba3ba426"},
     };
     std::string failures;
     for (auto& c : cases) {

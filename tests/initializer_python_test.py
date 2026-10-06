@@ -71,7 +71,7 @@ class Initializers(unittest.TestCase):
         def train(net):
             for _ in range(500):
                 y = net.forward(x)
-                net.sgd(net.backward(x, 2 * (y - t) / len(x)), 0.1)
+                net.sgd(net.backward(x, 2 * (y - t) / len(x)), 0.03)
             return float(np.mean((net.forward(x) - t) ** 2))
 
         zero = train(deep(kan.ChebyshevConfig(5)))
