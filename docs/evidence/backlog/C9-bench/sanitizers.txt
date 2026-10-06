@@ -1,0 +1,129 @@
+== build-b-c9 memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 302 errors
+========= ERROR SUMMARY: 202 errors were not printed. Use --print-limit option to adjust the number of printed errors
+== build-b-c9 memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c9 synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 302 errors
+========= ERROR SUMMARY: 202 errors were not printed. Use --print-limit option to adjust the number of printed errors
+== build-b-c9-fma memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c9-fma synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+
+# Rerun after 7c54280 (SGD graph node from the capture; the 302 errors above were cudaErrorInvalidDeviceFunction
+# from cudaGraphKernelNodeGetParams on cuBLAS library nodes in the removed node scan), merged tree:
+== build-b-c9 memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c9 synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9 initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c9-fma synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c9-fma initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors

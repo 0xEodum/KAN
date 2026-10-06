@@ -1,0 +1,6 @@
+# C9 golden check: golden.cpp built against build-b-c9base (ba60bf5, pre-C9) and build-b-c9 (final C9 + M4 merge), parity build
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *pre-C9.txt
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *C9.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *pre-C9_layers.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *C9_layers.txt
+# default dump (CPU + FP64 resident) and --layers dump (CPU): byte-identical

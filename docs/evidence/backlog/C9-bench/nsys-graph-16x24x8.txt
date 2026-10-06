@@ -1,0 +1,41 @@
+# nsys GPU trace, matched 16x24x8 b1024 FP32, train_step N=64 (graph replay, node trace): last steps
+    0.000    0.015   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.015    0.003   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+    0.018    0.006   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.025    0.005   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.029    0.003   13 ampere_sgemm_32x128_nn
+    0.032    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.036    0.006   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.042    0.004   13 ampere_sgemm_32x128_nn
+    0.046    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.050    0.001   13 void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T
+    0.051    0.001   13 void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsi
+    0.055    0.002   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+    0.057    0.015   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.073    0.003   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+    0.076    0.006   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.082    0.005   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.087    0.003   13 ampere_sgemm_32x128_nn
+    0.090    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.094    0.006   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.100    0.004   13 ampere_sgemm_32x128_nn
+    0.104    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.107    0.001   13 void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T
+    0.109    0.001   13 void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsi
+    0.112    0.002   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+    0.115    0.015   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.130    0.003   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+    0.133    0.006   13 void kan::cuda::<unnamed>::forward_dot_kernel<float>(const T1 *, const
+    0.140    0.004   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.144    0.003   13 ampere_sgemm_32x128_nn
+    0.147    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.151    0.006   13 void kan::cuda::<unnamed>::parameter_partial_kernel<float>(const T1 *,
+    0.157    0.004   13 ampere_sgemm_32x128_nn
+    0.161    0.004   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+    0.165    0.001   13 void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T
+    0.166    0.001   13 void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsi
+    0.197    0.001   13 [CUDA memcpy Device-to-Host]
+    0.236    0.003   13 [CUDA memcpy Device-to-Host]
+    0.256    0.001   13 [CUDA memcpy Device-to-Host]
+    0.282    0.001   13 [CUDA memcpy Device-to-Host]
+    0.299    0.001   13 [CUDA memcpy Device-to-Host]

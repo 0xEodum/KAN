@@ -118,9 +118,33 @@ anything else, or a value the executor precision cannot represent, raises
 the structure differs: build a new executor. Uploading costs a host-to-device copy of the
 parameters, a small fraction of construction for small networks (see the contract).
 
+For training, `train_step` (backlog C9) runs forward, the loss gradient, backward and SGD
+as one CUDA-graph replay with no host synchronization except a periodic status check:
+
+```cpp
+kan::cuda::ResidentNetwork gpu(model, batch, kan::cuda::Precision::Float32);
+gpu.set_status_interval(64); // check the device status every 64 steps (default: every step)
+for (const auto& [x, t] : batches)                 // host data, a new batch every step
+    gpu.train_step(x, t, batch, 0.01);             // MSE loss on the device; copy overlaps compute
+gpu.check_status();                                // report any failure of the last steps
+double loss = gpu.download_loss();                 // MSE of the last step's forward pass
+// Or with resident data: upload_input + upload_output_gradient (your loss gradient,
+// kept resident) or upload_target, then gpu.train_step(rate, l2, kan::cuda::Loss::...).
+```
+
+With `Loss::OutputGradient` a step computes bitwise what `forward(); backward(l2);
+sgd(rate)` computes. A failing step (nonfinite result, rational pole) is reported at the next
+status check, or by any other call, with the usual exception naming the step. That step and the
+rest of its interval commit no update, so the model keeps the last good parameters
+(`trained_steps()`). Python: `gpu.train_step(x, t, 0.01)`, `gpu.status_interval = 64`,
+`kan.Loss`. In FP32 this is faster than PyTorch on the review topologies, for resident data
+and for a new host batch every step; see the
+[C9 evidence](docs/evidence/backlog/C9.md) for measurements against eager, CUDA-graph and
+`torch.compile` PyTorch.
+
 Each executor owns its stream and storage. Uploads/downloads and numerical calls
-complete before returning; numerical calls transfer a small error status to check
-overflow. Forward retains activations for backward. Input uploads invalidate prior
+complete before returning (training steps excepted, see above); numerical calls transfer
+a small error status to check overflow. Forward retains activations for backward. Input uploads invalidate prior
 outputs/gradients/upstream; SGD invalidates outputs/gradients. Batch capacity is
 fixed; create a new executor to increase it. Different executors are independent;
 serialize access to the same executor. No execution call allocates GPU storage.

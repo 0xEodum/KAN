@@ -1,0 +1,29 @@
+# nsys GPU trace, realistic 1024x1024x1024 b4096 FP32, train_step N=1, first implementation (a24ee97): one step
+# start_ms duration_ms stream name
+   12.521    0.001   13 [CUDA memcpy Device-to-Host]
+   21.578    5.141   14 [CUDA memcpy Host-to-Device]
+   26.720    5.150   14 [CUDA memcpy Host-to-Device]
+   31.917    0.308   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+   32.227    0.001   13 [CUDA memset]
+   32.230    2.663   13 ampere_sgemm_128x128_tn
+   34.894    0.042   13 void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsign
+   34.935    0.312   13 void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, flo
+   35.248    0.001   13 [CUDA memset]
+   35.258    2.659   13 ampere_sgemm_128x128_tn
+   37.916    0.041   13 void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsign
+   37.957    0.067   13 void kan::cuda::<unnamed>::mse_kernel<float>(const T1 *, const T1 *, T
+   38.023    2.200   13 void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1:
+   40.223    0.023   13 std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, floa
+   40.246    2.197   13 void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1:
+   42.444    0.331   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+   42.775    2.194   13 void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1:
+   44.969    0.023   13 std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, floa
+   44.992    2.199   13 void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1:
+   47.191    0.332   13 void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, c
+   47.522    0.206   13 void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T
+   47.728    0.003   13 void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsi
+   47.770    0.001   13 [CUDA memcpy Device-to-Host]
+   65.044    8.972   13 [CUDA memcpy Device-to-Host]
+   74.116    0.001   13 [CUDA memcpy Device-to-Host]
+  113.195    8.964   13 [CUDA memcpy Device-to-Host]
+  122.260    0.001   13 [CUDA memcpy Device-to-Host]

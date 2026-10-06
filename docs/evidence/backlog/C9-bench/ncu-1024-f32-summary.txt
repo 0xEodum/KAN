@@ -1,0 +1,14 @@
+void kan::<unnamed>::basis_kernel<0, float>(c grid (16384, 1, 1)  dur   310,208 ns SM  51.31 % Mem  88.11 % DRAM  88.11 %
+ampere_sgemm_128x128_tn                       grid (8, 32, 7)     dur 3,311,840 ns SM  72.27 % Mem  52.36 % DRAM  15.58 %
+void kan::<unnamed>::bias_kernel<float>(T1 *, grid (16384, 1, 1)  dur    41,344 ns SM  43.87 % Mem  83.37 % DRAM  83.37 %
+void kan::<unnamed>::basis_kernel<0, float>(c grid (16384, 1, 1)  dur   310,272 ns SM  51.29 % Mem  88.05 % DRAM  88.05 %
+ampere_sgemm_128x128_tn                       grid (8, 32, 7)     dur 3,312,768 ns SM  72.09 % Mem  52.22 % DRAM  15.54 %
+void kan::<unnamed>::bias_kernel<float>(T1 *, grid (16384, 1, 1)  dur    40,736 ns SM  43.05 % Mem  83.19 % DRAM  83.19 %
+void kan::<unnamed>::backward_finish_kernel<f grid (28676, 1, 1)  dur   335,424 ns SM  32.87 % Mem  92.92 % DRAM  92.92 %
+void kan::<unnamed>::backward_finish_kernel<f grid (28676, 1, 1)  dur   332,192 ns SM  32.90 % Mem  93.01 % DRAM  93.01 %
+void kan::<unnamed>::candidate_kernel<float>( grid (57352, 1, 1)  dur   208,256 ns SM  21.17 % Mem  91.60 % DRAM  91.60 %
+void kan::<unnamed>::commit_kernel<float>(con grid (160, 1, 1)    dur     5,760 ns SM   1.71 % Mem   1.79 % DRAM   0.09 %
+void kan::<unnamed>::basis_kernel<0, float>(c grid (16384, 1, 1)  dur   313,504 ns SM  51.15 % Mem  88.00 % DRAM  88.00 %
+ampere_sgemm_128x128_tn                       grid (8, 32, 7)     dur 4,091,200 ns SM  72.23 % Mem  52.33 % DRAM  16.98 %
+void kan::<unnamed>::bias_kernel<float>(T1 *, grid (16384, 1, 1)  dur    40,672 ns SM  43.75 % Mem  83.21 % DRAM  83.21 %
+void kan::<unnamed>::basis_kernel<0, float>(c grid (16384, 1, 1)  dur   311,840 ns SM  50.98 % Mem  87.64 % DRAM  87.64 %

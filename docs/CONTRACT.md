@@ -83,8 +83,9 @@ data. No numerical call allocates device storage. Batches above capacity fail.
 count, which remains unchanged by subsequent operations.
 
 Uploads, computations, and downloads complete before returning. Computations check
-a small device error status on the host without copying full tensors. There is no
-asynchronous-submission guarantee. Different instances can run independently;
+a small device error status on the host without copying full tensors. The only
+asynchronous calls are the training steps of backlog C9 (below), whose status check is
+deferred by an explicit, documented interval. Different instances can run independently;
 callers must serialize operations on the same instance. Host input buffers need
 only remain alive for their upload call. Downloads return independently owned values.
 
@@ -139,6 +140,81 @@ them. Measured on the RTX 3090: 0.16 ms (FP64) / 0.12 ms (FP32) for a 0.4 MB
 1024x1024x1024 network, about 40% of construction, of which the PCIe copy is 36 / 18 ms
 ([R8/R9 evidence](evidence/backlog/R8-R9.md)). Python: `ResidentNetwork.upload_parameters(network)`
 (`ValueError` for rejections, `RuntimeError` for lifecycle errors), releasing the GIL.
+
+**Training steps (backlog C9).** `train_step(learning_rate, coefficient_l2 = 0, loss =
+Loss::OutputGradient)` runs forward, the loss gradient, `backward(coefficient_l2)` and
+`sgd(learning_rate)` as one captured CUDA graph, replayed without host synchronization.
+Arguments are validated like `backward`/`sgd` (`std::invalid_argument`, before anything is
+enqueued). `Loss::OutputGradient` needs an uploaded input and upstream (`std::logic_error`
+otherwise) and uses the upstream like `backward()`, which stays resident for the next step;
+the parameters after the step are **bitwise** those of `forward(); backward(l2); sgd(rate)` in
+every precision. `Loss::MeanSquaredError` needs an input, a target (`upload_target(target)`,
+shape batch x outputs, validated like the upstream; an input upload invalidates it) and a
+nonempty batch (`std::invalid_argument`); it computes on the device the upstream
+`(y - t)*(2/N)` in the executor precision, `N = batch*outputs`, bitwise what the eager
+sequence computes from that upstream, and the loss `sum (y - t)^2 / N` (block tree sums
+added in a fixed order: deterministic), returned by `download_loss()` for the most recent
+training step if it used this loss (`std::logic_error` otherwise); the value belongs to that
+step's forward pass, before its update. The step consumes the uploaded upstream (its own
+gradient replaces it: an `OutputGradient` step afterwards needs a new upload). After any
+step outputs and gradients are stale, as after `sgd()`. A step does not compute the gradient
+with respect to the network input, which it never exposes (as PyTorch for an input without
+`requires_grad`): a nonfinite network-input gradient therefore does not fail a training
+step, whereas `backward()` reports it.
+
+`train_step(input, target, batch, learning_rate, coefficient_l2 = 0)` trains one MSE step on
+a new host batch. Shapes, capacity, a nonempty batch and the values (finite; FP32 magnitudes at most
+`FLT_MAX`) are checked with the upload messages before the call returns, and a rejected batch
+changes nothing. Accepted data is converted into one of two page-locked host slots (split over
+up to 8 host threads for batches above 2^18 values) before the call returns, so the caller may
+reuse its buffers at once. It is copied on a separate stream into the input/target regions the
+running steps do not read: the input copy starts while the target converts, and the step waits
+for its target inside the graph, before the loss, so the target copy overlaps the forward
+pass. The batch then becomes the executor's input and target, for later eager calls and
+resident MSE steps. A slot is reused only after the step two staged batches earlier has
+finished. The host slots, copy stream and events are created on first use (host memory, not
+counted by `workspace_allocations()`); the second input and target regions, the loss and its
+block sums are part of the construction-time arena. No training call allocates device memory.
+
+*Deferred status.* The device status of training steps is checked once every
+`status_interval()` steps (`set_status_interval(steps)`, default 1, `steps = 0` raises
+`std::invalid_argument`) and by `check_status()`. Every other non-const call also checks it
+first: uploads, `forward`, `backward`, `sgd`, `upload_parameters`, downloads, `download_loss`,
+`synchronize`, `set_status_interval`. The const queries `status_interval()` and `trained_steps()`
+do not. A step writes its forward and loss, backward and SGD-candidate results into three
+status words that stay set until the check. A commit kernel at the end of the step counts the
+step as committed when all words are clear. Otherwise it records the phase bits of the
+first failing step (forward before backward before SGD, the order in which the eager calls
+would have raised) and copies the current parameters over the candidates. The region that
+becomes active then holds the parameters of the last good step. The check reads this block
+once and raises for the **first** failing step of the interval, with the exception the eager
+call would have raised (`std::overflow_error` for nonfinite results, `std::domain_error` for
+guarded rational poles). The message names the step's index since construction and the number
+of later steps of the interval. The failing step and all later steps of the interval commit no update: they run
+but roll back. Afterwards the parameters are those after the last good step, outputs,
+gradients and the loss are stale, the status is clear, the last batch stays the input/target,
+and training can continue. `trained_steps()` counts committed steps as of the last check, and
+equals the failing step's index right after such an exception. With the default interval each
+step's own call reports it; a larger interval reports up to `interval - 1` steps later and
+costs that much rolled-back work on failure, never a silently corrupted model. The destructor
+cannot report a pending failure: call `check_status()` (or any checking call) before
+discarding an executor whose last steps matter. Eager calls report and clear the status as
+before.
+
+*Graphs.* A captured step bakes in the batch, the active parameter region (the regions
+alternate every update), the input/target region, the loss, the L2 weight and whether it waits
+for a staged target. It is re-captured when any of these changes; at most 8 graphs are cached,
+least recently used first out. The learning rate is a parameter of the SGD candidate kernel,
+updated in the instantiated graph (`cudaGraphExecKernelNodeSetParams`, affecting later
+launches only), so a learning-rate schedule never re-captures. Graphs read parameters, inputs,
+targets and upstreams from the arena at replay, so `upload_parameters`, `upload_input`,
+`upload_target` and `upload_output_gradient` take effect at the next step without invalidation.
+Capture is thread-local (`cudaStreamCaptureModeThreadLocal`), so executors on other threads
+are unaffected. Python: `kan.Loss.OUTPUT_GRADIENT / MEAN_SQUARED_ERROR` (declared in every
+build), `train_step(learning_rate, coefficient_l2=0.0, loss=...)`,
+`train_step(input, target, learning_rate, coefficient_l2=0.0)` (strict float64 arrays),
+`upload_target`, `download_loss()`, the `status_interval` property, `check_status()` and
+`trained_steps`. Measurements against PyTorch are in the [C9 evidence](evidence/backlog/C9.md).
 
 **Contraction engine (backlog C2).** For `BasisEdges` and `TrainableRbfEdges` layers the
 resident executor computes the dense contraction and its VJPs with cuBLAS:
