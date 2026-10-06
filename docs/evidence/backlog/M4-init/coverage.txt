@@ -1,0 +1,31 @@
+(INFO) Reading coverage data...
+(INFO) Writing coverage report...
+------------------------------------------------------------------------------
+                           GCC Code Coverage Report
+Directory: .
+------------------------------------------------------------------------------
+File                                       Lines     Exec  Cover   Missing
+------------------------------------------------------------------------------
+src/basis.cpp                                104      103    99%   70
+src/carriers/basis_edges.cpp                  88       88   100%
+src/carriers/edge_ops.hpp                      6        6   100%
+src/carriers/linear_engine.hpp                57       57   100%
+src/carriers/rational_edges.cpp              131      131   100%
+src/detail/basis_formulas.hpp                186      185    99%   311
+src/detail/basis_host.hpp                      3        3   100%
+src/detail/basis_view.hpp                     59       59   100%
+src/detail/checks.hpp                         12       12   100%
+src/detail/host_device.hpp                    12       12   100%
+src/detail/input_map_formulas.hpp              7        7   100%
+src/detail/rational_formulas.hpp              93       86    92%   43,43,43,172,177,191-192
+src/families.cpp                              88       87    98%   25
+src/init/moments.cpp                         139      135    97%   99,121,151,177
+src/init/portable_math.hpp                    76       75    98%   138
+src/initializers.cpp                         140      138    98%   36,79
+src/input_map.cpp                            241      237    98%   181,190,198,269
+src/layer.cpp                                232      229    98%   32,34,185
+src/network.cpp                              116      114    98%   83,91
+src/rational.cpp                              70       69    98%   64
+------------------------------------------------------------------------------
+TOTAL                                       1860     1833    98%
+------------------------------------------------------------------------------

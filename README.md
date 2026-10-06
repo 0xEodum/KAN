@@ -13,6 +13,7 @@ backward and training; optional Python bindings expose the same implementation.
 | Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
 | Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
 | Input maps | Explicit affine (fixed, from data range or moments), tanh, LayerNorm (trainable gain/bias) layers | — |
+| Initializers | Explicit seeded variance-preserving and pykan-style noise initialization, pole-free rational denominators | — |
 | Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
 
 CPU supports all eight available families and compatible networks of any depth.
@@ -166,6 +167,27 @@ Layer indices (`insert_knot`, `adapt_grid`, gradients) are positions in `layers(
 maps included; `NetworkGradients::layers[i]` holds `kan::LayerGradients` or
 `kan::InputMapGradients`. Maps run on the resident executor as well. See the
 [contract](docs/CONTRACT.md#input-maps-backlog-m1).
+
+## Initialization
+
+Constructors zero-initialize, which trains a single layer but leaves a deep network at
+a saddle (it only learns the target mean). Initializers are explicit and seeded:
+
+```cpp
+#include <kan/initializers.hpp>
+kan::Network model({kan::InputMap(2, kan::TanhMap{}), kan::Layer(2, 8, kan::ChebyshevConfig{5}),
+                    kan::InputMap(8, kan::TanhMap{}), kan::Layer(8, 1, kan::ChebyshevConfig{5})});
+kan::initialize(model, kan::VarianceScaling{.gain = 1, .distribution = kan::Distribution::Normal, .seed = 7});
+// or kan::NoiseInit{.scale = 0.3, .seed = 7} (pykan's small spline noise), or one layer:
+// kan::initialize(layer, kan::VarianceScaling{}); rational layers also get bounded
+// nonzero denominators, kan::DenominatorInit{.bound = 0.5, .radius = 1}.
+```
+
+`VarianceScaling` gives every term an equal share of the output second moment under the
+family's reference measure (`kan::reference_moments`); `NoiseInit` matches pykan's
+`noise_scale` amplitude without its SiLU base branch. The same seed gives bitwise
+identical parameters on every platform. Python: `kan.initialize(model, kan.VarianceScaling(seed=7))`.
+See the [contract](docs/CONTRACT.md#initializers-backlog-m4).
 
 ## Localized and adaptive use
 
