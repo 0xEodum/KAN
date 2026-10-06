@@ -721,6 +721,11 @@ cublasStatus_t scal(cublasHandle_t h, std::int64_t n, const float* alpha, float*
 template<class T>
 struct Context {
     std::size_t capacity, batch = 0;
+    // Training steps (C9) never expose the gradient with respect to the
+    // network input (gradients are stale after a step), so they skip it, as
+    // PyTorch does for an input that does not require grad.
+    bool skip_network_input_gradient = false;
+    bool input_gradient(std::size_t j) const noexcept { return j != 0 || !skip_network_input_gradient; }
     std::size_t parameters = 0, gradients = 0, candidates = 0;
     // Contraction engine (C2): W = U*C scratch shared by all expansion layers
     // (largest capacity*inputs*terms), a ones vector for the bias VJP and the
@@ -1178,7 +1183,9 @@ template<class T> void run_forward(Context<T>& s, const LayerNormPlan<T>& plan, 
 
 // Backward of layer j: upstream[j+1] -> upstream[j] and the parameter gradients.
 template<class T>
-void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, T lambda) {
+// with_w: compute W = U*C (input VJP, and the trainable-RBF reductions);
+// with_dx: reduce W against Phi' to the input VJP.
+void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, T lambda, bool with_w, bool with_dx) {
     const auto& b = p.block;
     const auto ik = static_cast<std::int64_t>(b.inputs*b.terms), o = static_cast<std::int64_t>(b.outputs);
     const auto n = static_cast<std::int64_t>(s.batch);
@@ -1213,12 +1220,12 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
         }
         check(cudaMemsetAsync(db, 0, b.outputs*sizeof(T), s.stream), "resident bias VJP reset");
     }
-    if (s.batch) {
+    if (s.batch && with_w) {
         // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
         check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
               "resident input VJP contraction");
     }
-    const auto rows = s.batch*b.inputs;
+    const auto rows = with_dx ? s.batch*b.inputs : 0;
     const auto tile_rows = stage_rows<T>(b.terms, 2);
     const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*2*sizeof(T);
     const auto grid = std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
@@ -1229,12 +1236,13 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
 }
 
 template<class T> void run_backward(Context<T>& s, const BasisPlan<T>& plan, std::size_t j, T lambda) {
-    expansion_backward(s, plan.expansion, j, lambda);
+    const bool dx = s.input_gradient(j);
+    expansion_backward(s, plan.expansion, j, lambda, dx, dx);
 }
 template<class T> void run_backward(Context<T>& s, const TrainableRbfPlan<T>& plan, std::size_t j, T lambda) {
     const auto& p = plan.expansion;
     const auto& b = p.block;
-    expansion_backward(s, p, j, lambda);
+    expansion_backward(s, p, j, lambda, true, s.input_gradient(j));
     // Reuses W = U*C left in the scratch by expansion_backward (zero rows for an empty batch).
     const auto rows=product(s.batch,b.inputs);
     const auto tiles=static_cast<unsigned>(std::min<std::size_t>(plan.partial_tiles,rows?((rows-1)/256+1):1));
@@ -1255,7 +1263,7 @@ template<class T> void run_backward(Context<T>& s, const TrainableRbfPlan<T>& pl
 }
 template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, std::size_t j, T lambda) {
     const auto& b = plan.block;
-    if(s.batch) {
+    if(s.batch && s.input_gradient(j)) {
         rational_input_kernel<<<blocks(s.batch*b.inputs),256,0,s.stream>>>(s.ptr(plan.derivatives),s.ptr(s.upstream[j+1]),s.ptr(s.upstream[j]),
             s.batch,s.capacity,b.inputs,b.outputs,s.status);
         check(cudaGetLastError(),"resident rational input gradient launch");
@@ -1272,21 +1280,21 @@ template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, 
 // Input maps are not penalized by the coefficient L2 (lambda unused).
 template<class T> void run_backward(Context<T>& s, const AffinePlan<T>& plan, std::size_t j, T) {
     const auto count = s.batch*plan.block.features;
-    if (!count) return;
+    if (!count || !s.input_gradient(j)) return;
     affine_input_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.upstream[j+1]), s.ptr(plan.scale), s.ptr(s.upstream[j]),
         count, plan.block.features, s.status);
     check(cudaGetLastError(), "resident affine map gradient launch");
 }
 template<class T> void run_backward(Context<T>& s, const TanhPlan<T>& plan, std::size_t j, T) {
     const auto count = s.batch*plan.block.features;
-    if (!count) return;
+    if (!count || !s.input_gradient(j)) return;
     tanh_input_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.ptr(s.upstream[j+1]), s.ptr(s.upstream[j]),
         count, plan.scale, s.status);
     check(cudaGetLastError(), "resident tanh map gradient launch");
 }
 template<class T> void run_backward(Context<T>& s, const LayerNormPlan<T>& plan, std::size_t j, T) {
     const auto features = plan.block.features;
-    if (s.batch) {
+    if (s.batch && s.input_gradient(j)) {
         with_norm_lanes(plan.lanes, [&](auto lanes) {
             layer_norm_input_kernel<decltype(lanes)::value><<<norm_blocks(s.batch, plan.lanes), norm_block, 0, s.stream>>>(
                 s.ptr(s.activation[j]), s.ptr(s.upstream[j+1]), norm_gain(s, plan, s.parameters), s.ptr(plan.stats),
@@ -1793,7 +1801,9 @@ struct Engine final : ResidentExecutor, Context<T> {
             if (staged) check(cudaStreamWaitEvent(stream, target_copied[current], cudaEventWaitExternal), "resident staged target wait");
             if (loss == Loss::MeanSquaredError) enqueue_loss();
             status = control->bits+1;
+            this->skip_network_input_gradient = true;
             enqueue_backward(lambda);
+            this->skip_network_input_gradient = false;
             status = control->bits+2;
             enqueue_update(rate);
             commit_kernel<<<parameter_count ? std::min(blocks(parameter_count), commit_max_blocks) : 1U, 256, 0, stream>>>(
@@ -1801,6 +1811,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             check(cudaGetLastError(), "resident commit launch");
         } catch (...) {
             status = control->bits;
+            this->skip_network_input_gradient = false;
             cudaGraph_t partial = nullptr;
             cudaStreamEndCapture(stream, &partial);
             if (partial) cudaGraphDestroy(partial);
