@@ -1,0 +1,10 @@
+# C3 golden check: golden.cpp and C3-bench/f32_dump.cpp built against the worktree baseline c7978ff (KAN-c3base/build-parity, build-fma) and C3 (build-b-c3, build-b-c3-fma)
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden-pre.txt
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden-build-b-c3.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-pre.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-build-b-c3.txt
+498019198999ecbcbfe0cd1b55ba4063b8549682e0e5962c68cdf0227b33c895 *f32-pre-parity.txt
+498019198999ecbcbfe0cd1b55ba4063b8549682e0e5962c68cdf0227b33c895 *f32-build-b-c3.txt
+7eb68a83a54167b5c6be054137e193f531f7526547645cc4abc78eb2b7d6687b *f32-pre-fma.txt
+7eb68a83a54167b5c6be054137e193f531f7526547645cc4abc78eb2b7d6687b *f32-build-b-c3-fma.txt
+# all pairs byte-identical

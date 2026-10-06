@@ -1,0 +1,11 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+40.9,135934176,46,2955090.8,2994102.0,2693606,3351783,113512.6,ampere_sgemm_128x128_tn
+34.7,115190508,46,2504141.5,2548581.0,2247684,2555045,93784.8,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1::Params)
+17.1,56761204,23,2467878.4,2505989.0,2233189,2519398,91239.7,void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1::Params)
+2.5,8447380,46,183638.7,174032.5,62240,302464,116292.5,"void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::BasisKind)0, float>, float>(T1, const T2 *, T2 *, unsigned long long, unsigned long long, T2 *, unsigned long long, const T2 *, unsigned int, const T2 *, unsigned long long, T2, unsigned int, int *)"
+2.4,8123630,46,176600.7,165136.0,163136,695681,78237.3,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsigned long long, kan::detail::BasisViewOf<T2>, unsigned int, int *)"
+1.4,4722570,23,205329.1,205217.0,204513,206817,491.6,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *)"
+0.6,1905923,46,41433.1,41472.0,40608,41856,298.5,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)"
+0.3,1102525,46,23967.9,23967.0,23264,24640,356.7,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)9, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T13)"
+0.0,94369,23,4103.0,4128.0,3648,4192,113.7,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,1568,1,1568.0,1568.0,1568,1568,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)"

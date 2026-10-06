@@ -1,0 +1,11 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+40.0,135772833,46,2951583.3,2996581.5,2702021,3001381,97130.2,ampere_sgemm_128x128_tn
+34.0,115487740,46,2510603.0,2548997.0,2253093,2555717,91432.6,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1::Params)
+17.0,57599755,23,2504337.2,2511045.0,2241188,3223110,181288.5,void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1::Params)
+4.2,14178394,46,308226.0,308208.5,307200,309825,513.1,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsigned long long, kan::detail::BasisViewOf<T2>, unsigned int, int *)"
+2.6,8848426,46,192357.1,191520.0,45760,335393,143743.1,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, unsigned long long, T1 *, unsigned long long, const T1 *, unsigned int, const T1 *, unsigned long long, T1, unsigned int, int *)"
+1.4,4721834,23,205297.1,205216.0,204385,206337,521.4,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *)"
+0.6,1908996,46,41499.9,41552.0,40704,41952,305.6,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)"
+0.3,1100956,46,23933.8,23840.0,23392,24672,319.3,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)9, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T13)"
+0.0,96128,23,4179.5,4160.0,3712,5536,314.7,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,1632,1,1632.0,1632.0,1632,1632,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)"

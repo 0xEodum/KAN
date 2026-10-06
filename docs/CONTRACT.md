@@ -225,8 +225,13 @@ warp per output, with the bias and the finiteness check in the same launch, beca
 executes such tiny products as a single latency-bound block. For the same reason a layer
 with at most `2^15` coefficients plus outputs reduces its coefficient and bias VJPs in at
 most 64 batch tiles and sums the tiles in a fixed order; larger layers use cuBLAS. `W` lives in
-one scratch region shared by all expansion layers (the largest `capacity*inputs*terms`);
-the cuBLAS handle is created at construction and runs on the executor's stream with a
+one scratch region shared by all expansion layers (the largest `capacity*inputs*terms`).
+The derivative rows `Phi'` are kept from forward to backward only by the FP64 executor and
+by `TrainableRbfEdges`; FP32/TF32 `BasisEdges` layers (backlog C3) store only `Phi` and the
+backward pass recomputes `Phi'` from the layer input with the forward's formula, so the
+results are unchanged (bitwise in both builds) and each such layer reserves one
+`capacity*inputs*terms` region less (rows too long for the staged tile, above 85 terms,
+keep the stored rows). The cuBLAS handle is created at construction and runs on the executor's stream with a
 workspace inside the construction-time arena, so numerical calls make no `cudaMalloc` and
 no arena growth and `workspace_allocations()` is unchanged (the handle's own
 library-internal state, created once with it, is not counted). cuBLAS sums in its own (fused multiply-add, tiled) order: results are no

@@ -1,0 +1,106 @@
+== build-b-c3 memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c3 synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c3 initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c3-fma synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c3-fma initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors

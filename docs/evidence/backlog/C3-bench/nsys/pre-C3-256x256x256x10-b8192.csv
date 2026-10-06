@@ -1,0 +1,16 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+27.7,46160181,110,419638.0,425088.5,393697,427777,11658.0,ampere_sgemm_128x64_tn
+22.4,37256453,110,338695.0,344337.0,311393,350273,12770.6,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+15.3,25529743,165,154725.7,154720.0,152865,156577,433.9,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, float>(const T2 *, T2 *, T2 *, T2 *, unsigned long long, kan::detail::BasisViewOf<T2>, unsigned int, int *)"
+12.3,20443050,55,371691.8,376001.0,349952,378881,10597.5,ampere_sgemm_128x64_nn
+10.2,17000094,165,103030.9,151649.0,3808,153984,70212.0,"void kan::cuda::<unnamed>::backward_finish_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, unsigned long long, T1 *, unsigned long long, const T1 *, unsigned int, const T1 *, unsigned long long, T1, unsigned int, int *)"
+3.2,5273417,55,95880.3,96960.0,90304,98049,2571.0,ampere_sgemm_32x128_tn
+2.5,4151876,55,75488.7,75839.0,73088,77152,1079.9,ampere_sgemm_128x32_nt
+2.3,3902056,55,70946.5,71104.0,69665,71488,444.1,ampere_sgemm_128x32_nn
+1.5,2502563,165,15167.0,21696.0,1664,22240,9431.8,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)"
+1.0,1587074,55,28855.9,29280.0,26752,29664,970.0,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T10)"
+0.8,1402787,110,12752.6,12736.0,12513,13056,109.5,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)9, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T13)"
+0.4,643169,55,11694.0,11712.0,11424,12000,119.3,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *)"
+0.2,367676,165,2228.3,1984.0,1856,2944,387.3,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, float, (bool)1, (bool)0, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.1,222240,55,4040.7,4128.0,3648,4256,177.5,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,1408,1,1408.0,1408.0,1408,1408,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)"
