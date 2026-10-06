@@ -179,6 +179,12 @@ if(BUILD_TESTING)
         target_link_libraries(resident_training_test PRIVATE kan::cuda)
         add_test(NAME resident_training COMMAND resident_training_test)
         set_tests_properties(resident_training PROPERTIES LABELS "cuda" TIMEOUT 180)
+        # Backlog C3: fused basis expansion (no stored derivative rows).
+        add_executable(resident_fused_expansion_test tests/resident_fused_expansion_test.cpp)
+        target_include_directories(resident_fused_expansion_test PRIVATE tests)
+        target_link_libraries(resident_fused_expansion_test PRIVATE kan::cuda CUDA::cudart)
+        add_test(NAME resident_fused_expansion COMMAND resident_fused_expansion_test)
+        set_tests_properties(resident_fused_expansion PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Backlog M4: initialized networks on the resident executor.
         add_executable(initializer_resident_test tests/initializer_resident_test.cpp)
         target_include_directories(initializer_resident_test PRIVATE tests)
