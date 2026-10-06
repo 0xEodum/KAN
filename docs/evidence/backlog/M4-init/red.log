@@ -1,0 +1,125 @@
+﻿Test project K:/PycharmProjects/auxiliary_projects/KAN/.claude/worktrees/agent-a5e2365003d309205/build-m4i
+    Start 12: initializer
+1/4 Test #12: initializer ......................***Failed    0.01 sec
+PASS constructors_keep_zero_initialization
+FAIL polynomial_reference_moments_are_closed_forms: initializers not implemented
+FAIL localized_reference_moments_match_numerical_integration: initializers not implemented
+FAIL uniform_draws_follow_the_specified_transform: initializers not implemented
+FAIL normal_draws_have_the_stated_moments: initializers not implemented
+FAIL variance_scaling_preserves_the_reference_second_moment: initializers not implemented
+FAIL variance_stays_bounded_through_eight_layers: initializers not implemented
+FAIL rational_denominators_are_bounded_nonzero_and_pole_free: initializers not implemented
+FAIL rational_numerators_preserve_variance_on_the_domain: initializers not implemented
+FAIL guarded_bound_must_respect_the_pole_guard: initializers not implemented
+FAIL invalid_initializers_are_rejected_atomically: initializers not implemented
+FAIL network_initialization_uses_layer_seeds_and_resets_layer_norm: kan::layer_seed(77, p) == mix(77 + (p + 1) * golden_gamma)
+FAIL seeds_are_deterministic_and_pinned_across_platforms: initializers not implemented
+1/13 passed
+
+    Start 13: initializer_training
+2/4 Test #13: initializer_training .............***Failed   18.85 sec
+curve chebyshev zero               0:1.205e-01 100:9.482e+83FAIL deep_chebyshev_trains_only_from_explicit_initialization: nonfinite numerical result
+curve bspline zero                 0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+FAIL deep_bspline_trains_only_from_explicit_initialization: initializers not implemented
+curve rational guarded zero        0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+FAIL deep_rational_guarded_trains_only_from_explicit_initialization: initializers not implemented
+curve rational absolute zero       0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+FAIL deep_rational_absolute_trains_only_from_explicit_initialization: initializers not implemented
+curve rational smooth zero         0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+FAIL deep_rational_smooth_trains_only_from_explicit_initialization: initializers not implemented
+0/5 passed
+
+    Start 30: initializer_resident
+3/4 Test #30: initializer_resident .............***Failed    0.11 sec
+FAIL resident_chebyshev_from_variance_scaling: initializers not implemented
+FAIL resident_bspline_from_variance_scaling: initializers not implemented
+FAIL resident_rational_policies_from_variance_scaling: initializers not implemented
+0/3 passed
+
+    Start 38: initializer_python
+4/4 Test #38: initializer_python ...............***Failed    0.44 sec
+EEEEEE
+======================================================================
+ERROR: test_deep_chebyshev_trains_from_variance_scaling (__main__.Initializers.test_deep_chebyshev_trains_from_variance_scaling)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 77, in test_deep_chebyshev_trains_from_variance_scaling
+    zero = train(deep(kan.ChebyshevConfig(5)))
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 74, in train
+    net.sgd(net.backward(x, 2 * (y - t) / len(x)), 0.1)
+            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+OverflowError: nonfinite numerical result
+
+======================================================================
+ERROR: test_layer_initialization_is_deterministic (__main__.Initializers.test_layer_initialization_is_deterministic)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 35, in test_layer_initialization_is_deterministic
+    kan.initialize(layer, kan.VarianceScaling(seed=5))
+    ^^^^^^^^^^^^^^
+AttributeError: module 'kan' has no attribute 'initialize'
+
+======================================================================
+ERROR: test_rational_denominators_and_network (__main__.Initializers.test_rational_denominators_and_network)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 52, in test_rational_denominators_and_network
+    kan.initialize(net, kan.NoiseInit(seed=3, denominators=kan.DenominatorInit(0.4, 1.0)))
+    ^^^^^^^^^^^^^^
+AttributeError: module 'kan' has no attribute 'initialize'
+
+======================================================================
+ERROR: test_reference_moments (__main__.Initializers.test_reference_moments)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 43, in test_reference_moments
+    variance, moments = kan.reference_moments(kan.LegendreConfig(4))
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'kan' has no attribute 'reference_moments'
+
+======================================================================
+ERROR: test_resident_from_initialized_network (__main__.Initializers.test_resident_from_initialized_network)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 85, in test_resident_from_initialized_network
+    kan.initialize(net, kan.VarianceScaling(seed=1, distribution=kan.Distribution.NORMAL))
+    ^^^^^^^^^^^^^^
+AttributeError: module 'kan' has no attribute 'initialize'
+
+======================================================================
+ERROR: test_types_and_defaults (__main__.Initializers.test_types_and_defaults)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "K:\PycharmProjects\auxiliary_projects\KAN\.claude\worktrees\agent-a5e2365003d309205\tests\initializer_python_test.py", line 21, in test_types_and_defaults
+    self.assertEqual(kan.Distribution.UNIFORM.name, "UNIFORM")
+                     ^^^^^^^^^^^^^^^^
+AttributeError: module 'kan' has no attribute 'Distribution'
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.147s
+
+FAILED (errors=6)
+
+
+0% tests passed, 4 tests failed out of 4
+
+Label Time Summary:
+cpu            =  18.86 sec*proc (2 tests)
+cuda           =   0.11 sec*proc (1 test)
+integration    =   0.44 sec*proc (1 test)
+python         =   0.44 sec*proc (1 test)
+
+Total Test time (real) =  19.42 sec
+
+The following tests FAILED:
+	 12 - initializer (Failed)                              cpu
+	 13 - initializer_training (Failed)                     cpu
+	 30 - initializer_resident (Failed)                     cuda
+	 38 - initializer_python (Failed)                       integration python
+ctest : Errors while running CTest
+At line:1 char:669
++ ... | Out-Null; ctest --test-dir build-m4i -R "initializer" --output-on-f ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Errors while running CTest:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

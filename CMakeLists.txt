@@ -15,7 +15,7 @@ option(KAN_BENCH_RESIDENT "Include M2 resident backend in benchmarks" ON)
 option(KAN_CUDA_FMA "Allow fused multiply-add contraction in the CUDA kernels (performance build)" OFF)
 
 add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp src/input_map.cpp
-            src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp)
+            src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp src/initializers.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
 set_target_properties(kan PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -69,7 +69,8 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(suite basis basis_config carrier layer network input_map m3_basis m3_layer m4_rational m4_layer m4_allocation)
+    foreach(suite basis basis_config carrier layer network input_map m3_basis m3_layer m4_rational m4_layer m4_allocation
+                  initializer initializer_training)
         add_executable(${suite}_test tests/${suite}_test.cpp)
         target_include_directories(${suite}_test PRIVATE tests)
         target_link_libraries(${suite}_test PRIVATE kan)
@@ -169,6 +170,12 @@ if(BUILD_TESTING)
         target_link_libraries(resident_upload_test PRIVATE kan::cuda)
         add_test(NAME resident_upload COMMAND resident_upload_test)
         set_tests_properties(resident_upload PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog M4: initialized networks on the resident executor.
+        add_executable(initializer_resident_test tests/initializer_resident_test.cpp)
+        target_include_directories(initializer_resident_test PRIVATE tests)
+        target_link_libraries(initializer_resident_test PRIVATE kan::cuda)
+        add_test(NAME initializer_resident COMMAND initializer_resident_test)
+        set_tests_properties(initializer_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
@@ -249,6 +256,10 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_upload_python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(resident_upload_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME initializer_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/initializer_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(initializer_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 
