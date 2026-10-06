@@ -1,0 +1,21 @@
+﻿curve chebyshev zero               0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve chebyshev variance           0:3.496e-01 100:4.311e-04 300:1.099e-05 1000:4.519e-10 3000:2.026e-22
+curve chebyshev noise              0:1.216e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+PASS deep_chebyshev_trains_only_from_explicit_initialization
+curve bspline zero                 0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve bspline variance             0:8.572e-01 100:5.058e-03 300:1.353e-04 1000:4.273e-08 3000:7.267e-15
+curve bspline noise                0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+PASS deep_bspline_trains_only_from_explicit_initialization
+curve rational guarded zero        0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve rational guarded variance    0:2.045e-01 100:8.951e-02 300:1.352e-02 1000:5.301e-03 3000:9.439e-04
+curve rational guarded noise       0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+PASS deep_rational_guarded_trains_only_from_explicit_initialization
+curve rational absolute zero       0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve rational absolute variance   0:1.896e-01 100:9.979e-02 300:2.952e-02 1000:7.234e-03 3000:2.102e-03
+curve rational absolute noise      0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+PASS deep_rational_absolute_trains_only_from_explicit_initialization
+curve rational smooth zero         0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve rational smooth variance     0:1.937e-01 100:1.011e-01 300:2.244e-02 1000:8.930e-03 3000:1.840e-03
+curve rational smooth noise        0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+PASS deep_rational_smooth_trains_only_from_explicit_initialization
+5/5 passed

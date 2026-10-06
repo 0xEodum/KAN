@@ -1,0 +1,47 @@
+﻿PASS constructors_keep_zero_initialization
+PASS polynomial_reference_moments_are_closed_forms
+PASS localized_reference_moments_match_numerical_integration
+PASS uniform_draws_follow_the_specified_transform
+PASS normal_draws_have_the_stated_moments
+PASS variance_scaling_preserves_the_reference_second_moment
+depth chebyshev   zero     0 0 0 0 0 0 0 0
+depth chebyshev   variance 0.952 0.671 0.708 1.05 1.53 0.716 0.746 0.605
+depth chebyshev   noise    0.00187 0.00164 0.00107 0.00154 0.00187 0.00217 0.00194 0.000912
+depth legendre    zero     0 0 0 0 0 0 0 0
+depth legendre    variance 0.856 0.515 0.578 0.826 1.31 0.605 0.629 0.384
+depth legendre    noise    0.0018 0.00129 0.000611 0.00113 0.00164 0.00113 0.0012 0.000781
+depth jacobi      zero     0 0 0 0 0 0 0 0
+depth jacobi      variance 0.951 0.515 0.539 0.715 1.17 0.603 0.591 0.312
+depth jacobi      noise    0.00329 0.00193 0.000979 0.00175 0.00247 0.00194 0.00194 0.00108
+depth bspline     zero     0 0 0 0 0 0 0 0
+depth bspline     variance 0.831 1.26 1.06 0.605 0.51 0.629 0.874 1
+depth bspline     noise    0.000368 0.000643 0.000506 0.000309 0.000461 0.000281 0.000424 0.000451
+depth hermite     zero     0 0 0 0 0 0 0 0
+depth hermite     variance 0.623 0.46 0.385 0.696 0.3 0.337 0.309 0.49
+depth hermite     noise    0.0237 0.00497 0.00367 0.00658 0.00694 0.00464 0.00328 0.00509
+depth fourier     zero     0 0 0 0 0 0 0 0
+depth fourier     variance 0.924 1.09 1.05 0.919 1.02 0.879 0.902 1.03
+depth fourier     noise    0.000255 0.000243 0.000318 0.000261 0.000235 0.000152 0.000141 0.000397
+depth rbf         zero     0 0 0 0 0 0 0 0
+depth rbf         variance 1.28 0.887 0.998 0.979 1.09 0.815 0.693 0.959
+depth rbf         noise    0.000855 0.000844 0.000922 0.0011 0.00102 0.0009 0.000387 0.000957
+depth mexican_hat zero     0 0 0 0 0 0 0 0
+depth mexican_hat variance 0.942 1.03 0.934 0.975 0.95 0.901 0.931 0.922
+depth mexican_hat noise    0.00139 0.00303 0.00194 0.00108 0.0015 0.00164 0.00324 0.00139
+PASS variance_stays_bounded_through_eight_layers
+PASS rational_denominators_are_bounded_nonzero_and_pole_free
+PASS rational_numerators_preserve_variance_on_the_domain
+PASS guarded_bound_must_respect_the_pole_guard
+PASS invalid_initializers_are_rejected_atomically
+PASS network_initialization_uses_layer_seeds_and_resets_layer_norm
+pinned 0cc0adf3c0731725
+pinned bd57711a756b9442
+pinned 7c38d487449c767e
+pinned 09b57ceb64cf560d
+pinned 4eaa871a69b30de0
+pinned 39e6d8394275d625
+pinned e46b5fb6a1201363
+pinned 309cb5b5cbe3b6d4
+pinned 44389dcaba3ba426
+PASS seeds_are_deterministic_and_pinned_across_platforms
+13/13 passed

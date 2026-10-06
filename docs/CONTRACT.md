@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3 and backlog M1)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2 and M4)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -6,7 +6,8 @@ Arrays are contiguous, batch-major; coefficients use `(o * inputs + i) * basis_s
 All arithmetic and storage in M1 use `double`. Bias and coefficients initialize to zero.
 Topology and parameters are owned values, never global state. Initialization for training
 is explicit: zero initialization is useful for a single linear-in-coefficients layer, but
-multilayer training needs nonzero parameters to propagate gradients.
+multilayer training needs nonzero parameters to propagate gradients; constructors stay
+zero-initialized and the opt-in initializers are described under "Initializers (backlog M4)".
 
 `BasisConfig` is a `std::variant` of one configuration type per family
 (`ChebyshevConfig`, `LegendreConfig`, `JacobiConfig`, `HermiteConfig`, `FourierConfig`,
@@ -322,7 +323,7 @@ subgradient at `S=0`: the midpoint of the one-sided derivatives (the same
 convention as `abs` in PyTorch autograd). Consequently `b=0` is stationary under
 both safe policies (`S` vanishes identically and every `dr/db` is zero; for `Smooth`
 this is a true critical point): denominators of a safe layer must be initialized
-nonzero, or they never train. The safe policies never report a pole and ignore
+nonzero, or they never train (`kan::initialize` does so for every policy, see backlog M4). The safe policies never report a pole and ignore
 `epsilon`, which is still validated for every policy; all finiteness checks remain
 (`S`, `S^2`, `Q`, `Q'` and every derivative intermediate). The log-space paths cover
 the safe policies too; `Smooth` restores `r*Q'/Q` from `log|g|+log|S'|` when
@@ -471,6 +472,83 @@ upper)` and `kan.affine_from_moments(samples)`; `kan.Network` accepts and return
 lists of `Layer` and `InputMap`, and `NetworkGradients.layers` mixes `LayerGradients` and
 `InputMapGradients`.
 
+## Initializers (backlog M4)
+
+`include/kan/initializers.hpp`. Constructors are unchanged (zero coefficients, bias and
+denominators); an initializer is applied only by `kan::initialize(Layer&, Initializer)` or
+`kan::initialize(Network&, Initializer)`, with `Initializer = std::variant<VarianceScaling,
+NoiseInit>`. Both carry `distribution` (`kan::Distribution::Uniform` / `Normal`), a 64-bit
+`seed` and `denominators` (`DenominatorInit{bound = 0.5, radius = 1}`). Validation, all with
+`std::invalid_argument` before anything changes: gain / noise scale finite and positive, a
+known distribution, `bound` in (0, 1), `radius` finite and positive, a valid (not moved-from)
+layer, and for a `Guarded` rational layer `epsilon*(1+bound) < 1-bound`. Results that leave
+the double range raise `std::overflow_error`. Success replaces coefficients, bias (zero) and
+rational denominators through `set_carrier`; trainable RBF centers/log widths are kept (they
+define the reference measure). The network form validates every layer on copies before
+assigning, initializes the KAN layer at position p with seed `layer_seed(seed, p)` and resets
+LayerNorm maps that have gain/bias to gain 1, bias 0; affine and tanh maps are unchanged.
+
+**Determinism.** The generator is SplitMix64: draw j of a layer is
+`mix(seed + (j+1)*0x9E3779B97F4A7C15)`; `layer_seed(seed, p)` is `mix(seed + (p+1)*gamma)`.
+A uniform raw draw is `2u-1`, `u = (draw >> 11)*2^-53`, in [-1, 1); a normal raw draw is the
+Marsaglia polar method (pairs, rejecting `s >= 1` and `s = 0`) with a logarithm implemented
+from IEEE basic operations. Every derived quantity (moments, scales, the exponential of
+trainable log widths) uses basic operations, `sqrt`, `frexp`, `ldexp` and `nearbyint` only,
+so the same configuration and seed give bitwise-identical parameters with MSVC and GCC
+(pinned digests in `tests/initializer_test.cpp`). Draw order: coefficients in layout order,
+then denominators in layout order. A parameter is a per-term factor times one raw draw.
+
+**VarianceScaling{gain}.** `kan::reference_moments(BasisConfig)` returns the variance of the
+family's reference measure and `m_k = E[phi_k(x)^2]` under it:
+
+| Family | Reference measure | m_k | variance |
+|---|---|---|---|
+| Chebyshev | arcsine on [-1,1] (orthogonality weight) | 1, then 1/2 | 1/2 |
+| Legendre | uniform on [-1,1] | 1/(2k+1) | 1/3 |
+| Jacobi | normalized weight (1-x)^α(1+x)^β | h_k/h-mass, by its ratio recurrence | 4(α+1)(β+1)/((α+β+2)²(α+β+3)) |
+| Hermite (physicists') | N(0, 1/2) (weight e^{-x²}) | 2^k k! | 1/2 |
+| Fourier | uniform on one period [-π/ω, π/ω] | 1, then 1/2 | (π/ω)²/3 |
+| B-spline | uniform on the domain [t_p, t_K] | (p+1)-point Gauss-Legendre per span (exact) | L²/12 |
+| Gaussian RBF (fixed, trainable) | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 9w | L²/12 |
+| Mexican hat | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 12s | L²/12 |
+
+Coincident centers use [c-h, c+h], h the largest width or scale. With independent zero-mean
+coefficients `Var_c E_x[y²] = sum_i sum_k sigma_k² m_k` without cross terms, so
+`sigma_k² = gain²·variance / (inputs·terms·m_k)` (`m_k = 0` gives 0) gives every term the same
+share and `E[y²] = gain²·variance` for inputs drawn from the measure (variance-preserving).
+Uniform draws are `sqrt(3)·sigma_k·(2u-1)`, normal draws `sigma_k·z`. Rational edges use z
+uniform on [-radius, radius] (x on center ± radius·scale, variance (radius·scale)²/3) and the
+edge's own drawn denominator: `mu_k = E[u^{2k}/Q(radius·u)²]` by 16 panels of 8-point
+Gauss-Legendre, `sigma_k = sqrt(gain²·variance/(inputs·(m+1)·mu_k)) / radius^k`. A layer whose
+inputs leave the measure keeps the guarantee only approximately: put an input map between
+layers of bounded-domain families (Chebyshev, Legendre, Jacobi, B-spline); measured second
+moments over 8 layers stay within 0.3–1.5 times the target for every family.
+
+**NoiseInit{scale = 0.3}** (pykan `KANLayer`, master `ecde4ec`): amplitude
+`a = scale / (G·sqrt(inputs))`, G = terms - degree for B-splines (grid intervals), the term
+count for other families and m+1 for rational numerators; uniform draws `(a/2)·(2u-1)` are
+pykan's `U(-a/2, a/2)`, normal draws `(a/sqrt(12))·z` have the same variance. Differences from
+pykan: the noise is put on the coefficients rather than on the G+1 grid values followed by a
+least-squares fit; `scale_sp = 1/sqrt(inputs)` is folded into the amplitude; there is no SiLU
+base branch (backlog M3), so deep NoiseInit networks propagate almost no signal (see the M4
+evidence); pykan's generator is torch's, ours is SplitMix64.
+
+**Rational denominators** (both initializers). `beta_k = ±(bound/n)·(1+|ξ|)/2` with sign and ξ
+from one uniform draw, so `|beta_k|` is in [bound/(2n), bound/n], never zero, and
+`b_k = beta_k / radius^k`. Then for every `|z| <= radius`, `|S(z)| <= sum|b_k||z|^k <= bound`:
+`Q = 1+S >= 1-bound > epsilon(1+bound) >= epsilon(1+sum|b_k z^k|)` for `Guarded` (the relative
+guard cannot fire on the domain), `Q` in [1, 1+bound] for `Absolute` and [1, 1+bound²] for
+`Smooth`; no safe-policy denominator starts at the stationary point b = 0. A `b_k` that is
+zero or nonfinite in double (radius^k out of range) raises `std::overflow_error`. Outside the
+domain no bound is claimed.
+
+Python: `kan.Distribution.UNIFORM/NORMAL`, `kan.DenominatorInit(bound, radius)`,
+`kan.VarianceScaling(gain, distribution, seed, denominators)`, `kan.NoiseInit(scale, ...)`
+(value classes with equality), `kan.initialize(layer_or_network, initializer)` (in place,
+GIL released, `ValueError`/`OverflowError`), `kan.reference_moments(config)` returning
+`(variance, moments)` and `kan.layer_seed(seed, position)`. Initialized networks run on the
+resident executor by construction or `upload_parameters`; no executor change.
+
 ## Extension boundaries
 
 Basis and rational formulas have a single source shared by the CPU backend and
@@ -479,7 +557,7 @@ and `src/detail/rational_formulas.hpp`, parameterized by a finiteness guard (CPU
 device records status). Public declarations and validation live in
 `include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
 the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
-loops in `src/carriers/`, family operations in `src/families.cpp`; input maps in `src/input_map.cpp`
+loops in `src/carriers/`, family operations in `src/families.cpp`; initializers in `src/initializers.cpp` with portable draws and moments in `src/init/`; input maps in `src/input_map.cpp`
 with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
 dense contractions delegated to cuBLAS; the device query in `src/cuda_runtime.cpp`; the

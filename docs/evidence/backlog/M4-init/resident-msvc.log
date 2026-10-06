@@ -1,0 +1,9 @@
+﻿resident chebyshev: loss 2.329e-01 -> 1.870e-04
+PASS resident_chebyshev_from_variance_scaling
+resident bspline: loss 1.978e-01 -> 2.458e-03
+PASS resident_bspline_from_variance_scaling
+resident rational: loss 2.520e-01 -> 8.058e-02
+resident rational: loss 2.241e-01 -> 9.159e-02
+resident rational: loss 2.325e-01 -> 8.049e-02
+PASS resident_rational_policies_from_variance_scaling
+3/3 passed
