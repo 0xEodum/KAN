@@ -96,27 +96,35 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(con
     RationalHornerOf<Scalar> h{};
     h.z = z;
     const auto m = c.numerator_degree, n = c.denominator_degree;
+    // Each Horner chain is guarded once, at its end: x*z + c of a nonfinite x
+    // is nonfinite (inf*0 and inf-inf are NaN), so a chain whose intermediate
+    // overflows ends nonfinite and the guard reports exactly what guarding
+    // every step would (backlog C7 profiling: a guard per step was a large
+    // share of the forward pass's instructions).
     h.p = numerator[m];
     for (std::size_t k = m; k > 0; --k) {
-        h.dp = guard(h.dp * h.z + h.p);
-        h.p = guard(h.p * h.z + numerator[k - 1]);
+        h.dp = h.dp * h.z + h.p;
+        h.p = h.p * h.z + numerator[k - 1];
     }
+    guard(h.p); guard(h.dp);
     if constexpr (Policy == DenominatorPolicy::Guarded) {
         h.q = n ? denominator[n - 1] : Scalar(1);
         h.bound = n ? math::abs(denominator[n - 1]) : Scalar(1);
         for (std::size_t k = n; k > 0; --k) {
             const Scalar next = k == 1 ? Scalar(1) : denominator[k - 2];
-            h.dq = guard(h.dq * h.z + h.q);
-            h.q = guard(h.q * h.z + next);
-            h.bound = guard(h.bound * math::abs(h.z) + math::abs(next));
+            h.dq = h.dq * h.z + h.q;
+            h.q = h.q * h.z + next;
+            h.bound = h.bound * math::abs(h.z) + math::abs(next);
         }
+        guard(h.q); guard(h.dq); guard(h.bound);
     } else {
         // S and S' by Horner without the constant term, then Q = 1 + f(S) >= 1.
         Scalar s = n ? denominator[n - 1] : Scalar(0);
         for (std::size_t k = n; k > 0; --k) {
-            h.ds = guard(h.ds * h.z + s);
-            s = guard(k == 1 ? s * h.z : s * h.z + denominator[k - 2]);
+            h.ds = h.ds * h.z + s;
+            s = k == 1 ? s * h.z : s * h.z + denominator[k - 2];
         }
+        guard(s); guard(h.ds);
         if constexpr (Policy == DenominatorPolicy::Absolute) {
             h.gain = s > 0 ? Scalar(1) : s < 0 ? Scalar(-1) : Scalar(0);
             h.q = guard(1 + math::abs(s));
