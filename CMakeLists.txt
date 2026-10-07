@@ -155,6 +155,12 @@ if(BUILD_TESTING)
         target_link_libraries(rational_policy_resident_test PRIVATE kan::cuda)
         add_test(NAME rational_policy_resident COMMAND rational_policy_resident_test)
         set_tests_properties(rational_policy_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog C6-C8: rational kernel layout, forward VJP checks, launch bounds.
+        add_executable(rational_resident_execution_test tests/rational_resident_execution_test.cpp)
+        target_include_directories(rational_resident_execution_test PRIVATE tests)
+        target_link_libraries(rational_resident_execution_test PRIVATE kan::cuda)
+        add_test(NAME rational_resident_execution COMMAND rational_resident_execution_test)
+        set_tests_properties(rational_resident_execution PROPERTIES LABELS "cuda" TIMEOUT 180)
         # Backlog C2: GEMM contraction engine.
         add_executable(resident_contraction_test tests/resident_contraction_test.cpp)
         target_include_directories(resident_contraction_test PRIVATE tests)
