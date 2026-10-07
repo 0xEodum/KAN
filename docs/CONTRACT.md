@@ -413,7 +413,8 @@ Padé coefficients (such as the [1/1] exponential above) describe a `Guarded` ed
 An unknown enumerator raises `std::invalid_argument` ("invalid rational
 configuration"). CPU loops dispatch the policy once per call; resident CUDA has one
 forward and one parameter-VJP kernel instantiation per policy and caches `g` per
-sample/edge for the safe policies only (the `Guarded` arena layout is unchanged).
+sample/edge for the safe policies only (the `Guarded` layout has no `g` region; see the
+rational resident caches below).
 
 Numerator layout is `(outputs,inputs,m+1)` and denominator layout is
 `(outputs,inputs,n)`; bias is per output. A rational layer holds `RationalEdges`
@@ -432,6 +433,23 @@ domain_error; a failed execution invalidates its output/gradient state. Numerica
 calls do not allocate GPU storage or fall back to CPU evaluation. CPU/GPU parity
 remains tolerance-based. Since R7 the deprecated synchronous layer API also runs
 rational layers, through this executor.
+
+*Resident rational execution (backlog C6-C8).* Per rational layer the arena holds the
+arguments `z` per input and sample (`capacity*inputs`) and edge-major caches of `P`, `Q` and
+`dr/dx` (plus `g` for the safe policies) per edge and sample (`capacity*inputs*outputs`
+each); every rational kernel maps consecutive threads to consecutive samples, so these
+accesses are coalesced. As on the CPU, the forward pass reports a nonfinite
+parameter-VJP intermediate (`z^k`, `z^k/Q`, `dr/da_k`, `dr/db_k` for `k <= max(m,n)`) of
+every executed sample, also when the output and the upstream are finite or zero, as
+`std::overflow_error` of that forward pass (in a training step: its forward phase); the
+backward pass recomputes these values unchecked. The forward pass evaluates them in full
+only where a cheap bound (largest rounded power, `|z^k/Q|`, `|r z^k/Q|` and for `Smooth`
+`|g z^k/Q|` against `max/4` of the precision) does not prove them finite; the reported
+status is exactly that of the full evaluation. A Horner chain is checked at its end, which
+reports exactly what a check after every step would. The parameter VJP runs one warp per
+edge, which accumulates all numerator, denominator (and for input 0 the bias) sums over
+the samples in a fixed order: results are deterministic and bitwise those of the
+pre-C6 executor in both builds ([C6-C8 evidence](evidence/backlog/C6-C8.md)).
 
 Python exposes one class per basis configuration type (`kan.ChebyshevConfig(size=...)`,
 `kan.BSplineConfig(degree=..., knots=...)`, ...; each has a `size` property and value

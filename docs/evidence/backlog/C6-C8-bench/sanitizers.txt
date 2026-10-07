@@ -1,0 +1,176 @@
+== build-b-c678 memcheck rational_resident_execution_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 memcheck initializer_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 racecheck rational_resident_execution_test
+5/5 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678 racecheck m4_resident_test
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678 racecheck rational_policy_resident_test
+3/3 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678 racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678 synccheck rational_resident_execution_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 synccheck m4_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 synccheck rational_policy_resident_test
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 initcheck rational_resident_execution_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 initcheck m4_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 initcheck rational_policy_resident_test
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678 initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck rational_resident_execution_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma memcheck initializer_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma racecheck rational_resident_execution_test
+5/5 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678-fma racecheck m4_resident_test
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678-fma racecheck rational_policy_resident_test
+3/3 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678-fma racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-b-c678-fma synccheck rational_resident_execution_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma synccheck m4_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma synccheck rational_policy_resident_test
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma initcheck rational_resident_execution_test
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma initcheck m4_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma initcheck rational_policy_resident_test
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-b-c678-fma initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors

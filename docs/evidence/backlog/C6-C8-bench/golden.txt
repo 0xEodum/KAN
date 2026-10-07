@@ -1,0 +1,18 @@
+# C6-C8 golden check: baseline 7abbb7d (KAN-c678base/build-parity, build-fma) vs final e00dfe4 (build-b-c678, build-b-c678-fma)
+018eb7ce07dd4a78c842f01a0ddc3585f2e2d858a87f6abb93eb007826c8122a *base-parity.txt
+018eb7ce07dd4a78c842f01a0ddc3585f2e2d858a87f6abb93eb007826c8122a *final-parity.txt
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden-base-parity.txt
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden-final-parity.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-base-parity.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-final-parity.txt
+498019198999ecbcbfe0cd1b55ba4063b8549682e0e5962c68cdf0227b33c895 *f32-base-parity.txt
+498019198999ecbcbfe0cd1b55ba4063b8549682e0e5962c68cdf0227b33c895 *f32-final-parity.txt
+57c6bd277d361372e9edf92392a9cc5b3fd519ab8bac0c0e4cea95ffc812eb74 *base-fma.txt
+57c6bd277d361372e9edf92392a9cc5b3fd519ab8bac0c0e4cea95ffc812eb74 *final-fma.txt
+13c4cdb4724bbbab24fed4d34ca2219f57cfa3752af858fda6dd1ae00796e5c4 *golden-base-fma.txt
+13c4cdb4724bbbab24fed4d34ca2219f57cfa3752af858fda6dd1ae00796e5c4 *golden-final-fma.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-base-fma.txt
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-final-fma.txt
+7eb68a83a54167b5c6be054137e193f531f7526547645cc4abc78eb2b7d6687b *f32-base-fma.txt
+7eb68a83a54167b5c6be054137e193f531f7526547645cc4abc78eb2b7d6687b *f32-final-fma.txt
+# base-*/final-*: rational_dump.cpp; golden-*: golden/golden.cpp (default, --layers); f32-*: C3-bench/f32_dump.cpp. All pairs byte-identical.
