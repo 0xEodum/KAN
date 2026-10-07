@@ -287,8 +287,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE void rational_parameter_vjps_check(const Config
 //   path is at most z^k/Q with |z^k| tiny and Q nonzero (a pole is reported
 //   before): at most 2^52 (FP64) or 2^23 (FP32).
 // The proof and its test cases are in docs/evidence/backlog/C6-C8.md.
-template<class Scalar> constexpr Scalar rational_vjp_limit = Scalar(0x1.fffffffffffffp+1021); // DBL_MAX/4
-template<> constexpr float rational_vjp_limit<float> = 0x1.fffffep+125f;                       // FLT_MAX/4
+template<class Scalar> inline constexpr Scalar rational_vjp_limit = Scalar(0x1.fffffffffffffp+1021); // DBL_MAX/4
+template<> inline constexpr float rational_vjp_limit<float> = 0x1.fffffep+125f;                       // FLT_MAX/4
 template<DenominatorPolicy Policy, class Config, class Scalar>
 KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_parameter_vjps_bounded(const Config& c, const RationalHornerOf<Scalar>& h,
                                                      Scalar value) {
