@@ -48,9 +48,18 @@ template<> struct constants<float> {
     static constexpr float ln2 = 0.693147180559945309417232121458f;
 };
 
+// finite and tiny (|v| below the normal range: zero or subnormal) of a double.
+// Device code tests the exponent field with integer instructions, the exact
+// equivalent of the comparisons: these compile to DSETP on the FP64 pipe,
+// which GA102 runs at 1/64 of the FP32 rate (backlog C7 profiling).
+#if defined(__CUDA_ARCH__)
+KAN_HOST_DEVICE inline bool finite(double v) { return (__double2hiint(v) & 0x7ff00000) != 0x7ff00000; }
+KAN_HOST_DEVICE inline bool tiny(double v) { return (__double2hiint(v) & 0x7ff00000) == 0; }
+#else
 KAN_HOST_DEVICE inline bool finite(double v) { return KAN_MATH_NAMESPACE::isfinite(v); }
-KAN_HOST_DEVICE inline bool signbit(double v) { return KAN_MATH_NAMESPACE::signbit(v); }
 KAN_HOST_DEVICE inline bool tiny(double v) { return KAN_MATH_NAMESPACE::fabs(v) < min_normal; }
+#endif
+KAN_HOST_DEVICE inline bool signbit(double v) { return KAN_MATH_NAMESPACE::signbit(v); }
 KAN_HOST_DEVICE inline double abs(double v) { return KAN_MATH_NAMESPACE::fabs(v); }
 KAN_HOST_DEVICE inline double exp(double v) { return KAN_MATH_NAMESPACE::exp(v); }
 KAN_HOST_DEVICE inline double log(double v) { return KAN_MATH_NAMESPACE::log(v); }

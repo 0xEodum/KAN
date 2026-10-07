@@ -68,6 +68,19 @@ struct RationalEdgeOf {
 };
 using RationalEdge = RationalEdgeOf<double>;
 
+// a*b rounded on its own in every build: an FMA (KAN_CUDA_FMA=ON) build may
+// otherwise contract the guarded product into a following addition, so that
+// the value used differs from the value checked (and from the CPU's).
+template<class Scalar>
+KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rounded_product(Scalar a, Scalar b) {
+#if defined(__CUDA_ARCH__)
+    if constexpr (std::is_same_v<Scalar, double>) return __dmul_rn(a, b);
+    else return __fmul_rn(a, b);
+#else
+    return a * b;
+#endif
+}
+
 template<class Config, class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_argument(const Config& c, Scalar x, const Guard& guard) {
     return guard(guard(x - static_cast<Scalar>(c.center)) / static_cast<Scalar>(c.scale));
@@ -108,7 +121,7 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const 
             h.q = guard(1 + math::abs(s));
         } else {
             h.gain = guard(2 * s);
-            h.q = guard(1 + guard(s * s));
+            h.q = guard(1 + guard(rounded_product(s, s)));
         }
         h.dq = guard(h.gain * h.ds);
     }

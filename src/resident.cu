@@ -66,7 +66,16 @@ template<class T> void representable(std::span<const double> values) {
     if constexpr (!std::is_same_v<T, double>) for (double v : values) narrow<T>(v);
 }
 
-template<class T> __device__ void report(T value, int* status) { if (!isfinite(value)) atomicOr(status, 1); }
+// Finiteness test of the device status checks. FP64: an integer test of the
+// exponent field (all ones for inf and NaN), the exact equivalent of
+// isfinite; isfinite compiles to DSETP on the FP64 pipe, which GA102 runs at
+// 1/64 of the FP32 rate, where these checks were a large share of the FP64
+// instructions of the rational and basis kernels (backlog C7 profiling).
+__device__ __forceinline__ bool finite_value(double value) {
+    return (__double2hiint(value) & 0x7ff00000) != 0x7ff00000;
+}
+__device__ __forceinline__ bool finite_value(float value) { return isfinite(value); }
+template<class T> __device__ void report(T value, int* status) { if (!finite_value(value)) atomicOr(status, 1); }
 // Device guard for the shared formulas: record a nonfinite status bit and
 // continue; the host raises after the launch sequence completes.
 struct StatusGuard {
