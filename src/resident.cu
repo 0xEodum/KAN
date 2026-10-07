@@ -485,13 +485,28 @@ __global__ void mse_kernel(const T* y, const T* t, T* upstream, std::size_t coun
 // samples (backlog C6), which makes the cache accesses coalesced. One
 // instantiation per denominator policy; all caches live in the arena.
 //
+// Arguments: z = (x - center)/scale depends on the input and sample only, so
+// it is computed (and checked) once into `arguments`, [i*capacity + sample],
+// instead of once per output in the forward pass and once per edge in the
+// parameter VJP (a division each, and the layer input read with stride
+// `inputs`); both kernels then read it coalesced, the same value bitwise.
+template<class T>
+__global__ void rational_argument_kernel(const T* input, T* arguments, std::size_t batch, std::size_t capacity,
+                                         std::size_t inputs, detail::RationalScalars<T> config, int* status) {
+    const StatusGuard guard{status};
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < batch*inputs; index += stride) {
+        const auto i = index/batch, sample = index%batch;
+        arguments[i*capacity+sample] = detail::rational_argument(config, input[sample*inputs+i], guard);
+    }
+}
 // Forward: one thread per (output, sample), sample fastest; it sums its
 // output over the inputs in order. The parameter-VJP intermediates of every
 // executed sample are checked here (the backward pass recomputes them with
 // CheckedEarlier), with the full check only where the cheap bound of
 // rational_parameter_vjps_bounded does not hold (backlog C7).
 template<DenominatorPolicy Policy, class T>
-__global__ void rational_forward_kernel(const T* input, const T* a, const T* b, const T* bias,
+__global__ void rational_forward_kernel(const T* arguments, const T* a, const T* b, const T* bias,
                                         T* values, T* denominator_values, T* derivatives, T* gains, T* output,
                                         std::size_t batch, std::size_t capacity, std::size_t inputs, std::size_t outputs,
                                         detail::RationalScalars<T> config, int* status) {
@@ -503,7 +518,7 @@ __global__ void rational_forward_kernel(const T* input, const T* a, const T* b, 
         T sum = bias[o];
         for (std::size_t i = 0; i < inputs; ++i) {
             const auto edge = o*inputs+i, cache = edge*capacity+sample;
-            const auto h = detail::rational_horner<Policy>(config, input[sample*inputs+i], a+edge*(m+1), b+edge*n, guard);
+            const auto h = detail::rational_horner_at<Policy>(config, arguments[i*capacity+sample], a+edge*(m+1), b+edge*n, guard);
             if (detail::rational_pole<Policy>(config, h)) {
                 atomicOr(status, 2);
                 values[cache] = denominator_values[cache] = derivatives[cache] = 0;
@@ -530,6 +545,7 @@ __global__ void rational_input_kernel(const T* derivatives, const T* upstream, T
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < batch*inputs; index += stride) {
         const auto i = index/batch, sample = index%batch;
         T sum = 0;
+#pragma unroll 8
         for (std::size_t o = 0; o < outputs; ++o) sum += upstream[sample*outputs+o]*derivatives[(o*inputs+i)*capacity+sample];
         input_gradient[sample*inputs+i] = sum; report(sum, status);
     }
@@ -547,7 +563,7 @@ constexpr std::size_t rational_max_degree = 16;
 // backward runs only after a successful forward. The upstream products are
 // backward results and are reported here.
 template<DenominatorPolicy Policy, class T>
-__global__ void rational_parameter_kernel(const T* input, const T* values, const T* denominator_values, const T* gains,
+__global__ void rational_parameter_kernel(const T* arguments, const T* values, const T* denominator_values, const T* gains,
                                           const T* upstream, const T* parameters, T* gradients,
                                           std::size_t batch, std::size_t capacity, std::size_t inputs, std::size_t outputs,
                                           detail::RationalScalars<T> config, T lambda, int* status) {
@@ -567,10 +583,11 @@ __global__ void rational_parameter_kernel(const T* input, const T* values, const
         for (std::size_t k = 0; k <= rational_max_degree; ++k) numerator_sums[k] = 0;
 #pragma unroll
         for (std::size_t k = 0; k < rational_max_degree; ++k) denominator_sums[k] = 0;
+#pragma unroll 2
         for (auto sample = static_cast<std::size_t>(lane); sample < batch; sample += 32) {
             const auto cache = edge*capacity+sample;
             const T u = upstream[sample*outputs+o];
-            const T z = detail::rational_argument(config, input[sample*inputs+i], guard);
+            const T z = arguments[i*capacity+sample];
             const T q = denominator_values[cache];
             const T p = n ? values[cache] : T(0);
             const T value = n ? p/q : T(0);
@@ -951,15 +968,16 @@ struct TrainableRbfPlan {
     unsigned partial_tiles = 1;
 };
 
-// Rational edges with edge-major caches of P, Q and dr/dx, plus g = dQ/dS for
-// the safe denominator policies (nonlinear block: denominators).
+// Rational edges with the arguments z per (input, sample), edge-major caches
+// of P, Q and dr/dx, plus g = dQ/dS for the safe denominator policies
+// (nonlinear block: denominators).
 template<class T>
 struct RationalPlan {
     using edges_type = RationalEdges;
     ParameterBlock block;
     RationalConfig config;
     detail::RationalScalars<T> scalars; // center, scale and the pole threshold in T
-    std::size_t values = 0, derivatives = 0, denominator_values = 0, gains = 0;
+    std::size_t arguments = 0, values = 0, derivatives = 0, denominator_values = 0, gains = 0;
     bool safe() const { return config.denominator_policy != DenominatorPolicy::Guarded; }
 };
 
@@ -1134,6 +1152,7 @@ template<class T> void reserve_workspace(TrainableRbfPlan<T>& plan, std::size_t 
 }
 template<class T> void reserve_workspace(RationalPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     const auto count = product(product(capacity, plan.block.inputs), plan.block.outputs);
+    plan.arguments = reserve(product(capacity, plan.block.inputs));
     plan.values = reserve(count); plan.derivatives = reserve(count); plan.denominator_values = reserve(count);
     if (plan.safe()) plan.gains = reserve(count);
 }
@@ -1259,9 +1278,12 @@ template<class T> void run_forward(Context<T>& s, const TrainableRbfPlan<T>& pla
 template<class T> void run_forward(Context<T>& s, const RationalPlan<T>& plan, std::size_t j) {
     const auto& b = plan.block;
     T* gains = plan.safe() ? s.ptr(plan.gains) : nullptr;
+    rational_argument_kernel<<<blocks(s.batch*b.inputs),256,0,s.stream>>>(s.ptr(s.activation[j]), s.ptr(plan.arguments),
+        s.batch, s.capacity, b.inputs, plan.scalars, s.status);
+    check(cudaGetLastError(), "resident rational argument launch");
     detail::visit_denominator_policy(plan.config.denominator_policy, [&](auto policy) {
         rational_forward_kernel<decltype(policy)::value><<<blocks(s.batch*b.outputs),256,0,s.stream>>>(
-            s.ptr(s.activation[j]),s.ptr(s.parameters+b.offset),
+            s.ptr(plan.arguments),s.ptr(s.parameters+b.offset),
             s.ptr(s.parameters+b.nonlinear()),s.ptr(s.parameters+b.bias()),
             s.ptr(plan.values),s.ptr(plan.denominator_values),s.ptr(plan.derivatives),gains,s.ptr(s.activation[j+1]),
             s.batch,s.capacity,b.inputs,b.outputs,plan.scalars,s.status);
@@ -1394,7 +1416,7 @@ template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, 
     const T* gains = plan.safe() ? s.ptr(plan.gains) : nullptr;
     detail::visit_denominator_policy(plan.config.denominator_policy, [&](auto policy) {
         rational_parameter_kernel<decltype(policy)::value><<<blocks(b.inputs*b.outputs,8),256,0,s.stream>>>(
-            s.ptr(s.activation[j]),s.ptr(plan.values),s.ptr(plan.denominator_values),gains,
+            s.ptr(plan.arguments),s.ptr(plan.values),s.ptr(plan.denominator_values),gains,
             s.ptr(s.upstream[j+1]),s.ptr(s.parameters+b.offset),s.ptr(s.gradients+b.offset),s.batch,s.capacity,b.inputs,b.outputs,
             plan.scalars,lambda,s.status);
     });

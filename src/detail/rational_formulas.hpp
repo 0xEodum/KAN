@@ -86,14 +86,15 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_argument(const Config& c, Scala
     return guard(guard(x - static_cast<Scalar>(c.center)) / static_cast<Scalar>(c.scale));
 }
 
-// Horner evaluation of P, P', Q, Q' (and the guard bound or S', g). `numerator`
-// holds numerator_degree+1 coefficients, `denominator` holds denominator_degree.
+// Horner evaluation of P, P', Q, Q' (and the guard bound or S', g) at the
+// argument z = rational_argument(c, x). `numerator` holds numerator_degree+1
+// coefficients, `denominator` holds denominator_degree.
 template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const Config& c, Scalar x,
-                                               const Scalar* numerator,
-                                               const Scalar* denominator, const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(const Config& c, Scalar z,
+                                                  const Scalar* numerator,
+                                                  const Scalar* denominator, const Guard& guard) {
     RationalHornerOf<Scalar> h{};
-    h.z = rational_argument(c, x, guard);
+    h.z = z;
     const auto m = c.numerator_degree, n = c.denominator_degree;
     h.p = numerator[m];
     for (std::size_t k = m; k > 0; --k) {
@@ -126,6 +127,13 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const 
         h.dq = guard(h.gain * h.ds);
     }
     return h;
+}
+// The same at the input x.
+template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
+KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const Config& c, Scalar x,
+                                               const Scalar* numerator,
+                                               const Scalar* denominator, const Guard& guard) {
+    return rational_horner_at<Policy>(c, rational_argument(c, x, guard), numerator, denominator, guard);
 }
 
 // Guarded policy: |Q| <= epsilon * bound is an unsafe pole. The safe policies
