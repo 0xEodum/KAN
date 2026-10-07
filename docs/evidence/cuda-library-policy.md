@@ -51,3 +51,29 @@ entries are retained; current context is distinguished from the original review.
 - Checked the documentation patch with `git diff --check` and reviewed its scope.
   No code, build dependencies or benchmark artifacts were changed; runtime tests
   and profiling are not needed for this documentation-only policy change.
+
+## Verification of the backlog translation and context refresh
+
+The policy step was committed and pushed as `e2bbde3`. The backlog refresh was
+checked against the pre-change `6d59ffd:docs/BACKLOG.md`:
+
+- All 28 item IDs, priorities and open/closed statuses match the original:
+  16 closed, 12 open. C3 retains its stage-1 closure; C12 retains its partial
+  FP32 completion and open FP64 work.
+- All 22 historical status-journal entries remain in order. Their dates,
+  numeric tokens, inline code and link targets are unchanged; one owner-decision
+  entry dated 2026-10-07 is added.
+- All 18 original Markdown link targets are retained. Local links and the C1
+  heading anchor resolve in the translated backlog and this evidence file.
+- No Cyrillic text remains in BACKLOG; Markdown table column counts are valid.
+  The original reproduction commands are retained, with English comments and
+  an explicit historical-baseline label.
+- Current context was checked against ROADMAP, CONTRACT, CMake, public headers,
+  `src/carriers/`, `src/detail/`, `src/init/`, the kernel-free legacy adapter,
+  resident parameter-upload/training/recomputed-derivative paths and the recorded
+  C3 evidence. The source still sets `status_interval` to 1. Volatile code-size
+  estimates and obsolete implementation descriptions were removed from the quick
+  context; original table findings and measurements remain explicitly historical.
+- No repository links to translated BACKLOG heading anchors were found.
+  `git diff --check` passes. Only AGENTS, BACKLOG and this decision evidence change
+  across the documentation pass; no runtime tests, builds or profiles were rerun.

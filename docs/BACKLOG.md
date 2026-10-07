@@ -1,136 +1,195 @@
-# Бэклог по итогам ревью M1–M4
+# M1–M4 review backlog
 
-Дата ревью: 2026-10-01, ветка `cpp-foundation`, HEAD `7b58b61` (M4 закрыта, M5 — NEXT).
-Источник истины по стадиям — [ROADMAP.md](ROADMAP.md); этот файл хранит находки ревью,
-их обоснование и предлагаемый порядок работ. Перенос пунктов в ROADMAP (новая стадия,
-изменение области M5) фиксируется отдельной записью в `docs/evidence`, как требует `AGENTS.md`.
+Original review: 2026-10-01, branch `cpp-foundation`, HEAD `7b58b61` (M4 was closed;
+M5 was NEXT at the time). Current context verified on 2026-10-07 against `6d59ffd`
+(C3 closure) and the subsequent CUDA library policy decision.
+[ROADMAP.md](ROADMAP.md) is the source of truth for stages; this file records review
+findings, their rationale and the proposed work order. Changes to ROADMAP (a new
+stage or a change to M5 scope) require a separate record in `docs/evidence`, as
+specified by `AGENTS.md`.
 
-## Быстрое восстановление контекста
+## Quick context
 
-- Код небольшой: ~1.6k строк в `src/` + `include/`. Вся GPU-логика — `src/resident.cu` (641 строка),
-  устаревший M1-API — `src/cuda.cu`. Контракт — [CONTRACT.md](CONTRACT.md).
-- Вердикт ревью: математика верна, это настоящий KAN (`y_o = b_o + Σ_i φ_{o,i}(x_i)`).
-  Главные долги — устройство типов носителей, практическая обучаемость глубоких сетей
-  и эффективность CUDA (FP64 + наивные свёртки вместо GEMM).
-- Рекомендованный порядок: **R (рефакторинг носителей) → C1/C2 (точность + GEMM) → M5**.
-  Пункты M (математика) можно вести параллельно, они меняют контракт.
-- Замеры и скрипты: [evidence/review-2026-10-01](evidence/review-2026-10-01/)
-  (`torch_reference.py`, `resident_bench.cpp`, `build_resident_bench.cmd`).
+- **Current stage:** B is NEXT. All remaining backlog items must close before
+  roadmap M5 starts; M5 is PLANNED and depends on B. Work in passes of at most three
+  items, honoring dependencies and taking dependency-free P0 items first. The
+  original R → C1/C2 → M5 recommendation is historical; it does not bypass the
+  [backlog gate](evidence/backlog-gate.md). Backlog IDs M1–M7 are review items,
+  distinct from roadmap milestones with the same names.
+- **Status:** 28 items, 16 closed and 12 open. R1–R3 and R7–R9 are closed; R4–R6
+  remain open. M1, M2 and M4 are closed; M3 and M5–M7 remain open. C1–C4 and C9–C11
+  are closed (C3 at stage 1); C5–C8 and C12 remain open. All P0 items are closed.
+  C12 is still open for FP64; its FP32 portion was addressed in C1.
+- **Architecture:** typed per-family `BasisConfig`; `Carrier` separates fixed-basis
+  edges, trainable RBF edges and rational edges. The shared CPU linear engine is
+  in `src/carriers/linear_engine.hpp`, CPU carrier loops in `src/carriers/`, and
+  shared host/device formulas in `src/detail/`. Input maps are in `src/input_map.cpp`;
+  initializers in `src/initializers.cpp` and `src/init/`; topology in `src/network.cpp`.
+  Public headers are in `include/kan/`. See [CONTRACT.md](CONTRACT.md) for numerical
+  semantics and extension boundaries; R4's directory reorganization is pending.
+- **CUDA:** `src/resident.cu` implements persistent mixed-network execution with
+  reusable storage, cuBLAS contractions, specialized small kernels, explicit
+  `upload_parameters`, and graph-based `train_step`. `src/cuda.cu` is a deprecated,
+  kernel-free M1 adapter over `ResidentNetwork`; the supported device query is in
+  `kan/cuda_runtime.hpp` / `src/cuda_runtime.cpp`. CUDA is an optional `kan::cuda`
+  target, currently linked to cudart/cuBLAS (CUDA >= 12); the CPU target has no
+  CUDA dependency. FP64 remains the default; FP32 and TF32 are opt-in.
+  `KAN_CUDA_FMA=OFF` remains the default parity build; ON selects the performance
+  build. `status_interval` currently defaults to 1; C9's owner question about that
+  default remains recorded in the journal.
+- **Libraries and custom kernels:** CUDA ecosystem libraries and components are
+  permitted, including cuBLAS/cuBLASLt, CUTLASS/CuTe, cuTENSOR, cuDNN, cuSPARSE,
+  cuSOLVER, cuFFT, CUB/Thrust and others. Prefer suitable library primitives and
+  their extension. Use custom CUDA kernels when library facilities do not cover
+  the operation or contract, or when profiling and matched measurements demonstrate
+  an advantage. Preserve numerical, precision and reproducibility contracts;
+  measure complete calls or training steps, document adopted dependency versions,
+  GPU/toolchain requirements and installation validation, and keep CPU-only builds
+  independent of CUDA. See `AGENTS.md` rule 8 and the
+  [policy decision](evidence/cuda-library-policy.md). Permission does not add a
+  dependency or promise acceleration. C3 remains closed; further GEMM fusion is a
+  possible follow-up, not an open item created by this policy.
+- **Evidence:** the latest recorded C3 validation reports 41/41 CTest in both
+  builds, byte-identical baseline comparisons, clean sanitizers and no FP64 frozen
+  regression ([C3](evidence/backlog/C3.md)); these are recorded results, not new
+  test runs in this documentation pass. Current training harnesses and profiles
+  are in [C9-bench](evidence/backlog/C9-bench/) and
+  [C3-bench](evidence/backlog/C3-bench/); each closure below links its own evidence.
+  [review-2026-10-01](evidence/review-2026-10-01/) contains the original diagnostic
+  PyTorch/resident comparison, not a benchmark of the current implementation.
 
-Обозначения приоритета: **P0** — блокирует следующую веху или даёт кратный выигрыш,
-**P1** — важно, **P2** — желательно.
+Priorities: **P0** — blocks the next milestone or offers a multiplicative speedup;
+**P1** — important; **P2** — desirable.
+
+The tables below retain the recorded findings and proposed tasks. The
+"Where / why" column describes the original finding (or a later recorded addition),
+not the current implementation of closed items; source line numbers are historical.
+Use the linked evidence and CONTRACT for accepted behavior.
 
 ---
 
-## R. Организация кода
+## R. Code organization
 
-Ключевая мысль: директории `carriers/…` — правильная идея, но проблема в типах, а не в папках.
-Группировать стоит по свойству, важному для исполнения, а не по «orthogonal/harmonic»
-(Фурье тоже ортогонален, B-сплайн — нет).
+Key point: `carriers/…` directories are a useful direction, but the problem is in
+the types, not the folders. Group by properties relevant to execution rather than
+"orthogonal/harmonic" (Fourier is also orthogonal; B-splines are not).
 
-| ID | P | Задача | Где / почему |
+| ID | P | Task | Where / why (recorded finding) |
 |---|---|---|---|
-| R1 | P0 | (ГОТОВО, [evidence](evidence/backlog/R1.md)) Заменить плоский `BasisConfig` на `std::variant<ChebyshevConfig, …, BSplineConfig>` (pybind11 поддерживает variant) | `include/kan/basis.hpp:10-23` — все поля всех семейств в одной структуре |
-| R2 | P0 | (ГОТОВО, [evidence](evidence/backlog/R2.md)) Убрать флаг `rational_` и ветвления из `Layer`: разделить носители, **линейные по параметрам** (общий движок «раскладка + GEMM»), и **нелинейные** (rational, обучаемые RBF, будущий PQC) со своими VJP. Семейно-специфичные методы (`insert_knot`, `adapt_grid`, `set_rbf_parameters`) вынести с общего класса | `src/layer.cpp:88`, `:127`, sgd/validate; M5 иначе добавит третью ветку |
-| R3 | P0 | (ГОТОВО, [evidence](evidence/backlog/R3.md)) Единственный источник формулы семейства: `__host__ __device__` header-функции, общие для CPU и CUDA | Сейчас дублируются: `src/basis.cpp` ↔ `src/resident.cu:48-172`, `src/rational.cpp` ↔ `src/resident.cu:258-327` (Якоби, log-space Гаусс/Mexican hat, Cox–de Boor, Горнер) |
-| R4 | P1 | Раскладка каталогов: `carriers/{polynomial,trigonometric,local,rational,quantum}`, `backends/{cpu,cuda}`, `core/` (Layer, Network, ошибки, формы) | Предложение ревью; `local/` = B-сплайн, RBF, Mexican hat |
-| R5 | P1 | Переименовать тесты и бенчмарки по фичам, зеркально `carriers/` | Сейчас `m3_layer_test`, `m4_resident_test` и т.п. — названы по вехам |
-| R6 | P2 | Добавить `.clang-format` и привести код M3/M4 к нему | Плотные строки с несколькими операторами, напр. `src/resident.cu:520-523`, `src/rational.cpp` |
-| R7 | P2 | (ГОТОВО, [evidence](evidence/backlog/R7.md)) Объявить deprecated или пустить через resident-исполнитель M1-API `src/cuda.cu` | Только Chebyshev, malloc на каждый вызов, `coefficient_gradient_kernel` за O(K²·B) (`src/cuda.cu:140`) |
-| R8 | P1 | (ГОТОВО, [evidence](evidence/backlog/R8-R9.md)) Общий заголовок запроса устройства `kan/cuda_runtime.hpp`: `kan::cuda::available()` (не deprecated, имя прежнее) включают и `kan/cuda.hpp`, и `kan/resident.hpp`; реализация — отдельно от legacy-адаптера | Решение владельца по итогам R7 ([решение](evidence/backlog/R8-R9-decision.md)): граница deprecation проходила неверно — запрос устройства нужен и современному API |
-| R9 | P1 | (ГОТОВО, [evidence](evidence/backlog/R8-R9.md)) `ResidentNetwork::upload_parameters(...)` — явная загрузка параметров (веса после CPU-обучения, восстановление модели) без изменения существующих сигнатур; без автоматического кэша исполнителя на поток | Решение владельца по итогам R7 ([решение](evidence/backlog/R8-R9-decision.md)): основной путь — один `ResidentNetwork` на много вызовов |
+| R1 | P0 | (DONE, [evidence](evidence/backlog/R1.md)) Replace the flat `BasisConfig` with `std::variant<ChebyshevConfig, …, BSplineConfig>` (pybind11 supports variants) | `include/kan/basis.hpp:10-23` — all fields of all families in one structure |
+| R2 | P0 | (DONE, [evidence](evidence/backlog/R2.md)) Remove the `rational_` flag and branches from `Layer`: separate carriers **linear in their parameters** (shared "expansion + GEMM" engine) from **nonlinear** carriers (rational, trainable RBF, future PQC) with their own VJPs. Move family-specific methods (`insert_knot`, `adapt_grid`, `set_rbf_parameters`) out of the common class | `src/layer.cpp:88`, `:127`, sgd/validate; otherwise M5 adds a third branch |
+| R3 | P0 | (DONE, [evidence](evidence/backlog/R3.md)) Single source for each family's formulas: `__host__ __device__` header functions shared by CPU and CUDA | Duplicated at review time: `src/basis.cpp` ↔ `src/resident.cu:48-172`, `src/rational.cpp` ↔ `src/resident.cu:258-327` (Jacobi, log-space Gaussian/Mexican hat, Cox–de Boor, Horner) |
+| R4 | P1 | Directory layout: `carriers/{polynomial,trigonometric,local,rational,quantum}`, `backends/{cpu,cuda}`, `core/` (Layer, Network, errors, shapes) | Review proposal; `local/` = B-spline, RBF, Mexican hat |
+| R5 | P1 | Rename tests and benchmarks by feature, mirroring `carriers/` | `m3_layer_test`, `m4_resident_test`, etc. are named after milestones |
+| R6 | P2 | Add `.clang-format` and format M3/M4 code accordingly | Dense lines with multiple statements, e.g. `src/resident.cu:520-523`, `src/rational.cpp` |
+| R7 | P2 | (DONE, [evidence](evidence/backlog/R7.md)) Deprecate the M1 API in `src/cuda.cu` or route it through the resident executor | Chebyshev only, malloc per call, `coefficient_gradient_kernel` at O(K²·B) (`src/cuda.cu:140`) |
+| R8 | P1 | (DONE, [evidence](evidence/backlog/R8-R9.md)) Shared device-query header `kan/cuda_runtime.hpp`: both `kan/cuda.hpp` and `kan/resident.hpp` include `kan::cuda::available()` (same name, not deprecated); implementation separate from the legacy adapter | Owner decision following R7 ([decision](evidence/backlog/R8-R9-decision.md)): the deprecation boundary was incorrect — the device query is also needed by the modern API |
+| R9 | P1 | (DONE, [evidence](evidence/backlog/R8-R9.md)) `ResidentNetwork::upload_parameters(...)` — explicit parameter upload (weights after CPU training, model restoration) without changing existing signatures; no automatic per-thread executor cache | Owner decision following R7 ([decision](evidence/backlog/R8-R9-decision.md)): the main path is one `ResidentNetwork` reused across many calls |
 
 ---
 
-## M. Математика и обучаемость
+## M. Mathematics and trainability
 
-Проверено и верно: рекуррентная формула Якоби (против `scipy.special.eval_jacobi`,
-макс. отн. ошибка 6e-15, включая |x|>1 и α+β=−1), производная Cox–de Boor, вставка
-узла Boehm, производная и нормировка Mexican hat (Ricker), d/dlog-width RBF = 2q²e^{−q²},
-VJP rational (dr/da = z^k/Q, dr/db = −r·z^k/Q, Q = 1+Σb·z^k).
+Verified in the review: the Jacobi recurrence (against `scipy.special.eval_jacobi`,
+maximum relative error 6e-15, including |x|>1 and α+β=−1), Cox–de Boor derivative,
+Boehm knot insertion, Mexican hat (Ricker) derivative and normalization,
+d/dlog-width RBF = 2q²e^{−q²}, and rational VJP
+(dr/da = z^k/Q, dr/db = −r·z^k/Q, Q = 1+Σb·z^k).
 
-Для линейных по коэффициентам семейств слой KAN ≡ раскладка Φ: ℝ^I→ℝ^{I·K} + плотный
-линейный слой. Это определение, а не ошибка, и на этом строится C2.
+For families linear in their coefficients, a KAN layer is equivalent to an
+expansion Φ: ℝ^I→ℝ^{I·K} followed by a dense linear layer. This follows from the
+definition and is the basis of C2.
 
-| ID | P | Задача | Где / почему |
+| ID | P | Task | Where / why (recorded finding) |
 |---|---|---|---|
-| M1 | P0 | (ГОТОВО, [evidence](evidence/backlog/M1.md)) Явная типизированная карта входа (affine / tanh / LayerNorm) как отдельный слой | Контракт запрещает неявную нормировку, но инструмента нет. Полиномы при \|x\|≫1 растут как (2\|x\|)^n → взрыв градиентов; локальные базисы вне [t_p, t_K] дают ноль и нулевой градиент («мёртвое» ребро) |
-| M2 | P0 | (ГОТОВО, [evidence](evidence/backlog/M2.md)) Rational: безопасный знаменатель без полюсов — PAU (Molina et al. 2019) `Q = 1+\|Σ b_k z^k\|` или гладкий `Q = 1+(Σ…)²` — как опция политики сингулярностей | Сейчас guard бросает `domain_error` (`src/rational.cpp:41`, GPU статус 2): один шаг SGD в полюс обрывает обучение без восстановления |
-| M3 | P1 | Residual-ветка `w_b·silu(x)` (как в оригинальном KAN), опционально | Единственный путь градиента вне сетки для B-сплайна/RBF |
-| M4 | P1 | (ГОТОВО, [evidence](evidence/backlog/M4.md)) Инициализаторы (variance-preserving по семейству, шумовая как в pykan) | Контракт признаёт: нулевая инициализация не обучает многослойные сети |
-| M5 | P1 | Нормированные функции Эрмита `H_n(x)e^{−x²/2}/√(2^n n! √π)` как вариант | Физические H_n растут ~2^n·n!, плохая обусловленность |
-| M6 | P2 | Сетка на вход (как в pykan), а не одна на весь слой; refit сетки по квантилям; `adapt_grid` с прогоном сэмплов через предыдущие слои | Сейчас узлы/центры/масштабы общие для слоя; `adapt_grid` вставляет по одному узлу |
-| M7 | P2 | Обучаемые scale/translation на ребро для Mexican hat (Wav-KAN) | Сейчас это KAN со словарём фиксированных вейвлетов |
+| M1 | P0 | (DONE, [evidence](evidence/backlog/M1.md)) Explicit typed input map (affine / tanh / LayerNorm) as a separate layer | The contract forbids implicit normalization, but no tool existed. For \|x\|≫1, polynomials grow as (2\|x\|)^n → exploding gradients; local bases outside [t_p, t_K] give zero and zero gradient (a "dead" edge) |
+| M2 | P0 | (DONE, [evidence](evidence/backlog/M2.md)) Rational: safe pole-free denominator — PAU (Molina et al. 2019) `Q = 1+\|Σ b_k z^k\|` or smooth `Q = 1+(Σ…)²` — as an optional singularity policy | The guard throws `domain_error` (`src/rational.cpp:41`, GPU status 2): one SGD step into a pole aborts training without recovery |
+| M3 | P1 | Optional residual branch `w_b·silu(x)` (as in the original KAN) | Only gradient path outside the grid for B-spline/RBF |
+| M4 | P1 | (DONE, [evidence](evidence/backlog/M4.md)) Initializers (family-specific variance preservation, noise initialization as in pykan) | The contract acknowledges that zero initialization does not train multilayer networks |
+| M5 | P1 | Normalized Hermite functions `H_n(x)e^{−x²/2}/√(2^n n! √π)` as an option | Physicists' H_n grow as ~2^n·n!, with poor conditioning |
+| M6 | P2 | Per-input grid (as in pykan), rather than one grid per layer; refit the grid by quantiles; `adapt_grid` with samples propagated through preceding layers | Knots/centers/scales are shared across a layer; `adapt_grid` inserts one knot at a time |
+| M7 | P2 | Trainable per-edge scale/translation for Mexican hat (Wav-KAN) | The implementation uses a dictionary of fixed wavelets |
 
 ---
 
 ## C. CUDA
 
-Замер 2026-10-01, RTX 3090 (FP64:FP32 = 1:64), Chebyshev K=7, полный шаг
-forward+backward+SGD. Одиночные прогоны под WDDM, вне замороженного протокола проекта —
-диагностика, а не принятое evidence.
+**Historical diagnostic baseline (2026-10-01), not current performance.**
+RTX 3090 (FP64:FP32 = 1:64), Chebyshev K=7, complete forward+backward+SGD step.
+Single runs under WDDM, outside the project's frozen protocol — diagnostic
+measurements, not accepted performance evidence.
 
-| Топология, batch | resident FP64 | PyTorch FP64 | PyTorch FP32 |
+| Topology, batch | resident FP64 | PyTorch FP64 | PyTorch FP32 |
 |---|---:|---:|---:|
-| 64→64→32→16, 1024 | **2.46 мс** | 3.11 | 3.60 |
-| 256→256→256→10, 8192 | 310 мс | 87 | 9.5 |
-| 1024→1024→1024, 4096 | 7039 мс | 613 | 22.9 |
+| 64→64→32→16, 1024 | **2.46 ms** | 3.11 | 3.60 |
+| 256→256→256→10, 8192 | 310 ms | 87 | 9.5 |
+| 1024→1024→1024, 4096 | 7039 ms | 613 | 22.9 |
 
-Интерпретация: на малой сети resident обгоняет eager PyTorch (там всё упирается в запуск
-ядер). На крупных ~360 GFLOP/шаг дают ≈51 GFLOPS — около 9% пика FP64 (~0.56 TFLOPS,
-PyTorch FP64 упирается в пик). Сверх этого FP32 даёт ещё ~27× на GeForce.
+Interpretation of that baseline: on the small network, resident beat eager
+PyTorch (kernel launches dominated). On large networks, ~360 GFLOP/step yielded
+≈51 GFLOPS — about 9% of peak FP64 (~0.56 TFLOPS; PyTorch FP64 reached the peak).
+FP32 offered a further ~27× on GeForce. C1/C2/C9/C3 have since changed the executor;
+their evidence, rather than this table, describes accepted subsequent results.
 
-| ID | P | Задача | Где / почему |
+| ID | P | Task | Where / why (recorded finding) |
 |---|---|---|---|
-| C1 | P0 | (ГОТОВО, [evidence](evidence/backlog/C1.md)) Политика точности: шаблон по `Scalar`; FP32 (опц. TF32/BF16) для обучения, FP64 — эталон паритета | Самый крупный множитель на GeForce |
-| C2 | P0 | (ГОТОВО, [evidence](evidence/backlog/C2.md)) Свести свёртку к GEMM (cuBLAS/cuBLASLt, bias через epilogue): `Y = Φ·Cᵀ + b`, `dC = Uᵀ·Φ`, `dX = Σ_k (U·C)⊙Φ'` | `src/resident.cu:174-212` — наивные GEMM без тайлинга, некоалесцированный доступ к коэффициентам |
-| C3 | P1 | (ГОТОВО на этапе 1 по решению владельца, [evidence](evidence/backlog/C3.md)) Fused-ядро: вычислять базис в shared memory при загрузке тайла X; в backward пересчитывать Φ', а не хранить | Сейчас пишутся тензоры V и D размером B·I·K в глобальную память (для 1024-wide, B=4096 — ~235 МБ каждый на слой) |
-| C4 | P1 | (ГОТОВО вместе с R3, [evidence](evidence/backlog/R3.md)) Шаблонизировать `basis_kernel` по семейству | `src/resident.cu:48`, скретч `double lower[18], next[18]` (`:67`) задаёт регистры/local memory для всех семейств |
-| C5 | P1 | Разреженный путь B-сплайна: хранить `(span, p+1 значений)` | Ненулевых p+1, а хранится и умножается все K; после `adapt_grid` K растёт |
-| C6 | P1 | Rational forward: sample — быстрый индекс | `rational_forward_kernel`, `index%outputs` (`:283-286`) → запись кэшей с шагом I·capacity |
-| C7 | P1 | Rational forward: убрать вычисление всех VJP ради проверки конечности | `:317-322`, лишние FP64-деления (очень дороги на GA102) |
-| C8 | P1 | Rational parameter VJP: один warp на ребро, собирающий все m+n+1 сумм сразу | `rational_parameter_kernel` (`:337`): warp на параметр, каждый заново читает z, P, Q и пересчитывает степени |
-| C9 | P1 | (ГОТОВО, [evidence](evidence/backlog/C9.md)) Проверять статус раз за шаг / раз в N шагов; захват шага в CUDA Graph | `result()` (`:482`) — memcpy статуса + sync после forward, backward и sgd (3 раза за шаг) |
-| C10 | P2 | (ГОТОВО, [evidence](evidence/backlog/C1.md)) `--fmad=false` только в сборке паритета, в сборке производительности включить FMA | Сейчас выключено везде |
-| C11 | P0 (процесс) | (ГОТОВО) Включить счётчики Nsight Compute: NVIDIA Control Panel → Developer → Manage GPU Performance Counters → «Allow access to all users» (или ncu от администратора) | `ERR_NVGPUCTRPERM` во всех трёх вехах — оптимизация шла без occupancy/bandwidth |
-| C12 | P2 | Nonlinear RBF reduction: коалесцированный доступ | `nonlinear_partial_kernel`: чтения `dx`/`dw`/`c` с шагом K |
+| C1 | P0 | (DONE, [evidence](evidence/backlog/C1.md)) Precision policy: template on `Scalar`; FP32 (optionally TF32/BF16) for training, FP64 as the parity reference | Largest speedup factor on GeForce |
+| C2 | P0 | (DONE, [evidence](evidence/backlog/C2.md)) Express the contraction as GEMM (cuBLAS/cuBLASLt, bias via epilogue): `Y = Φ·Cᵀ + b`, `dC = Uᵀ·Φ`, `dX = Σ_k (U·C)⊙Φ'` | `src/resident.cu:174-212` — naive untiled GEMMs, uncoalesced coefficient access |
+| C3 | P1 | (DONE at stage 1 by owner decision, [evidence](evidence/backlog/C3.md)) Fused kernel: evaluate the basis in shared memory while loading the X tile; recompute Φ' in backward rather than storing it | V and D tensors of size B·I·K were written to global memory (for 1024-wide, B=4096 — ~235 MB each per layer) |
+| C4 | P1 | (DONE with R3, [evidence](evidence/backlog/R3.md)) Template `basis_kernel` by family | `src/resident.cu:48`, scratch `double lower[18], next[18]` (`:67`) dictates register/local memory requirements for all families |
+| C5 | P1 | Sparse B-spline path: store `(span, p+1 values)` | Only p+1 values are nonzero, but all K are stored and multiplied; K grows after `adapt_grid` |
+| C6 | P1 | Rational forward: make sample the fastest-varying index | `rational_forward_kernel`, `index%outputs` (`:283-286`) → cache writes with stride I·capacity |
+| C7 | P1 | Rational forward: remove evaluation of all VJPs solely for finiteness checks | `:317-322`, extra FP64 divisions (very expensive on GA102) |
+| C8 | P1 | Rational parameter VJP: one warp per edge, collecting all m+n+1 sums together | `rational_parameter_kernel` (`:337`): one warp per parameter, each rereads z, P, Q and recomputes powers |
+| C9 | P1 | (DONE, [evidence](evidence/backlog/C9.md)) Check status once per step / once every N steps; capture the step in a CUDA Graph | `result()` (`:482`) — status memcpy + sync after forward, backward and SGD (3 times per step) |
+| C10 | P2 | (DONE, [evidence](evidence/backlog/C1.md)) Use `--fmad=false` only in the parity build; enable FMA in the performance build | FMA was disabled everywhere |
+| C11 | P0 (process) | (DONE) Enable Nsight Compute counters: NVIDIA Control Panel → Developer → Manage GPU Performance Counters → "Allow access to all users" (or run ncu as administrator) | `ERR_NVGPUCTRPERM` in all three milestones — optimization proceeded without occupancy/bandwidth counters |
+| C12 | P2 | Nonlinear RBF reduction: coalesced access | `nonlinear_partial_kernel`: `dx`/`dw`/`c` reads with stride K |
 
 ---
 
-## Воспроизведение замеров
+## Reproducing measurements
+
+The commands below reproduce the **original review diagnostic**. For subsequent
+accepted benchmarks, use each item's evidence and its baseline/build instructions
+(in particular [C9](evidence/backlog/C9.md) and [C3](evidence/backlog/C3.md)).
 
 ```powershell
-# PyTorch-эталон (нужен torch с CUDA)
+# PyTorch reference (requires torch with CUDA)
 python docs/evidence/review-2026-10-01/torch_reference.py
 
-# resident-исполнитель: нужна Release CUDA-сборка (scripts/build.ps1 -Cuda ... -BuildDirectory build-m4-cuda)
+# Resident executor: requires a Release CUDA build (scripts/build.ps1 -Cuda ... -BuildDirectory build-m4-cuda)
 cmd /c docs\evidence\review-2026-10-01\build_resident_bench.cmd build-m4-cuda
 & "$env:TEMP\resident_bench.exe"
 ```
 
-## Журнал статуса
+## Status journal
 
-| Дата | Изменение |
+Entries retain the decisions, validation results and measurements recorded at
+the time; later entries and linked evidence describe subsequent changes.
+
+| Date | Change |
 |---|---|
-| 2026-10-01 | Бэклог создан по итогам ревью M1–M4; все пункты открыты |
-| 2026-10-01 | C11 закрыт владельцем (счётчики Nsight Compute доступны) |
-| 2026-10-01 | Бэклог стал стадией B в ROADMAP; M5 стартует только после закрытия всех пунктов ([решение](evidence/backlog-gate.md)). Первый проход: R3, R1 |
-| 2026-10-01 | R3 закрыт: формулы базисов и rational — общие `KAN_HOST_DEVICE`-шаблоны в `src/detail/`; golden-дамп CPU+CUDA побитово идентичен, 19/19 CTest, GCC 11/11. Профилирование выявило и устранило три регрессии ([evidence](evidence/backlog/R3.md)) |
-| 2026-10-01 | C4 закрыт вместе с R3: `basis_kernel` инстанцируется по семейству (66 → 36–62 регистров, скретч сплайна только у B-сплайна), время ядра −0.2…−12.6% ([evidence](evidence/backlog/R3.md)). Проход 1: R3, C4, R1 |
-| 2026-10-01 | R1 закрыт: `BasisConfig` = `std::variant` типизированных конфигов по семействам, размер локальных семейств выводится, `TrainableRbfConfig` — отдельный тип, `BasisKind` ушёл в `detail`; golden побитово идентичен, 20/20 CTest, GCC 12/12 ([evidence](evidence/backlog/R1.md)). Проход 1 завершён: R3, C4, R1 |
-| 2026-10-02 | R2 закрыт: `Layer` хранит `kan::Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges>`, общий линейный движок «раскладка Φ + свёртка» (`src/carriers/linear_engine.hpp`), нелинейные VJP по носителям, семейные операции — свободные функции `kan/families.hpp`, resident — план на носитель; golden побитово идентичен (+ новый `--layers` дамп), 21/21 CTest, GCC 13/13, покрытие 98.5%, CPU быстрее в 1.1–2.2× ([evidence](evidence/backlog/R2.md)). Проход 2: R2, затем M1 и M2 |
-| 2026-10-02 | M2 закрыт: `RationalConfig::denominator_policy` = `Guarded` (по умолчанию, прежнее поведение) / `Absolute` (PAU, 1+\|S\|) / `Smooth` (1+S²); общие host/device формулы, ядра инстанцируются по политике; шаг SGD в полюс больше не обрывает обучение при безопасных политиках; golden (оба режима) побитово идентичен, 23/23 CTest, GCC 14/14, покрытие 98.5% ([evidence](evidence/backlog/M2.md)). Остаток стоимости параметрического VJP → C8, ненулевая инициализация знаменателя → M4 |
-| 2026-10-02 | M1 закрыт: отдельный вид слоя `kan::InputMap` с `AffineMap` (фиксированная, хелперы `affine_from_range`/`affine_from_moments`), `TanhMap`, `LayerNormMap` (обучаемые gain/bias); `Network` = последовательность `std::variant<Layer, InputMap>`; общие host/device формулы, CUDA-ядра карт ≈1% шага; демонстрация: входы в [100, 500] без карты — переполнение (Chebyshev) или нулевой градиент (B-сплайн), с картой — loss 8e-20 ([evidence](evidence/backlog/M1.md)) |
-| 2026-10-02 | Проход 2 завершён: R2, M2, M1. M1 и M2 велись параллельно в worktree и слиты в `39e115c` (тесты M2 переведены на гетерогенный `Network::layers()`); на объединённом дереве MSVC+CUDA+Python 26/26, GCC 15/15, golden (оба режима) побитово идентичен `5dc6819` |
-| 2026-10-02 | Проход 3: C2, затем C1 (+ C10). Владелец принял отказ от побитового CPU/GPU-паритета (допуск) и зависимость от cuBLAS |
-| 2026-10-02 | C2 закрыт: свёртка resident-исполнителя — cuBLAS DGEMM (`Y = ΦCᵀ`, `dC = UᵀΦ + λC`, `W = UC`) плюс два малых ядра там, где cuBLAS упирается в латентность одного тайла (прямой проход ≤ 2²³ FMA — warp на выход; VJP параметров ≤ 2¹⁵ — тайлы по батчу); RBF-редукция по `W` (B·I·K вместо B·I·O·K). Шаг: 256-wide 286 → 96 мс, 1024-wide 6.8 → 0.69 с (≈94% FP64-пика), обучаемый RBF 920 → 113 мс; frozen resident m2 ×0.61, m3 ×0.65, ни один базисный случай не медленнее >2%. 27/27 CTest, GCC 15/15, санитайзеры чисты, CPU golden побитово идентичен, resident — отклонение ≤ 3.1e-14; CUDA ≥ 12, Python регистрирует каталог DLL cuBLAS ([evidence](evidence/backlog/C2.md)) |
-| 2026-10-05 | Проход 4 начат с R7 (P2) вне строгого порядка приоритетов: это единственный открытый пункт, не конфликтующий с параллельной работой C1 (+ C10) над `src/resident.cu`/`src/detail/` (одобрено владельцем) |
-| 2026-10-05 | R7 закрыт: `kan::cuda::forward`/`backward` — `[[deprecated]]` (сообщение указывает на `ResidentNetwork`), сигнатуры прежние; `src/cuda.cu` (239 → 60 строк) — адаптер без ядер, на каждый вызов однослойный `ResidentNetwork`; принимаются все носители resident-исполнителя (контрактное изменение), допуск к CPU `\|a-e\| ≤ 1e-12\|e\| + 1e-13 max\|e\|`; `available()` не устарел; frozen-бенчмарки вызывают legacy-API намеренно с локальным подавлением предупреждения. 29/29 CTest (+2 compile-пробы deprecation), GCC 15/15, memcheck — 0 байт утечек, golden (оба режима) побитово идентичен; `cudaMalloc` на вызов не изменился (5), большой Chebyshev-случай backward 178 → 24 мс, малый forward 0.46 → 1.1 мс из-за построения исполнителя (диагностика на занятом GPU) ([evidence](evidence/backlog/R7.md)) |
-| 2026-10-05 | C1 и C10 закрыты: `kan::cuda::Precision` = `Float64` (по умолчанию, побитово исполнитель C2: golden обоих режимов идентичен) / `Float32` / `TensorFloat32` (FP32 + TF32-тензорные GEMM, opt-in); ядра, планы и исполнитель — шаблоны по скаляру, общие формулы `src/detail/` — шаблоны по `Scalar`; хост-API остаётся `double`, FP32 отвергает непредставимые данные/конфигурации (`invalid_argument`), guarded-полюс в FP32 — порог `max(epsilon, n·2⁻²³)`; допуск FP32 `2e-4\|e\| + 5e-5 max\|e\|`, TF32 `1e-2`; Python `kan.Precision`. C10: CMake `KAN_CUDA_FMA` (по умолчанию OFF = сборка паритета с `--fmad=false`; ON — сборка производительности, `build.ps1 -CudaFma`). Профилирование: некоалесцированные строки Φ/Φ'/W (тайлы в shared, только FP32), RBF-редукция по тайлам (FP32-часть C12), пороги малых ядер для FP32, pinned-загрузка. Шаг FP32: 256-wide 99 → 3.85 мс (34% FP32-пика, PyTorch FP32 9.0 мс), 1024-wide 0.70 с → 27.8 мс (36%; без загрузки upstream 17.6 мс, 58%; PyTorch 22.3 мс), обучаемый RBF 116 → 5.5 мс; FP64 frozen без регрессии. 31/31 CTest в обеих сборках, GCC 15/15, санитайзеры чисты ([evidence](evidence/backlog/C1.md)). C12 для FP64 остаётся открытым |
-| 2026-10-05 | Добавлены R8 (общий заголовок `kan/cuda_runtime.hpp` для `available()`) и R9 (`ResidentNetwork::upload_parameters`) по решению владельца об открытых вопросах R7; автоматический кэш исполнителя на поток отклонён ([решение](evidence/backlog/R8-R9-decision.md)) |
-| 2026-10-05 | R8 закрыт: `kan::cuda::available()` (имя прежнее, не deprecated) объявлен в новом заголовке `kan/cuda_runtime.hpp` без зависимости от CUDA, его включают `kan/resident.hpp` и `kan/cuda.hpp`; реализация перенесена из legacy-адаптера `src/cuda.cu` в `src/cuda_runtime.cpp`; `src/resident.cu` и Python-биндинги больше не включают `kan/cuda.hpp`. Новая compile-проба `cuda_deprecation_resident_only` (только `kan/resident.hpp`, deprecation как ошибка) зелёная, пробы R7 без изменений, Python `cuda_available()` работает ([evidence](evidence/backlog/R8-R9.md)) |
-| 2026-10-05 | R9 закрыт: `ResidentNetwork::upload_parameters(network)` (Python `upload_parameters`) загружает всё обучаемое состояние (коэффициенты, bias, центры/log-ширины обучаемого RBF, знаменатели rational, gain/bias LayerNorm) без выделения памяти устройства; строгая проверка структуры (виды и размеры слоёв, носители, фиксированная конфигурация по `operator==`, включая узлы сплайна: узлы — структура, после `insert_knot`/`adapt_grid` нужен новый исполнитель) и значений по правилам конструктора (FP32: представимость) до любого изменения, иначе `invalid_argument` и исполнитель не меняется; успех инвалидирует output/gradients, вход и upstream сохраняются. Одна копия (FP64 > 1 МиБ — по тензору без staging: 62 → 45 мс). Стоимость: 0.16 мс против 2.2 мс построения (малая сеть), 45 мс против 116 мс (1024-wide, упор в PCIe 3.2 ГБ/с). 34/34 CTest, GCC 15/15, memcheck — 0 байт утечек, golden (оба режима) побитово идентичен ([evidence](evidence/backlog/R8-R9.md)) |
-| 2026-10-06 | Решения владельца по C1: сборка по умолчанию остаётся паритетной (`KAN_CUDA_FMA=OFF`), FP32-порог полюса `max(epsilon, n·2⁻²³)` принят ([evidence](evidence/backlog/C1.md#decisions-for-the-owner)). Проход 5: C9 (основное дерево) и M4 (worktree) параллельно |
-| 2026-10-06 | M4 закрыт: `kan/initializers.hpp` — `kan::initialize(Layer\|Network, Initializer)`, `Initializer = std::variant<VarianceScaling, NoiseInit>`, `DenominatorInit`, `Distribution` (Uniform/Normal), `reference_moments`, `layer_seed`; конструкторы по-прежнему нулевые (opt-in). VarianceScaling: σ_k² = gain²·Var_ref/(I·K·m_k) по эталонной мере семейства (замкнутые формы для Чебышёва/Лежандра/Якоби/Эрмита/Фурье, детерминированные квадратуры Гаусса–Лежандра для B-сплайна/RBF/Mexican hat, для rational — моменты по собственному знаменателю ребра); NoiseInit — как pykan `U(-a/2,a/2)`, `a = scale/(G·√in)` (без базовой ветки SiLU — M3); знаменатели rational с \|S(z)\| ≤ bound на \|z\| ≤ radius — без полюсов для Guarded/Absolute/Smooth, ненулевые. SplitMix64 + переносимое полярное преобразование: параметры побитово совпадают на MSVC и GCC (9 закреплённых дайджестов). Демонстрация: 5-слойная сеть на x₁x₂ — нулевая и шумовая инициализации остаются в седле (MSE 0.1205), VarianceScaling — 2e-22 (Чебышёв), 7e-15 (B-сплайн), 0.9–2.1e-3 (rational, все политики); resident — через `ResidentNetwork`/`upload_parameters` без изменений исполнителя. 38/38 CTest, GCC 17/17, покрытие 98.5%, golden (оба режима) побитово идентичен ([evidence](evidence/backlog/M4.md)) |
-| 2026-10-06 | C9 закрыт (с расширением области: обучение без обмена с хостом на шаге, [evidence](evidence/backlog/C9.md)): `ResidentNetwork::train_step(rate, l2, loss)` — forward + градиент потерь + backward + SGD одним CUDA Graph (с `Loss::OutputGradient` побитово равен eager-последовательности), `Loss::MeanSquaredError` и `upload_target`/`download_loss` — MSE на устройстве, `train_step(input, target, batch, ...)` — новый хостовый батч через двойные pinned-буферы и отдельный поток копирования, перекрытые с вычислением; статус проверяется раз в `status_interval()` шагов (по умолчанию 1) и любым синхронным вызовом: фазовые «липкие» слова статуса и commit/rollback-ядро на устройстве относят ошибку к первому упавшему шагу (`trained_steps()`), сохраняя параметры последнего успешного; граф пересобирается при смене батча, активного региона параметров, буфера входа/цели, потерь и L2, learning rate меняется в узле графа без пересборки; шаг не считает градиент по входу сети (как PyTorch). Синхронизаций за шаг: 3 → 1 (N=1) / 0.06 (N=64). FP32 против PyTorch (ABBA, медиана n=9, тихий GPU), matched: 0.18/0.09/3.3/15.6 мс против eager 3.2/2.0/9.0/21.9 и CUDA Graph 0.35/0.18/8.9/22.0; реалистичный цикл (новый батч с хоста каждый шаг): 0.38/0.17/7.0/22.7 мс (N=64: 0.20/0.08/4.0/16.2) против eager 3.4/2.3/12.2/32.4 и CUDA Graph 0.52/0.27/11.7/32.4 — быстрее на всех топологиях; TF32 и FP64 тоже не медленнее (FP64 N=1 в реалистичном цикле — в пределах шума). torch.compile/inductor недоступен (нет Triton), измерен backend cudagraphs. 40/40 CTest в обеих сборках (на дереве со слиянием M4), GCC 17/17, санитайзеры чисты, golden (оба режима) побитово идентичен, frozen m2/m3/m4 без регрессии. Открытый вопрос владельцу: значение `status_interval` по умолчанию |
-| 2026-10-06 | C3 закрыт на этапе 1 (решение владельца, [evidence](evidence/backlog/C3.md)): FP32/TF32-слои `BasisEdges` больше не хранят Φ' между forward и backward — `basis_kernel` пишет только Φ, финиш backward пересчитывает Φ' из входа слоя той же формулой в staged-тайле (до 85 членов; FP64, обучаемый RBF и длинные строки — как раньше); минус один регион `capacity·inputs·terms` на слой (58.7 МБ на 256-wide слой при capacity 8192). Результаты побитово прежние в обеих сборках (golden, FP32-дамп всех семейств), 41/41 CTest в обеих сборках, санитайзеры чисты, FP64 frozen без регрессии. Шаг FP32 (ABBA, медиана n=9): 256-wide 3.12 → 2.91 мс (−6.8…−7.9%), 1024-wide 15.02 → 14.73 мс (−1.4…−1.9%); TF32 256-wide −8…−10%. Этап 2 (слияние раскладки с GEMM: базис в A-тайле forward, эпилог dx в W-GEMM) прототипирован и не принят: самописное SIMT SGEMM-ядро на 10–30% медленнее cuBLAS/CUTLASS на этих формах, что больше экономии памяти (fused forward 0.63 мс против 0.52, fused dx в 1.27–1.34 раза медленнее); оценка 20–25% предполагала ядро на уровне cuBLAS. Дальнейшее слияние — не открытый пункт, а возможное продолжение при зависимости от CUTLASS (решение владельца) |
+| 2026-10-01 | Backlog created from the M1–M4 review; all items open |
+| 2026-10-01 | C11 closed by the owner (Nsight Compute counters available) |
+| 2026-10-01 | Backlog became stage B in ROADMAP; M5 starts only after all items close ([decision](evidence/backlog-gate.md)). First pass: R3, R1 |
+| 2026-10-01 | R3 closed: basis and rational formulas share `KAN_HOST_DEVICE` templates in `src/detail/`; CPU+CUDA golden dump byte-identical, 19/19 CTest, GCC 11/11. Profiling identified and resolved three regressions ([evidence](evidence/backlog/R3.md)) |
+| 2026-10-01 | C4 closed with R3: `basis_kernel` instantiated per family (66 → 36–62 registers, spline scratch only for B-splines), kernel time −0.2…−12.6% ([evidence](evidence/backlog/R3.md)). Pass 1: R3, C4, R1 |
+| 2026-10-01 | R1 closed: `BasisConfig` = `std::variant` of typed per-family configurations, local-family size inferred, separate `TrainableRbfConfig`, `BasisKind` moved to `detail`; golden byte-identical, 20/20 CTest, GCC 12/12 ([evidence](evidence/backlog/R1.md)). Pass 1 completed: R3, C4, R1 |
+| 2026-10-02 | R2 closed: `Layer` holds `kan::Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges>`, shared linear "expansion Φ + contraction" engine (`src/carriers/linear_engine.hpp`), per-carrier nonlinear VJPs, family operations as free functions in `kan/families.hpp`, resident plan per carrier; golden byte-identical (+ new `--layers` dump), 21/21 CTest, GCC 13/13, coverage 98.5%, CPU 1.1–2.2× faster ([evidence](evidence/backlog/R2.md)). Pass 2: R2, then M1 and M2 |
+| 2026-10-02 | M2 closed: `RationalConfig::denominator_policy` = `Guarded` (default, previous behavior) / `Absolute` (PAU, 1+\|S\|) / `Smooth` (1+S²); shared host/device formulas, kernels instantiated per policy; an SGD step into a pole no longer aborts training with safe policies; golden (both modes) byte-identical, 23/23 CTest, GCC 14/14, coverage 98.5% ([evidence](evidence/backlog/M2.md)). Remaining parameter-VJP cost → C8, nonzero denominator initialization → M4 |
+| 2026-10-02 | M1 closed: explicit typed `kan::InputMap` layer with `AffineMap` (fixed, helpers `affine_from_range`/`affine_from_moments`), `TanhMap`, `LayerNormMap` (trainable gain/bias); `Network` = sequence of `std::variant<Layer, InputMap>`; shared host/device formulas, CUDA map kernels ≈1% of the step; demonstration: inputs in [100, 500] without a map cause overflow (Chebyshev) or zero gradient (B-spline), with a map loss is 8e-20 ([evidence](evidence/backlog/M1.md)) |
+| 2026-10-02 | Pass 2 completed: R2, M2, M1. M1 and M2 ran in parallel in worktrees and were merged in `39e115c` (M2 tests adapted to heterogeneous `Network::layers()`); combined tree: MSVC+CUDA+Python 26/26, GCC 15/15, golden (both modes) byte-identical to `5dc6819` |
+| 2026-10-02 | Pass 3: C2, then C1 (+ C10). The owner accepted tolerance-based rather than bitwise CPU/GPU parity and a cuBLAS dependency |
+| 2026-10-02 | C2 closed: resident contractions use cuBLAS DGEMM (`Y = ΦCᵀ`, `dC = UᵀΦ + λC`, `W = UC`) plus two small kernels where cuBLAS hits single-tile latency (forward ≤ 2²³ FMA — warp per output; parameter VJP ≤ 2¹⁵ — batch tiles); RBF reduction over `W` (B·I·K rather than B·I·O·K). Step: 256-wide 286 → 96 ms, 1024-wide 6.8 → 0.69 s (≈94% of FP64 peak), trainable RBF 920 → 113 ms; frozen resident m2 ×0.61, m3 ×0.65, no basis case slower by >2%. 27/27 CTest, GCC 15/15, clean sanitizers, CPU golden byte-identical, resident deviation ≤ 3.1e-14; CUDA ≥ 12, Python registers the cuBLAS DLL directory ([evidence](evidence/backlog/C2.md)) |
+| 2026-10-05 | Pass 4 began with R7 (P2), outside strict priority order: it was the only open item that did not conflict with parallel C1 (+ C10) work on `src/resident.cu`/`src/detail/` (owner-approved) |
+| 2026-10-05 | R7 closed: `kan::cuda::forward`/`backward` are `[[deprecated]]` (message points to `ResidentNetwork`), signatures unchanged; `src/cuda.cu` (239 → 60 lines) is a kernel-free adapter constructing a single-layer `ResidentNetwork` per call; all resident carriers accepted (contract change), CPU tolerance `\|a-e\| ≤ 1e-12\|e\| + 1e-13 max\|e\|`; `available()` not deprecated; frozen benchmarks deliberately call the legacy API with local warning suppression. 29/29 CTest (+2 deprecation compile probes), GCC 15/15, memcheck: 0 leaked bytes, golden (both modes) byte-identical; `cudaMalloc` calls unchanged (5 per call), large Chebyshev backward 178 → 24 ms, small forward 0.46 → 1.1 ms due to executor construction (diagnostics on a busy GPU) ([evidence](evidence/backlog/R7.md)) |
+| 2026-10-05 | C1 and C10 closed: `kan::cuda::Precision` = `Float64` (default, bitwise C2 executor: golden identical in both modes) / `Float32` / `TensorFloat32` (FP32 + TF32 tensor GEMMs, opt-in); kernels, plans and executor templated on scalar, shared `src/detail/` formulas templated on `Scalar`; host API remains `double`, FP32 rejects unrepresentable data/configurations (`invalid_argument`), FP32 guarded-pole threshold `max(epsilon, n·2⁻²³)`; FP32 tolerance `2e-4\|e\| + 5e-5 max\|e\|`, TF32 `1e-2`; Python `kan.Precision`. C10: CMake `KAN_CUDA_FMA` (default OFF = parity build with `--fmad=false`; ON = performance build, `build.ps1 -CudaFma`). Profiling: uncoalesced Φ/Φ'/W rows (shared-memory tiles, FP32 only), tiled RBF reduction (FP32 portion of C12), FP32 small-kernel thresholds, pinned uploads. FP32 step: 256-wide 99 → 3.85 ms (34% of FP32 peak, PyTorch FP32 9.0 ms), 1024-wide 0.70 s → 27.8 ms (36%; without upstream upload 17.6 ms, 58%; PyTorch 22.3 ms), trainable RBF 116 → 5.5 ms; no FP64 frozen regression. 31/31 CTest in both builds, GCC 15/15, clean sanitizers ([evidence](evidence/backlog/C1.md)). C12 remains open for FP64 |
+| 2026-10-05 | R8 (shared `kan/cuda_runtime.hpp` header for `available()`) and R9 (`ResidentNetwork::upload_parameters`) added by owner decision on R7's open questions; automatic per-thread executor cache rejected ([decision](evidence/backlog/R8-R9-decision.md)) |
+| 2026-10-05 | R8 closed: `kan::cuda::available()` (same name, not deprecated) declared in new CUDA-independent `kan/cuda_runtime.hpp`, included by `kan/resident.hpp` and `kan/cuda.hpp`; implementation moved from legacy `src/cuda.cu` to `src/cuda_runtime.cpp`; `src/resident.cu` and Python bindings no longer include `kan/cuda.hpp`. New compile probe `cuda_deprecation_resident_only` (only `kan/resident.hpp`, deprecation as error) passes, R7 probes unchanged, Python `cuda_available()` works ([evidence](evidence/backlog/R8-R9.md)) |
+| 2026-10-05 | R9 closed: `ResidentNetwork::upload_parameters(network)` (Python `upload_parameters`) uploads all trainable state (coefficients, bias, trainable RBF centers/log widths, rational denominators, LayerNorm gain/bias) without device allocation; strict structure validation (layer kinds and sizes, carriers, fixed configuration via `operator==`, including spline knots: knots are structure, so `insert_knot`/`adapt_grid` requires a new executor) and value validation under constructor rules (FP32: representability) before any mutation, otherwise `invalid_argument` with executor unchanged; success invalidates output/gradients, retaining input and upstream. One copy (FP64 > 1 MiB — per tensor without staging: 62 → 45 ms). Cost: 0.16 ms versus 2.2 ms construction (small network), 45 ms versus 116 ms (1024-wide, PCIe-bound at 3.2 GB/s). 34/34 CTest, GCC 15/15, memcheck: 0 leaked bytes, golden (both modes) byte-identical ([evidence](evidence/backlog/R8-R9.md)) |
+| 2026-10-06 | Owner decisions on C1: default build remains parity (`KAN_CUDA_FMA=OFF`), FP32 pole threshold `max(epsilon, n·2⁻²³)` accepted ([evidence](evidence/backlog/C1.md#decisions-for-the-owner)). Pass 5: C9 (main tree) and M4 (worktree) in parallel |
+| 2026-10-06 | M4 closed: `kan/initializers.hpp` — `kan::initialize(Layer\|Network, Initializer)`, `Initializer = std::variant<VarianceScaling, NoiseInit>`, `DenominatorInit`, `Distribution` (Uniform/Normal), `reference_moments`, `layer_seed`; constructors remain zero-initializing (opt-in). VarianceScaling: σ_k² = gain²·Var_ref/(I·K·m_k) under each family's reference measure (closed forms for Chebyshev/Legendre/Jacobi/Hermite/Fourier, deterministic Gauss–Legendre quadrature for B-spline/RBF/Mexican hat, rational moments under each edge's own denominator); NoiseInit follows pykan `U(-a/2,a/2)`, `a = scale/(G·√in)` (without the base SiLU branch — M3); nonzero rational denominators with \|S(z)\| ≤ bound for \|z\| ≤ radius — pole-free for Guarded/Absolute/Smooth. SplitMix64 + portable polar transform: parameters bitwise identical on MSVC and GCC (9 pinned digests). Demonstration: 5-layer network on x₁x₂ — zero and noise initializations remain at a saddle (MSE 0.1205), VarianceScaling reaches 2e-22 (Chebyshev), 7e-15 (B-spline), 0.9–2.1e-3 (rational, all policies); resident via `ResidentNetwork`/`upload_parameters` without executor changes. 38/38 CTest, GCC 17/17, coverage 98.5%, golden (both modes) byte-identical ([evidence](evidence/backlog/M4.md)) |
+| 2026-10-06 | C9 closed (expanded scope: training without per-step host exchange, [evidence](evidence/backlog/C9.md)): `ResidentNetwork::train_step(rate, l2, loss)` — forward + loss gradient + backward + SGD in one CUDA Graph (with `Loss::OutputGradient`, bitwise equal to the eager sequence), `Loss::MeanSquaredError` and `upload_target`/`download_loss` — device MSE, `train_step(input, target, batch, ...)` — new host batch through double pinned buffers and a separate copy stream, overlapped with computation; status checked every `status_interval()` steps (default 1) and by any synchronous call: phase-specific sticky status words and a device commit/rollback kernel attribute errors to the first failed step (`trained_steps()`), preserving parameters from the last successful step; graph rebuilt when batch, active parameter region, input/target buffer, loss or L2 changes, learning rate updated in the graph node without rebuilding; the step skips the network input gradient (as in PyTorch). Synchronizations per step: 3 → 1 (N=1) / 0.06 (N=64). FP32 versus PyTorch (ABBA, median n=9, quiet GPU), matched: 0.18/0.09/3.3/15.6 ms versus eager 3.2/2.0/9.0/21.9 and CUDA Graph 0.35/0.18/8.9/22.0; realistic loop (new host batch every step): 0.38/0.17/7.0/22.7 ms (N=64: 0.20/0.08/4.0/16.2) versus eager 3.4/2.3/12.2/32.4 and CUDA Graph 0.52/0.27/11.7/32.4 — faster on all topologies; TF32 and FP64 also no slower (FP64 N=1 in the realistic loop is within noise). torch.compile/inductor unavailable (no Triton), cudagraphs backend measured. 40/40 CTest in both builds (tree with M4 merged), GCC 17/17, clean sanitizers, golden (both modes) byte-identical, no frozen m2/m3/m4 regression. Open owner question: default `status_interval` |
+| 2026-10-06 | C3 closed at stage 1 (owner decision, [evidence](evidence/backlog/C3.md)): FP32/TF32 `BasisEdges` layers no longer store Φ' between forward and backward — `basis_kernel` writes only Φ, backward finish recomputes Φ' from the layer input using the same formula in a staged tile (up to 85 terms; FP64, trainable RBF and long rows retain the previous path); one less `capacity·inputs·terms` region per layer (58.7 MB per 256-wide layer at capacity 8192). Results bitwise unchanged in both builds (golden, FP32 dump of all families), 41/41 CTest in both builds, clean sanitizers, no FP64 frozen regression. FP32 step (ABBA, median n=9): 256-wide 3.12 → 2.91 ms (−6.8…−7.9%), 1024-wide 15.02 → 14.73 ms (−1.4…−1.9%); TF32 256-wide −8…−10%. Stage 2 (fusion of expansion with GEMM: basis in the forward A tile, dx epilogue in W-GEMM) prototyped but not adopted: hand-written SIMT SGEMM core 10–30% slower than cuBLAS/CUTLASS on these shapes, exceeding memory savings (fused forward 0.63 ms versus 0.52, fused dx 1.27–1.34× slower); the 20–25% estimate assumed a cuBLAS-class core. Further fusion was recorded as a possible follow-up with a CUTLASS dependency (owner decision), not an open item |
+| 2026-10-07 | Owner-approved CUDA library policy added to `AGENTS.md` rule 8 and this backlog: library primitives and their extension preferred when suitable; custom kernels chosen for missing operations/contracts or demonstrated advantage. Complete English translation and quick-context refresh distinguish current stage B/architecture from historical findings and measurements. No item status, runtime dependency or stage order changed; C3 remains closed at stage 1 ([decision and verification](evidence/cuda-library-policy.md)) |
