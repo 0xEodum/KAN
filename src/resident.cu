@@ -525,45 +525,87 @@ __global__ void rational_input_kernel(const T* derivatives, const T* upstream, T
         input_gradient[sample*inputs+i] = sum; report(sum, status);
     }
 }
+// Largest numerator or denominator degree (RationalConfig: 0..16).
+constexpr std::size_t rational_max_degree = 16;
+// Parameter VJPs (backlog C8): one warp per edge accumulates all m+1
+// numerator and n denominator sums, and the warp of edge (o, 0) also the
+// bias of output o, in one pass over the samples: z, z^k, P/Q and the cached
+// P, Q, g are read or formed once per sample, not once per parameter. Lane l
+// sums the samples l, l+32, ... in order and the warp reduces each sum with
+// the same shuffle tree, so every gradient is bitwise that of the former
+// warp-per-parameter kernel. The forward pass validated z and every parameter
+// VJP of these cached samples with the same operations (CheckedEarlier);
+// backward runs only after a successful forward. The upstream products are
+// backward results and are reported here.
 template<DenominatorPolicy Policy, class T>
-__global__ void rational_parameter_kernel(const T* input,const T* values,const T* denominator_values,const T* gains,const T* upstream,
-                                          const T* parameters,T* gradients,std::size_t batch,std::size_t capacity,
-                                          std::size_t inputs,std::size_t outputs,detail::RationalScalars<T> config,T lambda,int* status) {
-    // Forward validated z and every parameter VJP of these cached samples with
-    // bit-identical operations; backward runs only after a successful forward.
+__global__ void rational_parameter_kernel(const T* input, const T* values, const T* denominator_values, const T* gains,
+                                          const T* upstream, const T* parameters, T* gradients,
+                                          std::size_t batch, std::size_t capacity, std::size_t inputs, std::size_t outputs,
+                                          detail::RationalScalars<T> config, T lambda, int* status) {
     const CheckedEarlier guard;
-    const auto m=config.numerator_degree+1,n=config.denominator_degree,acount=inputs*outputs*m;
-    const auto total=acount+outputs+inputs*outputs*n;
-    // A full warp owns each parameter and scans contiguous edge-major
-    // cache samples. Warp reduction preserves bounded launches and avoids
-    // atomics or execution scratch allocations.
-    const auto lane=threadIdx.x%32;
-    const auto stride=static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
-    for(auto index=(static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32;index<total;index+=stride) {
-        const bool numerator=index<acount,bias=index>=acount&&index<acount+outputs;
-        const auto relative=numerator?index:bias?index-acount:index-acount-outputs;
-        const auto edge=bias?0:relative/(numerator?m:n),k=bias?0:relative%(numerator?m:n)+(numerator?0:1);
-        const auto o=bias?relative:edge/inputs,i=edge%inputs;T sum=0;
-        for(std::size_t sample=lane;sample<batch;sample+=32) {
-            T derivative=1;
-            if(!bias) {
-                const T z=detail::rational_argument(config,input[sample*inputs+i],guard);T power=1;
-                for(std::size_t j=0;j<k;++j)power*=z;
-                const auto cache=edge*capacity+sample;
-                const T q=denominator_values[cache],divided=power/q;
-                if(numerator)derivative=detail::rational_numerator_vjp(q,z,k,power,divided,guard);
-                else {
-                    const T p=values[cache];
-                    const T gain=Policy==DenominatorPolicy::Guarded?T(1):gains[cache];
-                    derivative=detail::rational_denominator_vjp<Policy>(p,q,p/q,gain,z,k,power,divided,guard);
+    const auto m = config.numerator_degree, n = config.denominator_degree, degree = m > n ? m : n;
+    const auto edges = inputs*outputs;
+    // Gradient layout [numerators (edge, m+1) | bias (outputs) | denominators (edge, n)].
+    T* bias_gradients = gradients+edges*(m+1);
+    T* denominator_gradients = bias_gradients+outputs;
+    const auto lane = threadIdx.x%32;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
+    for (auto edge = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; edge < edges; edge += stride) {
+        const auto o = edge/inputs, i = edge%inputs;
+        const bool owns_bias = i == 0;
+        T numerator_sums[rational_max_degree+1], denominator_sums[rational_max_degree], bias_sum = 0;
+#pragma unroll
+        for (std::size_t k = 0; k <= rational_max_degree; ++k) numerator_sums[k] = 0;
+#pragma unroll
+        for (std::size_t k = 0; k < rational_max_degree; ++k) denominator_sums[k] = 0;
+        for (auto sample = static_cast<std::size_t>(lane); sample < batch; sample += 32) {
+            const auto cache = edge*capacity+sample;
+            const T u = upstream[sample*outputs+o];
+            const T z = detail::rational_argument(config, input[sample*inputs+i], guard);
+            const T q = denominator_values[cache];
+            const T p = n ? values[cache] : T(0);
+            const T value = n ? p/q : T(0);
+            const T gain = Policy == DenominatorPolicy::Guarded || !n ? T(1) : gains[cache];
+            T power = 1;
+#pragma unroll
+            for (std::size_t k = 0; k <= rational_max_degree; ++k) {
+                if (k > degree) break;
+                if (k) power *= z;
+                const T divided = power/q;
+                if (k <= m) {
+                    const T term = u*detail::rational_numerator_vjp(q, z, k, power, divided, guard);
+                    report(term, status); numerator_sums[k] += term;
+                }
+                if (k && k <= n) {
+                    const T term = u*detail::rational_denominator_vjp<Policy>(p, q, value, gain, z, k, power, divided, guard);
+                    report(term, status); denominator_sums[k-1] += term;
                 }
             }
-            const T term=upstream[sample*outputs+o]*derivative;report(term,status);sum+=term;
+            if (owns_bias) { report(u, status); bias_sum += u; }
         }
-        report(sum,status);
-        for(unsigned offset=16;offset;offset/=2)sum+=__shfl_down_sync(0xffffffffU,sum,offset);
-        if(lane==0) {
-            if(numerator)sum+=lambda*parameters[index];gradients[index]=sum;report(sum,status);
+        const auto reduce = [&](T sum) {
+            report(sum, status);
+            for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
+            return sum;
+        };
+#pragma unroll
+        for (std::size_t k = 0; k <= rational_max_degree; ++k) {
+            if (k > m) break;
+            T sum = reduce(numerator_sums[k]);
+            if (lane == 0) {
+                const auto index = edge*(m+1)+k;
+                sum += lambda*parameters[index]; gradients[index] = sum; report(sum, status);
+            }
+        }
+#pragma unroll
+        for (std::size_t k = 0; k < rational_max_degree; ++k) {
+            if (k >= n) break;
+            const T sum = reduce(denominator_sums[k]);
+            if (lane == 0) { denominator_gradients[edge*n+k] = sum; report(sum, status); }
+        }
+        if (owns_bias) {
+            const T sum = reduce(bias_sum);
+            if (lane == 0) { bias_gradients[o] = sum; report(sum, status); }
         }
     }
 }
@@ -1342,7 +1384,7 @@ template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, 
     }
     const T* gains = plan.safe() ? s.ptr(plan.gains) : nullptr;
     detail::visit_denominator_policy(plan.config.denominator_policy, [&](auto policy) {
-        rational_parameter_kernel<decltype(policy)::value><<<blocks(b.size(),8),256,0,s.stream>>>(
+        rational_parameter_kernel<decltype(policy)::value><<<blocks(b.inputs*b.outputs,8),256,0,s.stream>>>(
             s.ptr(s.activation[j]),s.ptr(plan.values),s.ptr(plan.denominator_values),gains,
             s.ptr(s.upstream[j+1]),s.ptr(s.parameters+b.offset),s.ptr(s.gradients+b.offset),s.batch,s.capacity,b.inputs,b.outputs,
             plan.scalars,lambda,s.status);
