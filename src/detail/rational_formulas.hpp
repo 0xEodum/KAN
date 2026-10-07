@@ -223,4 +223,61 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_denominator_vjp(Scalar p, Scala
     }
 }
 
+// Every parameter-VJP intermediate of one executed sample: z^k, z^k/Q, dr/da_k
+// and dr/db_k for k <= max(m, n), each passed through the guard (value = P/Q).
+// The CPU computes them as results (evaluate_rational); the resident forward
+// pass checks them so that its backward pass may recompute them unguarded.
+template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
+KAN_HOST_DEVICE KAN_FORCE_INLINE void rational_parameter_vjps_check(const Config& c, const RationalHornerOf<Scalar>& h,
+                                                   Scalar value, const Guard& guard) {
+    const auto m = c.numerator_degree, n = c.denominator_degree;
+    Scalar power = 1;
+    for (std::size_t k = 0; k <= (m > n ? m : n); ++k) {
+        if (k) power = guard(power * h.z);
+        const Scalar divided = guard(power / h.q);
+        if (k <= m) rational_numerator_vjp(h.q, h.z, k, power, divided, guard);
+        if (k && k <= n) rational_denominator_vjp<Policy>(h.p, h.q, value, h.gain, h.z, k, power, divided, guard);
+    }
+}
+
+// Backlog C7: a cheap sufficient condition for rational_parameter_vjps_check
+// to find every intermediate finite: one power, at most one division and two
+// products instead of max(m, n)+1 divisions and their log-space tests. Where
+// it holds, the check cannot report anything and is skipped; elsewhere (only
+// within a factor 4 of the overflow threshold) the check itself decides, so
+// the reported status is exactly the check's. With IEEE round to nearest
+// (monotone and sign-symmetric) and limit = max/4:
+// - the check's |z^k| (repeated multiplication) is nondecreasing in k for
+//   |z| >= 1 and at most 1 for |z| < 1: `power` is its maximum for k <= max(m, n);
+// - |z^k/Q| <= d = fl(power/|Q|) (d = power for |Q| >= 1), |r z^k/Q| <= fl(|r| d);
+//   Smooth: |g z^k/Q| <= s = fl(|g| d) and |r g z^k/Q| <= fl(|r| s); Absolute
+//   evaluates the Guarded form first and multiplies by g in {-1, 0, 1};
+// - the log-space paths run only when one factor is below the normal range;
+//   they then equal the exact product of the same factors up to a relative
+//   error far below 4, which is at most a few units: finite. The numerator
+//   path is at most z^k/Q with |z^k| tiny and Q nonzero (a pole is reported
+//   before): at most 2^52 (FP64) or 2^23 (FP32).
+// The proof and its test cases are in docs/evidence/backlog/C6-C8.md.
+template<class Scalar> constexpr Scalar rational_vjp_limit = Scalar(0x1.fffffffffffffp+1021); // DBL_MAX/4
+template<> constexpr float rational_vjp_limit<float> = 0x1.fffffep+125f;                       // FLT_MAX/4
+template<DenominatorPolicy Policy, class Config, class Scalar>
+KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_parameter_vjps_bounded(const Config& c, const RationalHornerOf<Scalar>& h,
+                                                     Scalar value) {
+    constexpr Scalar limit = rational_vjp_limit<Scalar>;
+    const auto m = c.numerator_degree, n = c.denominator_degree, degree = m > n ? m : n;
+    const Scalar magnitude = math::abs(h.z), q = math::abs(h.q);
+    Scalar power = 1;
+    if (magnitude > 1)
+        for (std::size_t k = 0; k < degree; ++k) power *= magnitude;
+    const Scalar divided = q >= 1 ? power : power / q;
+    if (!(divided <= limit)) return false;
+    if (n == 0) return true;
+    Scalar slope = divided;
+    if constexpr (Policy == DenominatorPolicy::Smooth) {
+        slope = math::abs(h.gain) * divided;
+        if (!(slope <= limit)) return false;
+    }
+    return math::abs(value) * slope <= limit;
+}
+
 } // namespace kan::detail

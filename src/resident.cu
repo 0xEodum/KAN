@@ -479,7 +479,8 @@ __global__ void mse_kernel(const T* y, const T* t, T* upstream, std::size_t coun
 // Forward: one thread per (output, sample), sample fastest; it sums its
 // output over the inputs in order. The parameter-VJP intermediates of every
 // executed sample are checked here (the backward pass recomputes them with
-// CheckedEarlier).
+// CheckedEarlier), with the full check only where the cheap bound of
+// rational_parameter_vjps_bounded does not hold (backlog C7).
 template<DenominatorPolicy Policy, class T>
 __global__ void rational_forward_kernel(const T* input, const T* a, const T* b, const T* bias,
                                         T* values, T* denominator_values, T* derivatives, T* gains, T* output,
@@ -500,15 +501,10 @@ __global__ void rational_forward_kernel(const T* input, const T* a, const T* b, 
                 continue;
             }
             const auto e = detail::rational_edge<Policy>(config, h, guard);
-            // Derivative powers are part of the nonlinear contract, including
-            // zero upstream. Detect unusable parameter VJPs during forward.
-            T power = 1;
-            for (std::size_t k = 0; k <= (m > n ? m : n); ++k) {
-                if (k) power = guard(power*h.z);
-                const T divided = guard(power/h.q);
-                if (k <= m) detail::rational_numerator_vjp(h.q, h.z, k, power, divided, guard);
-                if (k && k <= n) detail::rational_denominator_vjp<Policy>(h.p, h.q, e.value, h.gain, h.z, k, power, divided, guard);
-            }
+            // The parameter VJPs are part of the contract for every executed
+            // sample, including a zero upstream.
+            if (!detail::rational_parameter_vjps_bounded<Policy>(config, h, e.value))
+                detail::rational_parameter_vjps_check<Policy>(config, h, e.value, guard);
             if constexpr (Policy != DenominatorPolicy::Guarded) gains[cache] = h.gain;
             values[cache] = h.p; denominator_values[cache] = h.q; derivatives[cache] = e.input_derivative;
             sum += e.value; report(sum, status);
