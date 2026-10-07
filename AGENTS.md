@@ -24,3 +24,14 @@ Before doing any work in this workspace:
    Do not leave completed work uncommitted at the end of a session. Commit only
    files that belong to the step; regenerated `artifacts/` are committed only
    when recorded as evidence per `BACKLOG.md`.
+8. CUDA ecosystem libraries and components are permitted, including
+   cuBLAS/cuBLASLt, CUTLASS/CuTe, cuTENSOR, cuDNN, cuSPARSE, cuSOLVER, cuFFT,
+   CUB/Thrust and others. Prefer suitable library primitives and their extension.
+   Use custom CUDA kernels when library facilities do not cover the required
+   operation or contract, or when profiling and matched measurements demonstrate
+   an advantage for the custom implementation. Evaluate implementations against
+   the numerical, precision and reproducibility contracts and measure complete
+   calls or training steps, not only individual kernels. Record adopted dependency
+   versions, GPU/toolchain requirements and installation validation in evidence;
+   keep the CPU-only build free of CUDA dependencies. This policy grants permission
+   to use libraries; it does not require adding them or guarantee a performance gain.
