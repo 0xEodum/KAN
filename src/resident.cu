@@ -469,50 +469,64 @@ __global__ void mse_kernel(const T* y, const T* t, T* upstream, std::size_t coun
         *ticket = 0;
     }
 }
-// Distinct rational execution: caches are edge-major to expose contiguous
-// samples to nonlinear parameter reductions. All caches live in the arena.
-// One instantiation per denominator policy; `gains` (g = dQ/dS) is cached
-// only by the safe policies and is null for Guarded.
+// Rational edges. The caches of P, Q, dr/dx and, for the safe policies only,
+// g = dQ/dS (`gains`, null for Guarded) are edge-major, [edge*capacity +
+// sample], edge = o*inputs + i, so that the samples of one edge are
+// contiguous. Every rational kernel maps consecutive lanes to consecutive
+// samples (backlog C6), which makes the cache accesses coalesced. One
+// instantiation per denominator policy; all caches live in the arena.
+//
+// Forward: one thread per (output, sample), sample fastest; it sums its
+// output over the inputs in order. The parameter-VJP intermediates of every
+// executed sample are checked here (the backward pass recomputes them with
+// CheckedEarlier).
 template<DenominatorPolicy Policy, class T>
-__global__ void rational_forward_kernel(const T* input,const T* a,const T* b,const T* bias,
-                                        T* values,T* denominator_values,T* derivatives,T* gains,T* output,
-                                        std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,
-                                        detail::RationalScalars<T> config,int* status) {
+__global__ void rational_forward_kernel(const T* input, const T* a, const T* b, const T* bias,
+                                        T* values, T* denominator_values, T* derivatives, T* gains, T* output,
+                                        std::size_t batch, std::size_t capacity, std::size_t inputs, std::size_t outputs,
+                                        detail::RationalScalars<T> config, int* status) {
     const StatusGuard guard{status};
-    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    const auto m=config.numerator_degree,n=config.denominator_degree;
-    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<batch*outputs;index+=stride) {
-        const auto sample=index/outputs,o=index%outputs;T sum=bias[o];
-        for(std::size_t i=0;i<inputs;++i) {
-            const auto edge=o*inputs+i,cache=edge*capacity+sample;
-            const auto h=detail::rational_horner<Policy>(config,input[sample*inputs+i],a+edge*(m+1),b+edge*n,guard);
-            if(detail::rational_pole<Policy>(config,h)) {
-                atomicOr(status,2);values[cache]=denominator_values[cache]=derivatives[cache]=0;continue;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    const auto m = config.numerator_degree, n = config.denominator_degree;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < batch*outputs; index += stride) {
+        const auto o = index/batch, sample = index%batch;
+        T sum = bias[o];
+        for (std::size_t i = 0; i < inputs; ++i) {
+            const auto edge = o*inputs+i, cache = edge*capacity+sample;
+            const auto h = detail::rational_horner<Policy>(config, input[sample*inputs+i], a+edge*(m+1), b+edge*n, guard);
+            if (detail::rational_pole<Policy>(config, h)) {
+                atomicOr(status, 2);
+                values[cache] = denominator_values[cache] = derivatives[cache] = 0;
+                continue;
             }
-            const auto e=detail::rational_edge<Policy>(config,h,guard);
+            const auto e = detail::rational_edge<Policy>(config, h, guard);
             // Derivative powers are part of the nonlinear contract, including
             // zero upstream. Detect unusable parameter VJPs during forward.
-            T power=1;
-            for(std::size_t k=0;k<=(m>n?m:n);++k) {
-                if(k)power=guard(power*h.z);
-                const T divided=guard(power/h.q);
-                if(k<=m)detail::rational_numerator_vjp(h.q,h.z,k,power,divided,guard);
-                if(k&&k<=n)detail::rational_denominator_vjp<Policy>(h.p,h.q,e.value,h.gain,h.z,k,power,divided,guard);
+            T power = 1;
+            for (std::size_t k = 0; k <= (m > n ? m : n); ++k) {
+                if (k) power = guard(power*h.z);
+                const T divided = guard(power/h.q);
+                if (k <= m) detail::rational_numerator_vjp(h.q, h.z, k, power, divided, guard);
+                if (k && k <= n) detail::rational_denominator_vjp<Policy>(h.p, h.q, e.value, h.gain, h.z, k, power, divided, guard);
             }
-            if constexpr(Policy!=DenominatorPolicy::Guarded)gains[cache]=h.gain;
-            values[cache]=h.p;denominator_values[cache]=h.q;derivatives[cache]=e.input_derivative;sum+=e.value;report(sum,status);
+            if constexpr (Policy != DenominatorPolicy::Guarded) gains[cache] = h.gain;
+            values[cache] = h.p; denominator_values[cache] = h.q; derivatives[cache] = e.input_derivative;
+            sum += e.value; report(sum, status);
         }
-        output[index]=sum;report(sum,status);
+        output[sample*outputs+o] = sum; report(sum, status);
     }
 }
+// Input VJP: one thread per (input, sample), sample fastest, summing over the
+// outputs in order.
 template<class T>
-__global__ void rational_input_kernel(const T* derivatives,const T* upstream,T* input_gradient,
-                                      std::size_t batch,std::size_t capacity,std::size_t inputs,std::size_t outputs,int* status) {
-    const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
-    for(auto index=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;index<batch*inputs;index+=stride) {
-        const auto sample=index/inputs,i=index%inputs;T sum=0;
-        for(std::size_t o=0;o<outputs;++o)sum+=upstream[sample*outputs+o]*derivatives[(o*inputs+i)*capacity+sample];
-        input_gradient[index]=sum;report(sum,status);
+__global__ void rational_input_kernel(const T* derivatives, const T* upstream, T* input_gradient,
+                                      std::size_t batch, std::size_t capacity, std::size_t inputs, std::size_t outputs, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < batch*inputs; index += stride) {
+        const auto i = index/batch, sample = index%batch;
+        T sum = 0;
+        for (std::size_t o = 0; o < outputs; ++o) sum += upstream[sample*outputs+o]*derivatives[(o*inputs+i)*capacity+sample];
+        input_gradient[sample*inputs+i] = sum; report(sum, status);
     }
 }
 template<DenominatorPolicy Policy, class T>
