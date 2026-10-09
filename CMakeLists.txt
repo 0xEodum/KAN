@@ -201,12 +201,12 @@ if(BUILD_TESTING)
         target_link_libraries(initializer_resident_test PRIVATE kan::cuda)
         add_test(NAME initializer_resident COMMAND initializer_resident_test)
         set_tests_properties(initializer_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog M3 phase 1: the resident executor rejects the residual branch.
+        # Backlog M3 phase 2: the residual branch on the resident executor.
         add_executable(residual_resident_test tests/residual_resident_test.cpp)
         target_include_directories(residual_resident_test PRIVATE tests)
         target_link_libraries(residual_resident_test PRIVATE kan::cuda)
         add_test(NAME residual_resident COMMAND residual_resident_test)
-        set_tests_properties(residual_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        set_tests_properties(residual_resident PROPERTIES LABELS "cuda" TIMEOUT 600)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)

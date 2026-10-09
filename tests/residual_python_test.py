@@ -104,12 +104,30 @@ class Residual(unittest.TestCase):
         self.assertIsNone(plain.residual)
 
     @unittest.skipUnless(CUDA, "CUDA build")
-    def test_resident_rejects_the_branch(self):
+    def test_resident_executes_the_branch(self):
         layer = layer_with_parameters()
-        layer.set_residual(np.ones((2, 3)))
-        with self.assertRaises(ValueError):
-            kan.ResidentNetwork(kan.Network([layer]), 4)
-
+        w = np.array([[0.5, -0.25, 0.125], [1.0, 0.0, -2.0]])
+        layer.set_residual(w)
+        network = kan.Network([layer])
+        x = np.array([[-0.5, 0.2, 0.9], [3.0, -4.0, 0.1]])
+        u = np.array([[1.0, -0.5], [0.25, 2.0]])
+        expected = network.backward(x, u)
+        for precision, tol in ((kan.Precision.FLOAT64, 1e-12), (kan.Precision.FLOAT32, 1e-4)):
+            gpu = kan.ResidentNetwork(network, 4, precision)
+            gpu.upload_input(x)
+            gpu.upload_output_gradient(u)
+            gpu.forward()
+            np.testing.assert_allclose(gpu.download_output(), network.forward(x), rtol=tol, atol=tol)
+            gpu.backward(0.0)
+            g = gpu.download_gradients()
+            self.assertEqual(g.layers[0].residual.shape, (2, 3))
+            np.testing.assert_allclose(g.layers[0].residual, expected.layers[0].residual, rtol=tol, atol=tol)
+            np.testing.assert_allclose(g.input, expected.input, rtol=tol, atol=tol)
+            trained = gpu.download_parameters()
+            np.testing.assert_allclose(trained.layers[0].residual, w, rtol=0, atol=tol)
+            gpu.upload_parameters(trained)
+            with self.assertRaises(ValueError):
+                gpu.upload_parameters(kan.Network([layer_with_parameters()]))
 
 if __name__ == "__main__":
     unittest.main(argv=[sys.argv[0]])

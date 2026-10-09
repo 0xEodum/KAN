@@ -1,0 +1,25 @@
+FAIL eager_forward_backward_sgd_match_the_cpu: residual branch not supported by the resident executor yet
+FAIL empty_batch_gives_the_l2_gradients: residual branch not supported by the resident executor yet
+FAIL train_steps_are_bitwise_the_eager_steps: residual branch not supported by the resident executor yet
+FAIL failing_steps_roll_back_the_residual_weights: residual branch not supported by the resident executor yet
+FAIL upload_and_download_parameters_carry_the_branch: residual branch not supported by the resident executor yet
+FAIL extreme_inputs_are_finite: residual branch not supported by the resident executor yet
+cpu loss: 1.217597e-01 1.196728e-01 7.546756e-01 1.234338e-02 4.558943e-03
+FAIL noise_initialized_training_tracks_the_cpu: residual branch not supported by the resident executor yet
+0/7 passed
+Errors while running CTest
+Ran 6 tests in 0.110s
+
+FAILED (errors=1)
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+integration    =   0.37 sec*proc (1 test)
+python         =   0.37 sec*proc (1 test)
+
+Total Test time (real) =   0.38 sec
+
+The following tests FAILED:
+	 47 - residual_python (Failed)                          integration python
