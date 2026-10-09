@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2 and M4)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1-M4)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -342,7 +342,8 @@ Updates are atomic; stale gradient shapes are rejected after refinement. The
 Samples do not implicitly propagate through preceding layers.
 
 `regularization(lambda)` returns the coefficient L2 penalty
-`lambda/2*sum(coefficients^2)` and its parameter VJP `lambda*coefficients`.
+`lambda/2*sum(coefficients^2)` and its parameter VJP `lambda*coefficients`; a layer with
+the SiLU residual branch adds `lambda/2*sum(w^2)` and `lambda*w` (backlog M3, below).
 Lambda is finite and nonnegative. Input gradients are empty; bias and trainable
 RBF gradients are correctly shaped zero vectors. Network penalties sum layers.
 Add this VJP to a loss VJP explicitly before CPU SGD. Resident `backward(lambda=0)`
@@ -425,7 +426,8 @@ layers. The constrained rational constructor preserves existing
 `Layer(inputs,outputs,{})` basis usage. Rational gradients hold `RationalGradients`
 in `LayerGradients::nonlinear`, correctly shaped including zero batch. SGD validates shapes/data and all
 finite candidate vectors before network-wide commit. Numerator coefficient L2
-keeps its existing definition; denominators and bias are unpenalized.
+keeps its existing definition (plus residual-branch weights, backlog M3); denominators
+and bias are unpenalized.
 
 Resident CUDA executes mixed rational/basis networks with persistent a/b storage,
 analytic VJPs and atomic GPU SGD. Unsafe denominators are reported to the host as
@@ -488,16 +490,18 @@ A `Layer` holds dimensions, a per-output bias and exactly one `kan::Carrier`
 `TrainableRbfConfig` and `BasisEdges` otherwise; `Layer(inputs, outputs, RationalConfig)`
 selects `RationalEdges`. `carrier()` returns the carrier; `terms()` is the number of
 coefficients per edge; `coefficients()`/`bias()` and `set_parameters` act on every
-carrier's per-edge coefficient tensor (the tensor the coefficient L2 penalizes).
+carrier's per-edge coefficient tensor (the tensor the coefficient L2 penalizes, together
+with the layer's residual-branch weights).
 `set_carrier(carrier[, bias])` validates the configuration, the shapes for the layer's
 dimensions and finite parameters, then replaces the carrier (and bias) atomically.
 Carriers and configurations are values with `operator==`.
 
-`LayerGradients{input, coefficients, bias, nonlinear}`: `nonlinear` is a
+`LayerGradients{input, coefficients, bias, nonlinear, residual}`: `nonlinear` is a
 `NonlinearGradients` variant whose alternative corresponds to the carrier
 (`std::monostate`, `TrainableRbfGradients{centers, log_widths}`,
 `RationalGradients{denominators}`). SGD rejects a gradient whose alternative does not
-match the carrier with `std::invalid_argument`.
+match the carrier with `std::invalid_argument`. `residual` is the residual-branch weight
+gradient (backlog M3), empty for a layer without the branch.
 
 Family-specific operations are free functions in `include/kan/families.hpp`
 (`insert_knot`, `adapt_grid`, `set_rbf_parameters`, `set_rational_parameters`); each
@@ -553,7 +557,7 @@ std::variant<LayerGradients, InputMapGradients>`, the alternative matching each
 position, and network SGD rejects a mismatched alternative with `invalid_argument`.
 Layer indices of every Network API are positions in `layers()`, maps included;
 `insert_knot`/`adapt_grid` at an input map raise `invalid_argument`. The coefficient L2
-penalizes KAN layer coefficients only: a map contributes zero value and zero gain/bias
+penalizes KAN layer coefficients and residual-branch weights only: a map contributes zero value and zero gain/bias
 gradients (no input gradient), like RBF and rational nonlinear parameters. Every
 operation dispatches on a layer's kind once per call. `Network::inputs()/outputs()`
 give the network's dimensions.
@@ -595,7 +599,10 @@ from IEEE basic operations. Every derived quantity (moments, scales, the exponen
 trainable log widths) uses basic operations, `sqrt`, `frexp`, `ldexp` and `nearbyint` only,
 so the same configuration and seed give bitwise-identical parameters with MSVC and GCC
 (pinned digests in `tests/initializer_test.cpp`). Draw order: coefficients in layout order,
-then denominators in layout order. A parameter is a per-term factor times one raw draw.
+then denominators in layout order, then (layers with the residual branch only) residual
+weights in layout order. A parameter is a per-term factor times one raw draw. Normal draws
+come in pairs from one generator: a pending second value of the coefficient draws survives
+the (uniform) denominator draws and is the first residual draw.
 
 **VarianceScaling{gain}.** `kan::reference_moments(BasisConfig)` returns the variance of the
 family's reference measure and `m_k = E[phi_k(x)^2]` under it:
@@ -628,9 +635,10 @@ moments over 8 layers stay within 0.3–1.5 times the target for every family.
 count for other families and m+1 for rational numerators; uniform draws `(a/2)·(2u-1)` are
 pykan's `U(-a/2, a/2)`, normal draws `(a/sqrt(12))·z` have the same variance. Differences from
 pykan: the noise is put on the coefficients rather than on the G+1 grid values followed by a
-least-squares fit; `scale_sp = 1/sqrt(inputs)` is folded into the amplitude; there is no SiLU
-base branch (backlog M3), so deep NoiseInit networks propagate almost no signal (see the M4
-evidence); pykan's generator is torch's, ours is SplitMix64.
+least-squares fit; `scale_sp = 1/sqrt(inputs)` is folded into the amplitude; the SiLU base
+branch is opt-in per layer (backlog M3, below) — its weights are initialized as pykan's
+`scale_base` only for layers that have it, and deep NoiseInit networks without it propagate
+almost no signal (see the M4 evidence); pykan's generator is torch's, ours is SplitMix64.
 
 **Rational denominators** (both initializers). `beta_k = ±(bound/n)·(1+|ξ|)/2` with sign and ξ
 from one uniform draw, so `|beta_k|` is in [bound/(2n), bound/n], never zero, and
@@ -642,20 +650,94 @@ zero or nonfinite in double (radius^k out of range) raises `std::overflow_error`
 domain no bound is claimed.
 
 Python: `kan.Distribution.UNIFORM/NORMAL`, `kan.DenominatorInit(bound, radius)`,
-`kan.VarianceScaling(gain, distribution, seed, denominators)`, `kan.NoiseInit(scale, ...)`
+`kan.VarianceScaling(gain, distribution, seed, denominators)`, `kan.NoiseInit(scale, distribution,
+seed, denominators, residual_mean, residual_spread)`
 (value classes with equality), `kan.initialize(layer_or_network, initializer)` (in place,
 GIL released, `ValueError`/`OverflowError`), `kan.reference_moments(config)` returning
 `(variance, moments)` and `kan.layer_seed(seed, position)`. Initialized networks run on the
 resident executor by construction or `upload_parameters`; no executor change.
 
+## Residual branch (backlog M3)
+
+`include/kan/layer.hpp`. A `Layer` optionally holds `SiluResidual{weights}`, layout
+`(outputs, inputs)` (the carrier's edge order), and computes
+
+```
+y[b,o] = bias[o] + carrier_o(x_b) + sum_i w[o,i] * silu(x[b,i]),   silu(x) = x * sigmoid(x)
+```
+
+for every carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`): the edge function is
+`phi_{o,i}(x) = w[o,i]·silu(x) + carrier_{o,i}(x)`, the base branch of the original KAN
+(pykan's `scale_base·silu(x)`). It is off by default (constructors are unchanged).
+`residual()` returns `const std::optional<SiluResidual>&`; `set_residual(optional)` validates
+the shape (`outputs*inputs`) and finite weights with `std::invalid_argument` and enables,
+replaces or (`std::nullopt`) disables the branch atomically. The branch belongs to the layer,
+not to the carrier: `set_carrier`, `set_parameters`, `insert_knot`, `adapt_grid`,
+`set_rbf_parameters` and `set_rational_parameters` keep it unchanged. Copies are values;
+`SiluResidual` has `operator==`.
+
+Purpose: B-spline, Gaussian RBF and Mexican-hat carriers are exactly zero, with zero input
+gradient, outside their support, so without the branch no gradient crosses a layer whose
+inputs left the support (`tests/residual_test.cpp` asserts both zero without and nonzero with
+the branch, including the first layer's coefficient gradients behind such a layer).
+
+**Formulas** (single host/device source `src/detail/residual_formulas.hpp`, templated on the
+scalar): with `e = exp(-|x|)`, `sigma = 1/(1+e)` and `1-sigma = e/(1+e)` for `x >= 0`,
+`sigma = e/(1+e)` and `1-sigma = 1/(1+e)` for `x < 0`; `silu = x·sigma`,
+`silu' = sigma·(1 + x·(1-sigma))`. No intermediate is nonfinite for any finite double or float
+`x` (no exp overflow, no cancellation for `1-sigma`); `silu(±DBL_MAX)` is `DBL_MAX` / `-0`.
+
+**Order of evaluation (CPU).** Forward: the carrier's output (bias included, unchanged code
+path), then per sample and output `r = sum_i w[o,i]·silu(x[b,i])` accumulated from 0 in
+ascending i, then `y += r`. Backward, after the carrier's VJPs:
+`dw[o,i] = sum_b u[b,o]·silu(x[b,i])` (ascending b) and
+`dx[b,i] += silu'(x[b,i])·t`, `t = sum_o u[b,o]·w[o,i]` (ascending o). silu and silu' are
+evaluated once per sample and input. Nonfinite results raise `std::overflow_error`, as for the
+carriers. The coefficient, bias and nonlinear VJPs are unchanged.
+
+**SGD** updates `w -= rate·dw` with the other parameters, validated before any commit;
+`LayerGradients::residual` must hold `outputs*inputs` finite values for a layer with the branch
+and be empty otherwise (`std::invalid_argument`).
+
+**L2.** `regularization(lambda)` penalizes every linear parameter of the edge functions:
+value `lambda/2·(sum c² + sum w²)` (coefficients first, unchanged, then the weights), gradient
+`lambda·w` in `residual`. Leaving w unpenalized would let a fit escape into the unpenalized
+branch. Denominators, RBF centers/widths and bias stay unpenalized.
+
+**Initializers.** `kan::initialize` keeps the branch's presence: a layer without it is
+initialized exactly as before (the nine M4 digests are unchanged). For a layer with it,
+`NoiseInit` draws pykan's `scale_base = (residual_mean + residual_spread·(2u-1))/sqrt(inputs)`
+(defaults `residual_mean = 0`, `residual_spread = 1`, pykan's MultKAN `scale_base_mu/sigma`;
+Normal draws `(residual_mean + residual_spread/sqrt(3)·z)/sqrt(inputs)`, equal mean and
+variance), after the carrier's draws; `residual_mean` must be finite and `residual_spread`
+finite and `>= 0` (`std::invalid_argument`). `VarianceScaling` sets `w = 0`: the carrier keeps
+the exact `E[y²] = gain²·variance` guarantee, and `w = 0` is not stationary, since
+`dw = sum_b u·silu(x)`. pykan's trainable `scale_sp` is not a separate parameter here: it
+multiplies the carrier and is a reparametrization folded into the coefficients.
+
+**Python.** `Layer.residual` returns an owned `(outputs, inputs)` float64 array or `None`;
+`Layer.set_residual(weights)` takes a strict C-contiguous float64 array of that shape or `None`
+(`TypeError` for other types, `ValueError` for shape or nonfinite data, GIL released);
+`LayerGradients.residual` is `(outputs, inputs)`, or shape `(0,)` without the branch (as
+`denominators`). Gradients record the branch's presence: `sgd` with a gradient of the other
+kind raises `ValueError`. `NoiseInit` takes `residual_mean` and `residual_spread`.
+
+**Resident executor (phase 1 of 2).** `kan::cuda::ResidentNetwork` does not execute the branch
+yet: construction and `upload_parameters` from a network containing a layer with the branch
+raise `std::invalid_argument` ("residual branch not supported by the resident executor yet")
+before any allocation or upload, rather than dropping it. The deprecated
+`kan::cuda::forward/backward(Layer)` adapters inherit this. Resident L2 still penalizes the
+coefficients only, which is consistent while no resident layer can hold the branch.
+
 ## Extension boundaries
 
-Basis and rational formulas have a single source shared by the CPU backend and
-the resident CUDA kernels: `KAN_HOST_DEVICE` templates in `src/detail/basis_formulas.hpp`
-and `src/detail/rational_formulas.hpp`, parameterized by a finiteness guard (CPU throws,
+Basis, rational and residual-branch formulas have a single source shared by the CPU
+backend and the resident CUDA kernels: `KAN_HOST_DEVICE` templates in
+`src/detail/basis_formulas.hpp`, `src/detail/rational_formulas.hpp` and
+`src/detail/residual_formulas.hpp`, parameterized by a finiteness guard (CPU throws,
 device records status). Public declarations and validation live in
 `include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
-the carrier-independent Layer protocol lives in `src/layer.cpp`, per-carrier CPU
+the carrier-independent Layer protocol, including the SiLU residual branch, lives in `src/layer.cpp`, per-carrier CPU
 loops in `src/carriers/`, family operations in `src/families.cpp`; initializers in `src/initializers.cpp` with portable draws and moments in `src/init/`; input maps in `src/input_map.cpp`
 with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
 kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
