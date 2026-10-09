@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1-M4)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3 phase 1 and M4)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.

@@ -209,9 +209,15 @@ kan::initialize(model, kan::VarianceScaling{.gain = 1, .distribution = kan::Dist
 
 `VarianceScaling` gives every term an equal share of the output second moment under the
 family's reference measure (`kan::reference_moments`); `NoiseInit` matches pykan's
-`noise_scale` amplitude without its SiLU base branch. The same seed gives bitwise
-identical parameters on every platform. Python: `kan.initialize(model, kan.VarianceScaling(seed=7))`.
+`noise_scale` amplitude. The same seed gives bitwise identical parameters on every
+platform. Python: `kan.initialize(model, kan.VarianceScaling(seed=7))`.
 See the [contract](docs/CONTRACT.md#initializers-backlog-m4).
+
+pykan's SiLU base branch is opt-in per layer (backlog M3; CPU only until the resident
+executor supports it): `layer.set_residual(kan::SiluResidual{std::vector<double>(outputs * inputs)})`
+adds `sum_i w[o,i]·silu(x_i)` to every output, and `NoiseInit` then draws `w` as pykan's
+`scale_base` (`VarianceScaling` sets it to 0). Python: `layer.set_residual(np.zeros((outputs, inputs)))`.
+See the [contract](docs/CONTRACT.md#residual-branch-backlog-m3).
 
 ## Localized and adaptive use
 
