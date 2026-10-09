@@ -129,6 +129,14 @@ std::vector<Fixture> fixtures() {
     f.push_back({"rational_smooth", single(branched(rational(3, 4, kan::DenominatorPolicy::Smooth), 0.9)), 9, 7, 0.05});
     f.push_back({"mixed", mixed(), 11, 9, 0.05});
     f.push_back({"wide", wide(), 640, 600, 0.005});
+    // FP64: cuBLAS carrier contraction with the small residual kernel before
+    // the bias (batch*outputs*inputs*terms > 2^23 >= batch*outputs*inputs).
+    f.push_back({"medium", single(branched(seeded(kan::Layer(64, 80, kan::ChebyshevConfig{7}), 0.4, 0.3), 0.6, 0.3)),
+                 400, 400, 0.005});
+    // Rational edges with the standalone branch above the small thresholds
+    // (and, FP64, inputs beyond the shared S tile): cuBLAS and the check kernel.
+    f.push_back({"rational_wide", single(branched(rational(160, 120, kan::DenominatorPolicy::Smooth), 0.3, 0.3)),
+                 1000, 1000, 0.005});
     return f;
 }
 std::vector<double> input_for(const kan::Network& n, std::size_t rows, double phase = 0.2) {

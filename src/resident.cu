@@ -115,11 +115,26 @@ template<class T> __device__ T* stage_memory() {
     return reinterpret_cast<T*>(stage_raw);
 }
 
+// S = silu(X) and silu'(X), (batch, inputs) row-major, of a layer with the
+// SiLU residual branch (backlog M3).
+template<class T> struct SiluRows {
+    T* values;
+    T* derivatives;
+};
+// Both from one sigmoid (one exp), checked like every formula result.
+template<class T> __device__ void write_silu(SiluRows<T> silu, std::size_t index, T x, const StatusGuard& guard) {
+    const auto f = detail::silu(x, guard);
+    silu.values[index] = f.value; silu.derivatives[index] = f.derivative;
+}
+
 // derivatives = null (staged path only, backlog C3): Phi' is evaluated into the
 // stage but not written; the backward pass recomputes it.
-template<detail::BasisKind Kind, class T>
+// Residual (backlog M3): the pass that reads X also writes the layer's S and
+// silu' rows; the instantiation without it is the kernel as before.
+template<detail::BasisKind Kind, bool Residual, class T>
 __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_derivatives,
-                             std::size_t count, detail::BasisViewOf<T> basis, unsigned tile_rows, int* status) {
+                             std::size_t count, detail::BasisViewOf<T> basis, unsigned tile_rows, SiluRows<T> silu,
+                             int* status) {
     const StatusGuard guard{status};
     const auto terms = basis.terms;
     if (tile_rows == 0) {
@@ -128,7 +143,9 @@ __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_d
             const auto row = index * terms;
             const detail::BasisRowOf<T> out{values + row, derivatives + row, nullptr,
                                             basis.trainable ? log_derivatives + row : nullptr};
-            detail::basis_terms_for<Kind>(basis, input[index], out, guard);
+            const T x = input[index];
+            detail::basis_terms_for<Kind>(basis, x, out, guard);
+            if constexpr (Residual) write_silu(silu, index, x, guard);
         }
         return;
     }
@@ -141,7 +158,9 @@ __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_d
             const auto row = threadIdx.x * terms;
             const detail::BasisRowOf<T> out{stage + row, stage + plane + row, nullptr,
                                             basis.trainable ? stage + 2 * plane + row : nullptr};
-            detail::basis_terms_for<Kind>(basis, input[base + threadIdx.x], out, guard);
+            const T x = input[base + threadIdx.x];
+            detail::basis_terms_for<Kind>(basis, x, out, guard);
+            if constexpr (Residual) write_silu(silu, base + threadIdx.x, x, guard);
         }
         __syncthreads();
         const auto length = rows * terms, offset = base * terms;
@@ -169,9 +188,15 @@ __global__ void bias_kernel(T* output, const T* bias, std::size_t count, std::si
 // dot(Phi[b,:], C[o,:]) over two contiguous rows, with the bias and the
 // nonfinite check fused. cuBLAS runs a tiny GEMM as one latency-bound CTA
 // (42-64 us at 24x32x112 on the RTX 3090; this kernel: 7 us); see C2 evidence.
-template<class T>
+// Residual (backlog M3): each lane also accumulates its share of
+// r = dot(S[b,:], W[o,:]) into the same partial sum, so one shuffle tree
+// reduces carrier and branch together (a separate tree for r cost 25-60% of
+// the kernel; the device order of the sums is tolerance-based), then the
+// bias is added; the instantiation without it is the kernel as before.
+template<bool Residual, class T>
 __global__ void forward_dot_kernel(const T* v, const T* c, const T* bias, T* output,
-                                   std::size_t count, std::size_t outputs, std::size_t length, int* status) {
+                                   std::size_t count, std::size_t outputs, std::size_t length,
+                                   const T* s, const T* w, std::size_t inputs, int* status) {
     const auto lane = threadIdx.x%32;
     const auto warps = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
     for (auto index = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; index < count; index += warps) {
@@ -179,6 +204,11 @@ __global__ void forward_dot_kernel(const T* v, const T* c, const T* bias, T* out
         const T* column = c+(index%outputs)*length;
         T sum = 0;
         for (std::size_t k = lane; k < length; k += 32) sum += row[k]*column[k];
+        if constexpr (Residual) {
+            const T* silu = s+(index/outputs)*inputs;
+            const T* weights = w+(index%outputs)*inputs;
+            for (std::size_t i = lane; i < inputs; i += 32) sum += silu[i]*weights[i];
+        }
         for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
         if (lane == 0) { sum += bias[index%outputs]; output[index] = sum; report(sum, status); }
     }
@@ -403,45 +433,61 @@ __global__ void candidate_kernel(const T* parameters, const T* gradients, T* nex
 
 // SiLU residual branch (backlog M3): y += S*W^T with S = silu(X), dW =
 // U^T*S + lambda*W and dX += silu'(X) (.) (U*W), after the carrier's own
-// forward and backward (which write, not accumulate, Y and dX). W is
-// (outputs, inputs) row-major, S (batch, inputs) is kept from forward to
-// backward, silu' is recomputed from the layer input. Larger shapes use
-// cuBLAS (residual_forward/residual_backward); these kernels add the
-// elementwise parts, the small-shape contractions and the nonfinite checks.
-//
-// Small forward: one block per sample (grid-stride). The block writes the
-// sample's S row into shared memory and the workspace, then one warp per
-// output adds dot(W[o,:], S[b,:]) to Y[b,o] and checks the sum. silu is
-// evaluated once per (sample, input), as on the CPU.
+// VJPs. W is (outputs, inputs) row-major; S and silu'(X) are (batch, inputs)
+// rows kept from forward to backward, written by the expansion carriers'
+// basis_kernel (which reads X anyway) or by silu_kernel. The expansion
+// carriers fuse the forward sum into forward_dot_kernel (small shapes) or run
+// the cuBLAS GEMM before bias_kernel, whose check then covers it; other
+// carriers use the kernels below after their forward. Larger shapes use
+// cuBLAS (residual_contract, residual_backward).
 template<class T>
-__global__ void residual_forward_kernel(const T* x, const T* w, T* s, T* y, std::size_t batch, std::size_t inputs,
-                                        std::size_t outputs, int* status) {
-    const StatusGuard guard{status};
-    T* row = stage_memory<T>();
-    const auto lane = threadIdx.x%32, warp = threadIdx.x/32, warps = blockDim.x/32;
-    for (auto b = static_cast<std::size_t>(blockIdx.x); b < batch; b += gridDim.x) {
-        for (auto i = static_cast<std::size_t>(threadIdx.x); i < inputs; i += blockDim.x) {
-            const T value = detail::silu_value(x[b*inputs+i], guard);
-            row[i] = value; s[b*inputs+i] = value;
-        }
-        __syncthreads();
-        for (auto o = static_cast<std::size_t>(warp); o < outputs; o += warps) {
-            const T* weights = w+o*inputs;
-            T sum = 0;
-            for (std::size_t i = lane; i < inputs; i += 32) sum += weights[i]*row[i];
-            for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
-            if (lane == 0) { const T value = y[b*outputs+o]+sum; y[b*outputs+o] = value; report(value, status); }
-        }
-        __syncthreads(); // the row is overwritten for the block's next sample
-    }
-}
-// S = silu(X) for the cuBLAS forward.
-template<class T>
-__global__ void silu_kernel(const T* x, T* s, std::size_t count, int* status) {
+__global__ void silu_kernel(const T* x, SiluRows<T> silu, std::size_t count, int* status) {
     const StatusGuard guard{status};
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
-        s[index] = detail::silu_value(x[index], guard);
+        write_silu(silu, index, x[index], guard);
+}
+// Small Y += S*W^T: a block takes 32 samples (lane = sample) and stages their
+// S rows transposed (padded, conflict-free; one warp per row, coalesced) in
+// shared memory; each warp then copies one W row into its own shared slice
+// and sums that output over the inputs from shared memory only, adds it to Y
+// and checks. Blocks along y split the outputs, one per warp. Profiling
+// (M3 evidence, phase 2): reading W[o,i] from global memory inside the
+// multiply-add chain made the kernel long-scoreboard bound, and fewer, wider
+// output groups (register tiles of 4 outputs) starved the GPU of blocks at
+// batch 1024. Needs the S tile and the warps' W rows in the stage
+// (residual_tile_inputs).
+constexpr unsigned residual_tile = 32;
+template<class T> constexpr std::size_t residual_tile_inputs =
+    stage_bytes/((residual_tile+1+stage_threads/32)*sizeof(T));
+template<class T>
+__global__ void residual_dot_kernel(const T* s, const T* w, T* y, std::size_t batch, std::size_t inputs,
+                                    std::size_t outputs, int* status) {
+    constexpr auto pitch = residual_tile+1;
+    const auto lane = threadIdx.x%32, warp = threadIdx.x/32, warps = blockDim.x/32;
+    T* tile = stage_memory<T>();                            // [input][pitch]
+    T* row = tile+static_cast<std::size_t>(inputs)*pitch+warp*inputs; // this warp's W row
+    for (auto first = static_cast<std::size_t>(blockIdx.x)*residual_tile; first < batch;
+         first += static_cast<std::size_t>(gridDim.x)*residual_tile) {
+        const auto rows = batch-first < residual_tile ? batch-first : static_cast<std::size_t>(residual_tile);
+        for (auto r = static_cast<std::size_t>(warp); r < rows; r += warps)
+            for (auto i = static_cast<std::size_t>(lane); i < inputs; i += 32) tile[i*pitch+r] = s[(first+r)*inputs+i];
+        __syncthreads();
+        for (auto o = static_cast<std::size_t>(blockIdx.y)*warps+warp; o < outputs; o += static_cast<std::size_t>(gridDim.y)*warps) {
+            for (auto i = static_cast<std::size_t>(lane); i < inputs; i += 32) row[i] = w[o*inputs+i];
+            __syncwarp();
+            if (lane < rows) {
+                T sum = 0;
+#pragma unroll 8
+                for (std::size_t i = 0; i < inputs; ++i) sum += row[i]*tile[i*pitch+lane];
+                const auto at = (first+lane)*outputs+o;
+                const T value = y[at]+sum;
+                y[at] = value; report(value, status);
+            }
+            __syncwarp(); // the row is overwritten for the warp's next output
+        }
+        __syncthreads(); // the tile is overwritten for the block's next samples
+    }
 }
 // Nonfinite check of a result cuBLAS wrote (Y after Y += S*W^T).
 template<class T>
@@ -454,14 +500,13 @@ __global__ void check_kernel(const T* values, std::size_t count, int* status) {
 // sum of `tiles` partials (parameter_partial_kernel over S, rows `checked`
 // apart; no tiles for an empty batch) + lambda*W[q]; otherwise cuBLAS wrote
 // dW and only the check remains. Rows r = (sample, input) < rows:
-// dx[r] += silu'(x[r]) * t with t = tw[r] (cuBLAS U*W) or, without tw,
-// sum_o U[b,o]*W[o,i] in ascending o.
+// dx[r] += silu'(x[r]) * t (silu' from the forward's rows) with t = tw[r]
+// (cuBLAS U*W) or, without tw, sum_o U[b,o]*W[o,i] in ascending o.
 template<class T>
 __global__ void residual_finish_kernel(const T* partial, unsigned tiles, std::size_t checked, bool reduce,
                                        const T* w, T* dw, std::size_t count, T lambda,
-                                       const T* x, const T* u, const T* tw, T* dx, std::size_t rows,
+                                       const T* derivative, const T* u, const T* tw, T* dx, std::size_t rows,
                                        std::size_t inputs, std::size_t outputs, int* status) {
-    const StatusGuard guard{status};
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     const auto first = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
     for (auto q = first; q < count; q += stride) {
@@ -481,7 +526,7 @@ __global__ void residual_finish_kernel(const T* partial, unsigned tiles, std::si
             const auto b = r/inputs, i = r%inputs;
             for (std::size_t o = 0; o < outputs; ++o) t += u[b*outputs+o]*w[o*inputs+i];
         }
-        const T value = dx[r]+detail::silu(x[r], guard).derivative*t;
+        const T value = dx[r]+derivative[r]*t;
         dx[r] = value; report(value, status);
     }
 }
@@ -912,6 +957,14 @@ cublasStatus_t gemv(cublasHandle_t h, std::int64_t m, std::int64_t n, const floa
 cublasStatus_t scal(cublasHandle_t h, std::int64_t n, const double* alpha, double* x) { return cublasDscal_64(h, n, alpha, x, 1); }
 cublasStatus_t scal(cublasHandle_t h, std::int64_t n, const float* alpha, float* x) { return cublasSscal_64(h, n, alpha, x, 1); }
 
+// cuBLAS workspace of every contraction, and the larger one the residual
+// branch's GEMMs (backlog M3) switch to: cuBLAS splits long-k products such
+// as dW = U^T*S (256 x 256 x 8192) over k only with enough workspace (M3
+// evidence, phase 2: 105 us at 4 MiB, 54 us at 32 MiB, FP32 RTX 3090). The
+// carriers keep 4 MiB, so their kernel selection and results are unchanged.
+constexpr std::size_t blas_workspace_bytes = std::size_t{4} << 20;
+constexpr std::size_t residual_workspace_bytes = std::size_t{32} << 20;
+
 // Device state shared by every layer plan: the arena, stream and status word,
 // the double-buffered parameter regions and the per-layer activations.
 template<class T>
@@ -928,6 +981,19 @@ struct Context {
     // cuBLAS workspace, so cuBLAS never allocates during execution.
     std::size_t scratch = 0, ones = 0, blas_workspace = 0;
     std::size_t partials = 0; // small parameter VJP tiles, shared like the scratch
+    // Residual branch GEMM workspace (residual_workspace_bytes), reserved only
+    // when some branch takes a cuBLAS path at capacity.
+    std::size_t residual_workspace = 0;
+    bool has_residual_workspace = false;
+    // Runs the residual branch's cuBLAS calls `f` with its workspace, then
+    // restores the shared one (host-side handle state; graph capture records
+    // the pointers the kernels use).
+    template<class F> void with_residual_workspace(F&& f) {
+        if (!has_residual_workspace) { f(); return; }
+        check(cublasSetWorkspace(blas, ptr(residual_workspace), residual_workspace_bytes), "resident cuBLAS workspace");
+        try { f(); } catch (...) { cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes); throw; }
+        check(cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes), "resident cuBLAS workspace");
+    }
     std::vector<std::size_t> activation, upstream;
     T* arena = nullptr;
     int* status = nullptr;
@@ -1002,7 +1068,6 @@ struct Reservation {
         total = offset+count; return offset;
     }
 };
-constexpr std::size_t blas_workspace_bytes = std::size_t{4} << 20;
 
 // A layer's parameters occupy [coefficients | bias | nonlinear | residual] at
 // `offset` inside each of the parameter, gradient and candidate regions. The
@@ -1013,7 +1078,7 @@ constexpr std::size_t blas_workspace_bytes = std::size_t{4} << 20;
 struct ParameterBlock {
     std::size_t inputs, outputs, terms, coefficients, nonlinear_count, offset;
     std::size_t residual_count = 0; // outputs*inputs with the branch, else 0
-    std::size_t silu = 0;           // workspace: S = silu(X), (capacity, inputs); branch only
+    std::size_t silu = 0, silu_derivative = 0; // workspace: S, silu'(X), (capacity, inputs) each; branch only
     std::size_t bias() const noexcept { return offset+coefficients; }
     std::size_t nonlinear() const noexcept { return offset+coefficients+outputs; }
     std::size_t residual() const noexcept { return offset+coefficients+outputs+nonlinear_count; }
@@ -1264,12 +1329,12 @@ template<class T> void reserve_workspace(LayerNormPlan<T>& plan, std::size_t cap
     if (plan.affine()) plan.partials = reserve(product(plan.block.features, 2*static_cast<std::size_t>(norm_tiles(capacity))));
 }
 
-// The S = silu(X) region of a layer with the residual branch, after its
+// The S and silu'(X) regions of a layer with the residual branch, after its
 // carrier's workspace (nothing is reserved without the branch).
 template<class T, class P> void reserve_residual(P& plan, std::size_t capacity, Reservation<T>& reserve) {
     if constexpr (requires { typename P::edges_type; }) {
         auto& b = block_of(plan);
-        if (b.residual_count) b.silu = reserve(product(capacity, b.inputs));
+        if (b.residual_count) { b.silu = reserve(product(capacity, b.inputs)); b.silu_derivative = reserve(product(capacity, b.inputs)); }
     }
 }
 
@@ -1365,6 +1430,44 @@ detail::BasisViewOf<T> device_basis(const Context<T>& s, const ExpansionPlan<T>&
     return basis;
 }
 
+// SiLU residual branch (backlog M3): the layer's S and silu' rows, and
+// Y += S*W^T without a check (the caller's bias_kernel or check_kernel
+// reports): residual_dot_kernel where a 32-sample S tile fits the stage and
+// batch*outputs*inputs is at most the carrier's small_forward_contraction,
+// cuBLAS (beta = 1) above.
+template<class T> SiluRows<T> silu_rows(Context<T>& s, const ParameterBlock& b) {
+    return {s.ptr(b.silu), s.ptr(b.silu_derivative)};
+}
+template<class T> bool small_residual_work(const ParameterBlock& b, std::size_t batch) {
+    return !batch || b.outputs*b.inputs <= small_forward_contraction<T>/batch;
+}
+template<class T> bool small_residual(const ParameterBlock& b, std::size_t batch) {
+    return b.inputs <= residual_tile_inputs<T> && small_residual_work<T>(b, batch);
+}
+// Returns whether the contraction checked Y itself (residual_dot_kernel).
+template<class T> bool residual_contract(Context<T>& s, const ParameterBlock& b, std::size_t j) {
+    const T* w = s.ptr(s.parameters+b.residual());
+    T* y = s.ptr(s.activation[j+1]);
+    if (small_residual<T>(b, s.batch)) {
+        constexpr unsigned warps = stage_threads/32;
+        const auto groups = static_cast<unsigned>(std::min<std::size_t>((b.outputs-1)/warps+1, 65535));
+        residual_dot_kernel<<<dim3(blocks(s.batch, residual_tile), groups), stage_threads,
+                              b.inputs*(residual_tile+1+warps)*sizeof(T), s.stream>>>(s.ptr(b.silu), w, y, s.batch, b.inputs,
+                                                                                      b.outputs, s.status);
+        check(cudaGetLastError(), "resident residual forward launch");
+        return true;
+    }
+    // Row-major Y (batch x O) += S (batch x I) * W^T: column-major
+    // Y^T = W(op T, W stored as column-major I x O) * S^T.
+    const auto i = static_cast<std::int64_t>(b.inputs), o = static_cast<std::int64_t>(b.outputs);
+    const T one = 1;
+    s.with_residual_workspace([&] {
+        check(gemm(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), i, &one, w, i, s.ptr(b.silu), i,
+                   &one, y, o), "resident residual forward contraction");
+    });
+    return false;
+}
+
 // Forward of layer j: activation[j] -> activation[j+1].
 template<class T>
 void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, T* log_derivatives,
@@ -1374,16 +1477,29 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     const auto count = s.batch*b.inputs;
     const auto tile_rows = stage_rows<T>(b.terms, basis.trainable ? 3 : 2);
     const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*(basis.trainable ? 3 : 2)*sizeof(T);
+    // With the residual branch (backlog M3) the same pass writes S and silu'.
+    const bool residual = b.residual_count != 0;
+    const auto silu = residual ? silu_rows(s, b) : SiluRows<T>{nullptr, nullptr};
     detail::visit_basis_family(basis.kind, [&](auto family) {
-        basis_kernel<decltype(family)::value><<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads, shared, s.stream>>>(
-            s.ptr(s.activation[j]), s.ptr(p.values), p.stored_derivatives ? s.ptr(p.derivatives) : nullptr, log_derivatives,
-            count, basis, tile_rows, s.status);
+        const auto launch = [&](auto with_residual) {
+            basis_kernel<decltype(family)::value, decltype(with_residual)::value>
+                <<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads, shared, s.stream>>>(
+                s.ptr(s.activation[j]), s.ptr(p.values), p.stored_derivatives ? s.ptr(p.derivatives) : nullptr, log_derivatives,
+                count, basis, tile_rows, silu, s.status);
+        };
+        if (residual) launch(std::true_type{}); else launch(std::false_type{});
     });
     check(cudaGetLastError(), "resident basis launch");
     const auto outputs = s.batch*b.outputs, length = b.inputs*b.terms;
     if (outputs <= small_forward_contraction<T>/length) {
-        forward_dot_kernel<<<blocks(outputs, 256/32), 256, 0, s.stream>>>(s.ptr(p.values), s.ptr(s.parameters+b.offset),
-            s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), outputs, b.outputs, length, s.status);
+        // The residual sum is reduced by the same warps (backlog M3).
+        const auto launch = [&](auto with_residual) {
+            forward_dot_kernel<decltype(with_residual)::value><<<blocks(outputs, 256/32), 256, 0, s.stream>>>(
+                s.ptr(p.values), s.ptr(s.parameters+b.offset), s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]),
+                outputs, b.outputs, length, silu.values, residual ? s.ptr(s.parameters+b.residual()) : nullptr, b.inputs,
+                s.status);
+        };
+        if (residual) launch(std::true_type{}); else launch(std::false_type{});
         check(cudaGetLastError(), "resident forward contraction launch");
         return;
     }
@@ -1394,6 +1510,8 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     check(gemm(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), ik, &one,
                s.ptr(s.parameters+b.offset), ik, s.ptr(p.values), ik, &zero, s.ptr(s.activation[j+1]), o),
           "resident forward contraction");
+    // Y += S*W^T before the bias, so that bias_kernel checks the sum (backlog M3).
+    if (residual) residual_contract(s, b, j);
     bias_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.ptr(s.parameters+b.bias()),
         s.batch*b.outputs, b.outputs, s.status);
     check(cudaGetLastError(), "resident forward bias launch");
@@ -1590,34 +1708,16 @@ template<class T> void run_backward(Context<T>& s, const LayerNormPlan<T>& plan,
     check(cudaGetLastError(), "resident layer norm parameter reduction launch");
 }
 
-// SiLU residual branch (backlog M3) of a KAN layer, enqueued after the
-// carrier's run_forward / run_backward. Small shapes (a shared S row fits
-// the stage budget and batch*outputs*inputs is at most the carrier's
-// small_forward_contraction) take one fused kernel; larger ones the silu
-// kernel, a cuBLAS GEMM with beta = 1 and the check.
-template<class T> bool small_residual(const ParameterBlock& b, std::size_t batch) {
-    return b.inputs <= stage_bytes/sizeof(T) && (!batch || b.outputs*b.inputs <= small_forward_contraction<T>/batch);
-}
+// SiLU residual branch (backlog M3) of a KAN layer whose carrier does not
+// fuse it (rational edges), enqueued after the carrier's run_forward: S and
+// silu' rows, then Y += S*W^T, checked. Its backward always follows the
+// carrier's run_backward.
 template<class T> void residual_forward(Context<T>& s, const ParameterBlock& b, std::size_t j) {
-    const T* x = s.ptr(s.activation[j]);
-    const T* w = s.ptr(s.parameters+b.residual());
-    T* y = s.ptr(s.activation[j+1]);
-    if (small_residual<T>(b, s.batch)) {
-        residual_forward_kernel<<<blocks(s.batch, 1), stage_threads, b.inputs*sizeof(T), s.stream>>>(x, w, s.ptr(b.silu), y,
-            s.batch, b.inputs, b.outputs, s.status);
-        check(cudaGetLastError(), "resident residual forward launch");
-        return;
-    }
     const auto count = s.batch*b.inputs;
-    silu_kernel<<<blocks(count), 256, 0, s.stream>>>(x, s.ptr(b.silu), count, s.status);
+    silu_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.activation[j]), silu_rows(s, b), count, s.status);
     check(cudaGetLastError(), "resident residual silu launch");
-    // Row-major Y (batch x O) += S (batch x I) * W^T: column-major
-    // Y^T = W(op T, W stored as column-major I x O) * S^T.
-    const auto i = static_cast<std::int64_t>(b.inputs), o = static_cast<std::int64_t>(b.outputs);
-    const T one = 1;
-    check(gemm(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), i, &one, w, i, s.ptr(b.silu), i,
-               &one, y, o), "resident residual forward contraction");
-    check_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(y, s.batch*b.outputs, s.status);
+    if (residual_contract(s, b, j)) return;
+    check_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.batch*b.outputs, s.status);
     check(cudaGetLastError(), "resident residual check launch");
 }
 // dW = U^T*S + lambda*W (small: tiled partials, otherwise cuBLAS with beta =
@@ -1643,26 +1743,31 @@ template<class T> void residual_backward(Context<T>& s, const ParameterBlock& b,
     } else if (s.batch) {
         // Column-major dW^T (I x O) = S^T * U + lambda*W^T; beta = 0 never reads dW.
         if (lambda != 0) check(cudaMemcpyAsync(dw, w, b.residual_count*sizeof(T), cudaMemcpyDeviceToDevice, s.stream), "resident L2 copy");
-        check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_T, i, o, n, &one, s.ptr(b.silu), i, u, o, &lambda, dw, i),
-              "resident residual weight VJP");
+        s.with_residual_workspace([&] {
+            check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_T, i, o, n, &one, s.ptr(b.silu), i, u, o, &lambda, dw, i),
+                  "resident residual weight VJP");
+        });
         reduce = false;
     }
     const bool dx = s.batch && s.input_gradient(j);
     const T* tw = nullptr;
-    if (dx && !small_residual<T>(b, s.batch)) {
+    if (dx && !small_residual_work<T>(b, s.batch)) {
         // Column-major T^T (I x batch) = W^T(W as column-major I x O) * U^T.
-        check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, i, n, o, &one, w, i, u, o, &zero, s.ptr(s.scratch), i),
-              "resident residual input VJP contraction");
+        s.with_residual_workspace([&] {
+            check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, i, n, o, &one, w, i, u, o, &zero, s.ptr(s.scratch), i),
+                  "resident residual input VJP contraction");
+        });
         tw = s.ptr(s.scratch);
     }
     const auto rows = dx ? s.batch*b.inputs : 0;
     residual_finish_kernel<<<std::max(blocks(b.residual_count), rows ? blocks(rows) : 1u), 256, 0, s.stream>>>(
-        s.ptr(s.partials), tiles, checked, reduce, w, dw, b.residual_count, lambda, s.ptr(s.activation[j]), u, tw,
+        s.ptr(s.partials), tiles, checked, reduce, w, dw, b.residual_count, lambda, s.ptr(b.silu_derivative), u, tw,
         s.ptr(s.upstream[j]), rows, b.inputs, b.outputs, s.status);
     check(cudaGetLastError(), "resident residual finish launch");
 }
+// Expansion carriers fuse the residual forward into expansion_forward.
 template<class T, class P> void run_residual_forward(Context<T>& s, const P& plan, std::size_t j) {
-    if constexpr (is_kan_layer<P>) if (block_of(plan).residual_count) residual_forward(s, block_of(plan), j);
+    if constexpr (is_kan_layer<P> && !is_expansion<P>) if (block_of(plan).residual_count) residual_forward(s, block_of(plan), j);
 }
 template<class T, class P> void run_residual_backward(Context<T>& s, const P& plan, std::size_t j, T lambda) {
     if constexpr (is_kan_layer<P>) if (block_of(plan).residual_count) residual_backward(s, block_of(plan), j, lambda);
@@ -2032,6 +2137,17 @@ struct Engine final : ResidentExecutor, Context<T> {
         target_regions[0] = reserve(product(capacity, extent(plans.back()).outputs));
         target_regions[1] = reserve(product(capacity, extent(plans.back()).outputs));
         loss_value = reserve(1); loss_partials = reserve(mse_max_blocks);
+        // Backlog M3: after every earlier region, only for a branch that takes
+        // a cuBLAS path at full capacity.
+        for (const auto& plan : plans)
+            std::visit([&](const auto& p) {
+                if constexpr (is_kan_layer<std::decay_t<decltype(p)>>) {
+                    const auto& b = block_of(p);
+                    if (b.residual_count && (!small_residual<T>(b, capacity) || !small_residual_vjp<T>(b, capacity)))
+                        this->has_residual_workspace = true;
+                }
+            }, plan);
+        if (this->has_residual_workspace) this->residual_workspace = reserve(residual_workspace_bytes/sizeof(T));
         graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
         try {
