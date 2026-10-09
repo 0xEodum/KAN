@@ -175,8 +175,39 @@ kan::NetworkGradients cpu_gradients(const kan::Network& n, std::span<const doubl
     }
     return g;
 }
+// TF32 rounds the operands of the cuBLAS dW = U^T*S to 10 mantissa bits
+// (2^-11 relative each); for sums with heavy cancellation the error scales
+// with sum_b |U[b,o]|*|S[b,i]|, not with the result. Per KAN layer j this
+// bound is formed from the CPU's layer input (a prefix network's forward)
+// and upstream (the next stage's input gradient, or the network upstream).
+std::vector<std::vector<double>> residual_bounds(const kan::Network& n, std::span<const double> x, std::size_t rows,
+                                                 std::span<const double> u, const kan::NetworkGradients& e) {
+    std::vector<std::vector<double>> bounds(n.layers().size());
+    const auto stages = n.layers();
+    for (std::size_t j = 0; j < stages.size(); ++j) {
+        const auto* l = std::get_if<kan::Layer>(&stages[j]);
+        if (!l || !l->residual()) continue;
+        const auto input = j ? kan::Network(std::vector<kan::NetworkLayer>(stages.begin(), stages.begin()+j)).forward(x, rows)
+                             : std::vector<double>(x.begin(), x.end());
+        std::vector<double> upstream(u.begin(), u.end());
+        if (j+1 < stages.size()) {
+            if (const auto* m = std::get_if<kan::InputMapGradients>(&e.layers[j+1])) upstream = m->input;
+            else upstream = test::grad(e, j+1).input;
+        }
+        const auto in = l->inputs(), out = l->outputs();
+        auto& b = bounds[j];
+        b.assign(in*out, 0.0);
+        for (std::size_t r = 0; r < rows; ++r)
+            for (std::size_t o = 0; o < out; ++o)
+                for (std::size_t i = 0; i < in; ++i) {
+                    const double v = input[r*in+i];
+                    b[o*in+i] += std::abs(upstream[r*out+o])*std::abs(v/(1+std::exp(-v)));
+                }
+    }
+    return bounds;
+}
 void compare_gradients(const kan::NetworkGradients& a, const kan::NetworkGradients& e, Tolerance t, const std::string& what,
-                       bool with_input = true) {
+                       bool with_input = true, const std::vector<std::vector<double>>* bounds = nullptr) {
     if (with_input) close(a.input, e.input, t, what + " network input");
     REQUIRE(a.layers.size() == e.layers.size());
     for (std::size_t j = 0; j < a.layers.size(); ++j) {
@@ -195,7 +226,18 @@ void compare_gradients(const kan::NetworkGradients& a, const kan::NetworkGradien
         close(test::centers(ag), test::centers(eg), t, at + " centers");
         close(test::log_widths(ag), test::log_widths(eg), t, at + " log widths");
         close(test::denominators(ag), test::denominators(eg), t, at + " denominators");
-        close(ag.residual, eg.residual, t, at + " residual");
+        if (bounds && !(*bounds)[j].empty()) {
+            const auto& bound = (*bounds)[j];
+            double scale = 0;
+            for (double v : eg.residual) scale = std::max(scale, std::abs(v));
+            for (std::size_t k = 0; k < eg.residual.size(); ++k)
+                if (!std::isfinite(ag.residual[k]) || std::abs(ag.residual[k]-eg.residual[k]) >
+                        t.relative*std::abs(eg.residual[k]) + t.floor*scale + 2e-3*bound[k])
+                    throw std::runtime_error(text(at, " residual (TF32 bound): index ", k, " actual=", ag.residual[k],
+                                                  " expected=", eg.residual[k], " bound=", bound[k]));
+        } else {
+            close(ag.residual, eg.residual, t, at + " residual");
+        }
     }
 }
 std::vector<double> flat(const kan::NetworkGradients& gradients) {
@@ -265,7 +307,10 @@ TEST(eager_forward_backward_sgd_match_the_cpu) {
                     close(gpu.download_output(), cpu.forward(x, rows), t, what + " output");
                     gpu.backward(l2);
                     const auto g = gpu.download_gradients();
-                    compare_gradients(g, cpu_gradients(cpu, x, rows, u, l2), t, what);
+                    const auto reference = cpu_gradients(cpu, x, rows, u, l2);
+                    const auto bounds = p == Precision::TensorFloat32 ? residual_bounds(cpu, x, rows, u, reference)
+                                                                      : std::vector<std::vector<double>>{};
+                    compare_gradients(g, reference, t, what, true, bounds.empty() ? nullptr : &bounds);
                     // SGD: p - rate*g of the downloaded values, in T.
                     const auto before = flat(cpu), gradient = flat(g);
                     gpu.sgd(f.rate);
@@ -473,7 +518,10 @@ TEST(extreme_inputs_are_finite) {
 }
 
 // Phase 1's demonstration network (NoiseInit + branch, Chebyshev) trained with
-// resident MSE steps tracks the CPU trajectory and leaves the saddle.
+// resident MSE steps tracks the CPU trajectory while it sits on the saddle and
+// leaves it like the CPU. The escape (epochs 200-300 at rate 0.03) is chaotic:
+// one ulp in one CPU weight changes the epoch-300 loss by 97% (M3 evidence,
+// phase 2), so only the pre-escape trajectory is compared value by value.
 TEST(noise_initialized_training_tracks_the_cpu) {
     std::vector<double> x, target;
     for (std::size_t i = 0; i < 8; ++i)
@@ -501,7 +549,7 @@ TEST(noise_initialized_training_tracks_the_cpu) {
     auto cpu = initial;
     constexpr std::size_t epochs = 1000;
     constexpr double rate = 0.03;
-    const std::size_t checkpoints[] = {0, 100, 300, 600, 999};
+    const std::size_t checkpoints[] = {0, 50, 100, 150, 200, 999};
     std::vector<double> expected;
     for (std::size_t e = 0; e < epochs; ++e) {
         const auto y = cpu.forward(x, 64);
@@ -526,7 +574,10 @@ TEST(noise_initialized_training_tracks_the_cpu) {
         std::printf("%s loss:", name_of(p));
         for (double v : actual) std::printf(" %.6e", v);
         std::printf("\n");
-        close(actual, expected, p == Precision::Float64 ? Tolerance{1e-8, 0} : Tolerance{5e-2, 0}, text("training ", name_of(p)));
+        const auto tracked = std::size(checkpoints)-1; // up to epoch 200
+        close(std::span(actual).first(tracked), std::span(expected).first(tracked),
+              p == Precision::Float64 ? Tolerance{1e-12, 0} : Tolerance{1e-3, 0}, text("training ", name_of(p)));
+        REQUIRE(expected.back() < 0.5*0.1205);
         REQUIRE(actual.back() < 0.5*0.1205);
     }
 }

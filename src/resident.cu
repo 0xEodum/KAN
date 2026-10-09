@@ -2,6 +2,7 @@
 #include "detail/basis_view.hpp"
 #include "detail/rational_formulas.hpp"
 #include "detail/input_map_formulas.hpp"
+#include "detail/residual_formulas.hpp"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <algorithm>
@@ -35,13 +36,6 @@ std::size_t product(std::size_t a, std::size_t b) {
 }
 void finite(std::span<const double> values) {
     for (double x : values) if (!std::isfinite(x)) throw std::invalid_argument("resident data must be finite");
-}
-// Backlog M3 phase 1: the SiLU residual branch has no resident plan yet; reject
-// it rather than drop it (phase 2 implements it).
-void reject_residual(const Network& network) {
-    for (const auto& stage : network.layers())
-        if (const auto* layer = std::get_if<Layer>(&stage); layer && layer->residual())
-            throw std::invalid_argument("residual branch not supported by the resident executor yet");
 }
 unsigned blocks(std::size_t count,std::size_t work_per_block=256) {
     return static_cast<unsigned>(std::min<std::size_t>((count-1)/work_per_block+1,65535));
@@ -404,6 +398,91 @@ __global__ void candidate_kernel(const T* parameters, const T* gradients, T* nex
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < count; i += stride) {
         next[i] = parameters[i] - rate*gradients[i]; report(next[i], status);
+    }
+}
+
+// SiLU residual branch (backlog M3): y += S*W^T with S = silu(X), dW =
+// U^T*S + lambda*W and dX += silu'(X) (.) (U*W), after the carrier's own
+// forward and backward (which write, not accumulate, Y and dX). W is
+// (outputs, inputs) row-major, S (batch, inputs) is kept from forward to
+// backward, silu' is recomputed from the layer input. Larger shapes use
+// cuBLAS (residual_forward/residual_backward); these kernels add the
+// elementwise parts, the small-shape contractions and the nonfinite checks.
+//
+// Small forward: one block per sample (grid-stride). The block writes the
+// sample's S row into shared memory and the workspace, then one warp per
+// output adds dot(W[o,:], S[b,:]) to Y[b,o] and checks the sum. silu is
+// evaluated once per (sample, input), as on the CPU.
+template<class T>
+__global__ void residual_forward_kernel(const T* x, const T* w, T* s, T* y, std::size_t batch, std::size_t inputs,
+                                        std::size_t outputs, int* status) {
+    const StatusGuard guard{status};
+    T* row = stage_memory<T>();
+    const auto lane = threadIdx.x%32, warp = threadIdx.x/32, warps = blockDim.x/32;
+    for (auto b = static_cast<std::size_t>(blockIdx.x); b < batch; b += gridDim.x) {
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < inputs; i += blockDim.x) {
+            const T value = detail::silu_value(x[b*inputs+i], guard);
+            row[i] = value; s[b*inputs+i] = value;
+        }
+        __syncthreads();
+        for (auto o = static_cast<std::size_t>(warp); o < outputs; o += warps) {
+            const T* weights = w+o*inputs;
+            T sum = 0;
+            for (std::size_t i = lane; i < inputs; i += 32) sum += weights[i]*row[i];
+            for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
+            if (lane == 0) { const T value = y[b*outputs+o]+sum; y[b*outputs+o] = value; report(value, status); }
+        }
+        __syncthreads(); // the row is overwritten for the block's next sample
+    }
+}
+// S = silu(X) for the cuBLAS forward.
+template<class T>
+__global__ void silu_kernel(const T* x, T* s, std::size_t count, int* status) {
+    const StatusGuard guard{status};
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
+        s[index] = detail::silu_value(x[index], guard);
+}
+// Nonfinite check of a result cuBLAS wrote (Y after Y += S*W^T).
+template<class T>
+__global__ void check_kernel(const T* values, std::size_t count, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
+        report(values[index], status);
+}
+// Backward finish. Weights q < count: with `reduce`, dW[q] = the fixed-order
+// sum of `tiles` partials (parameter_partial_kernel over S, rows `checked`
+// apart; no tiles for an empty batch) + lambda*W[q]; otherwise cuBLAS wrote
+// dW and only the check remains. Rows r = (sample, input) < rows:
+// dx[r] += silu'(x[r]) * t with t = tw[r] (cuBLAS U*W) or, without tw,
+// sum_o U[b,o]*W[o,i] in ascending o.
+template<class T>
+__global__ void residual_finish_kernel(const T* partial, unsigned tiles, std::size_t checked, bool reduce,
+                                       const T* w, T* dw, std::size_t count, T lambda,
+                                       const T* x, const T* u, const T* tw, T* dx, std::size_t rows,
+                                       std::size_t inputs, std::size_t outputs, int* status) {
+    const StatusGuard guard{status};
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    const auto first = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+    for (auto q = first; q < count; q += stride) {
+        if (reduce) {
+            T sum = 0;
+            for (unsigned t = 0; t < tiles; ++t) sum += partial[t*checked+q];
+            sum += lambda*w[q];
+            dw[q] = sum;
+        }
+        report(dw[q], status);
+    }
+    for (auto r = first; r < rows; r += stride) {
+        T t = 0;
+        if (tw) {
+            t = tw[r];
+        } else {
+            const auto b = r/inputs, i = r%inputs;
+            for (std::size_t o = 0; o < outputs; ++o) t += u[b*outputs+o]*w[o*inputs+i];
+        }
+        const T value = dx[r]+detail::silu(x[r], guard).derivative*t;
+        dx[r] = value; report(value, status);
     }
 }
 
@@ -925,20 +1004,29 @@ struct Reservation {
 };
 constexpr std::size_t blas_workspace_bytes = std::size_t{4} << 20;
 
-// A layer's parameters occupy [coefficients | bias | nonlinear] at `offset`
-// inside each of the parameter, gradient and candidate regions.
+// A layer's parameters occupy [coefficients | bias | nonlinear | residual] at
+// `offset` inside each of the parameter, gradient and candidate regions. The
+// residual part holds the SiLU branch weights W (outputs, inputs) of backlog
+// M3 and is empty without the branch, so the blocks (and the arena) of layers
+// without it are unchanged; the shared candidate and commit kernels and
+// (through dW) the L2 penalty cover W like every other parameter.
 struct ParameterBlock {
     std::size_t inputs, outputs, terms, coefficients, nonlinear_count, offset;
+    std::size_t residual_count = 0; // outputs*inputs with the branch, else 0
+    std::size_t silu = 0;           // workspace: S = silu(X), (capacity, inputs); branch only
     std::size_t bias() const noexcept { return offset+coefficients; }
     std::size_t nonlinear() const noexcept { return offset+coefficients+outputs; }
-    std::size_t size() const noexcept { return coefficients+outputs+nonlinear_count; }
+    std::size_t residual() const noexcept { return offset+coefficients+outputs+nonlinear_count; }
+    std::size_t size() const noexcept { return coefficients+outputs+nonlinear_count+residual_count; }
 };
 
 ParameterBlock parameter_block(const Layer& layer, std::size_t nonlinear_count, std::size_t offset) {
     const auto count = layer.coefficients().size()+layer.outputs(), maximum = std::vector<double>().max_size();
-    if (count>maximum || nonlinear_count>maximum-count || count+nonlinear_count>maximum-offset)
+    const auto residual = layer.residual() ? product(layer.inputs(), layer.outputs()) : 0;
+    if (count>maximum || nonlinear_count>maximum-count || residual>maximum-count-nonlinear_count ||
+        count+nonlinear_count+residual>maximum-offset)
         throw std::overflow_error("resident parameter size overflow");
-    return {layer.inputs(), layer.outputs(), layer.terms(), layer.coefficients().size(), nonlinear_count, offset};
+    return {layer.inputs(), layer.outputs(), layer.terms(), layer.coefficients().size(), nonlinear_count, offset, residual};
 }
 
 // Execution plans, one per carrier type (the alternatives of kan::Carrier),
@@ -1024,6 +1112,9 @@ using Plan = std::variant<BasisPlan<T>, TrainableRbfPlan<T>, RationalPlan<T>, Af
 template<class T> const ParameterBlock& block_of(const BasisPlan<T>& p) { return p.expansion.block; }
 template<class T> const ParameterBlock& block_of(const TrainableRbfPlan<T>& p) { return p.expansion.block; }
 template<class T> const ParameterBlock& block_of(const RationalPlan<T>& p) { return p.block; }
+template<class T> ParameterBlock& block_of(BasisPlan<T>& p) { return p.expansion.block; }
+template<class T> ParameterBlock& block_of(TrainableRbfPlan<T>& p) { return p.expansion.block; }
+template<class T> ParameterBlock& block_of(RationalPlan<T>& p) { return p.block; }
 
 // Dimensions and parameter count of any plan.
 struct Extent {
@@ -1122,6 +1213,7 @@ template<class T> Plan<T> make_plan(const InputMap& map, const LayerNormMap& nor
 template<class T> Plan<T> make_plan(const Layer& layer, std::size_t offset) {
     finite(layer.coefficients()); finite(layer.bias());
     representable<T>(layer.coefficients()); representable<T>(layer.bias());
+    if (layer.residual()) { finite(layer.residual()->weights); representable<T>(layer.residual()->weights); }
     return std::visit([&](const auto& edges) { return make_plan<T>(layer, edges, offset); }, layer.carrier());
 }
 template<class T> Plan<T> make_plan(const InputMap& map, std::size_t offset) {
@@ -1172,24 +1264,55 @@ template<class T> void reserve_workspace(LayerNormPlan<T>& plan, std::size_t cap
     if (plan.affine()) plan.partials = reserve(product(plan.block.features, 2*static_cast<std::size_t>(norm_tiles(capacity))));
 }
 
-template<class P> constexpr bool is_expansion = requires(const P& p) { p.expansion; };
+// The S = silu(X) region of a layer with the residual branch, after its
+// carrier's workspace (nothing is reserved without the branch).
+template<class T, class P> void reserve_residual(P& plan, std::size_t capacity, Reservation<T>& reserve) {
+    if constexpr (requires { typename P::edges_type; }) {
+        auto& b = block_of(plan);
+        if (b.residual_count) b.silu = reserve(product(capacity, b.inputs));
+    }
+}
 
-// Elements of the shared W = U*C scratch an expansion layer needs (zero otherwise).
+template<class P> constexpr bool is_expansion = requires(const P& p) { p.expansion; };
+template<class P> constexpr bool is_kan_layer = requires { typename P::edges_type; };
+
+// Elements of the shared W = U*C scratch an expansion layer needs, and the
+// U*W (capacity, inputs) of a residual branch (zero otherwise).
 template<class T> std::size_t scratch_extent(const Plan<T>& plan, std::size_t capacity) {
     return std::visit([&](const auto& p) -> std::size_t {
-        if constexpr (is_expansion<std::decay_t<decltype(p)>>)
-            return product(product(capacity, p.expansion.block.inputs), p.expansion.block.terms);
-        else return 0;
+        using P = std::decay_t<decltype(p)>;
+        std::size_t extent = 0;
+        if constexpr (is_expansion<P>)
+            extent = product(product(capacity, p.expansion.block.inputs), p.expansion.block.terms);
+        if constexpr (is_kan_layer<P>)
+            if (block_of(p).residual_count) extent = std::max(extent, product(capacity, block_of(p).inputs));
+        return extent;
     }, plan);
 }
 
+// A residual dW of at most small_parameter_vjp weights+outputs (and, FP32,
+// small_parameter_work batch*(weights+outputs)) is reduced by
+// parameter_partial_kernel over S, the expansion carriers' rule.
+template<class T> bool small_residual_vjp(const ParameterBlock& b, std::size_t batch) {
+    const auto checked = b.residual_count+b.outputs;
+    return checked <= small_parameter_vjp<T> && batch <= small_parameter_work<T>/checked;
+}
 // Elements of the shared small-parameter-VJP partials a layer needs (zero otherwise).
 template<class T> std::size_t partial_extent(const Plan<T>& plan, std::size_t capacity) {
     return std::visit([&](const auto& p) -> std::size_t {
-        if constexpr (is_expansion<std::decay_t<decltype(p)>>) {
+        using P = std::decay_t<decltype(p)>;
+        std::size_t extent = 0;
+        if constexpr (is_expansion<P>) {
             const auto checked = p.expansion.block.coefficients+p.expansion.block.outputs;
-            return checked <= small_parameter_vjp<T> ? checked*parameter_tile_count(capacity) : 0;
-        } else return 0;
+            extent = checked <= small_parameter_vjp<T> ? checked*parameter_tile_count(capacity) : 0;
+        }
+        if constexpr (is_kan_layer<P>) {
+            const auto& b = block_of(p);
+            const auto checked = b.residual_count+b.outputs;
+            if (b.residual_count && checked <= small_parameter_vjp<T>)
+                extent = std::max(extent, checked*parameter_tile_count(capacity));
+        }
+        return extent;
     }, plan);
 }
 
@@ -1221,6 +1344,7 @@ void upload_stage(Context<T>& s, const P& plan, const Layer& layer, const Edges&
     s.upload(s.ptr(s.parameters+b.offset), layer.coefficients());
     s.upload(s.ptr(s.parameters+b.bias()), layer.bias());
     upload_carrier(s, plan, edges);
+    if (b.residual_count) s.upload(s.ptr(s.parameters+b.residual()), layer.residual()->weights);
 }
 template<class T> void upload_stage(Context<T>& s, const AffinePlan<T>& plan, const InputMap&, const AffineMap& map) {
     s.upload(s.ptr(plan.scale), map.scale); s.upload(s.ptr(plan.shift), map.shift);
@@ -1466,6 +1590,84 @@ template<class T> void run_backward(Context<T>& s, const LayerNormPlan<T>& plan,
     check(cudaGetLastError(), "resident layer norm parameter reduction launch");
 }
 
+// SiLU residual branch (backlog M3) of a KAN layer, enqueued after the
+// carrier's run_forward / run_backward. Small shapes (a shared S row fits
+// the stage budget and batch*outputs*inputs is at most the carrier's
+// small_forward_contraction) take one fused kernel; larger ones the silu
+// kernel, a cuBLAS GEMM with beta = 1 and the check.
+template<class T> bool small_residual(const ParameterBlock& b, std::size_t batch) {
+    return b.inputs <= stage_bytes/sizeof(T) && (!batch || b.outputs*b.inputs <= small_forward_contraction<T>/batch);
+}
+template<class T> void residual_forward(Context<T>& s, const ParameterBlock& b, std::size_t j) {
+    const T* x = s.ptr(s.activation[j]);
+    const T* w = s.ptr(s.parameters+b.residual());
+    T* y = s.ptr(s.activation[j+1]);
+    if (small_residual<T>(b, s.batch)) {
+        residual_forward_kernel<<<blocks(s.batch, 1), stage_threads, b.inputs*sizeof(T), s.stream>>>(x, w, s.ptr(b.silu), y,
+            s.batch, b.inputs, b.outputs, s.status);
+        check(cudaGetLastError(), "resident residual forward launch");
+        return;
+    }
+    const auto count = s.batch*b.inputs;
+    silu_kernel<<<blocks(count), 256, 0, s.stream>>>(x, s.ptr(b.silu), count, s.status);
+    check(cudaGetLastError(), "resident residual silu launch");
+    // Row-major Y (batch x O) += S (batch x I) * W^T: column-major
+    // Y^T = W(op T, W stored as column-major I x O) * S^T.
+    const auto i = static_cast<std::int64_t>(b.inputs), o = static_cast<std::int64_t>(b.outputs);
+    const T one = 1;
+    check(gemm(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), i, &one, w, i, s.ptr(b.silu), i,
+               &one, y, o), "resident residual forward contraction");
+    check_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(y, s.batch*b.outputs, s.status);
+    check(cudaGetLastError(), "resident residual check launch");
+}
+// dW = U^T*S + lambda*W (small: tiled partials, otherwise cuBLAS with beta =
+// lambda), dX += silu'(X) (.) (U*W) when the layer's input gradient is
+// needed (small: inline per row, otherwise T = U*W by cuBLAS into the
+// scratch, whose earlier contents the carrier's backward has consumed).
+template<class T> void residual_backward(Context<T>& s, const ParameterBlock& b, std::size_t j, T lambda) {
+    const T* w = s.ptr(s.parameters+b.residual());
+    T* dw = s.ptr(s.gradients+b.residual());
+    const T* u = s.ptr(s.upstream[j+1]);
+    const auto i = static_cast<std::int64_t>(b.inputs), o = static_cast<std::int64_t>(b.outputs);
+    const auto n = static_cast<std::int64_t>(s.batch);
+    const T one = 1, zero = 0;
+    const auto checked = b.residual_count+b.outputs;
+    unsigned tiles = 0;
+    bool reduce = true;
+    if (s.batch && small_residual_vjp<T>(b, s.batch)) {
+        tiles = parameter_tile_count(s.batch);
+        const auto chunk = (s.batch-1)/tiles+1;
+        parameter_partial_kernel<<<dim3(blocks(checked), tiles), 256, 0, s.stream>>>(s.ptr(b.silu), u, s.ptr(s.partials),
+            s.batch, b.outputs, b.inputs, chunk);
+        check(cudaGetLastError(), "resident residual partial launch");
+    } else if (s.batch) {
+        // Column-major dW^T (I x O) = S^T * U + lambda*W^T; beta = 0 never reads dW.
+        if (lambda != 0) check(cudaMemcpyAsync(dw, w, b.residual_count*sizeof(T), cudaMemcpyDeviceToDevice, s.stream), "resident L2 copy");
+        check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_T, i, o, n, &one, s.ptr(b.silu), i, u, o, &lambda, dw, i),
+              "resident residual weight VJP");
+        reduce = false;
+    }
+    const bool dx = s.batch && s.input_gradient(j);
+    const T* tw = nullptr;
+    if (dx && !small_residual<T>(b, s.batch)) {
+        // Column-major T^T (I x batch) = W^T(W as column-major I x O) * U^T.
+        check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, i, n, o, &one, w, i, u, o, &zero, s.ptr(s.scratch), i),
+              "resident residual input VJP contraction");
+        tw = s.ptr(s.scratch);
+    }
+    const auto rows = dx ? s.batch*b.inputs : 0;
+    residual_finish_kernel<<<std::max(blocks(b.residual_count), rows ? blocks(rows) : 1u), 256, 0, s.stream>>>(
+        s.ptr(s.partials), tiles, checked, reduce, w, dw, b.residual_count, lambda, s.ptr(s.activation[j]), u, tw,
+        s.ptr(s.upstream[j]), rows, b.inputs, b.outputs, s.status);
+    check(cudaGetLastError(), "resident residual finish launch");
+}
+template<class T, class P> void run_residual_forward(Context<T>& s, const P& plan, std::size_t j) {
+    if constexpr (is_kan_layer<P>) if (block_of(plan).residual_count) residual_forward(s, block_of(plan), j);
+}
+template<class T, class P> void run_residual_backward(Context<T>& s, const P& plan, std::size_t j, T lambda) {
+    if constexpr (is_kan_layer<P>) if (block_of(plan).residual_count) residual_backward(s, block_of(plan), j, lambda);
+}
+
 // Candidate validation beyond finiteness, before the SGD commit.
 template<class T> void validate_candidates(Context<T>&, const BasisPlan<T>&) {}
 template<class T> void validate_candidates(Context<T>& s, const TrainableRbfPlan<T>& plan) {
@@ -1525,6 +1727,8 @@ NetworkLayerGradients download_stage_gradients(Context<T>& s, const P& plan, std
     s.download(g.input, s.ptr(s.upstream[j])); s.download(g.coefficients, s.ptr(s.gradients+b.offset));
     s.download(g.bias, s.ptr(s.gradients+b.bias()));
     g.nonlinear = download_nonlinear(s, plan);
+    g.residual.resize(b.residual_count);
+    s.download(g.residual, s.ptr(s.gradients+b.residual()));
     return NetworkLayerGradients(std::move(g));
 }
 template<class T> NetworkLayerGradients map_gradients(Context<T>& s, const MapBlock& b, std::size_t j) {
@@ -1545,9 +1749,12 @@ NetworkLayer download_stage(Context<T>& s, const P& plan, const Layer& snapshot,
     std::vector<double> coefficients(b.coefficients), bias(b.outputs);
     s.download(coefficients, s.ptr(s.parameters+b.offset)); s.download(bias, s.ptr(s.parameters+b.bias()));
     auto carrier = download_carrier(s, plan, edges, std::move(coefficients));
+    std::vector<double> weights(b.residual_count);
+    s.download(weights, s.ptr(s.parameters+b.residual()));
     s.sync();
     Layer layer = snapshot;
     layer.set_carrier(std::move(carrier), bias);
+    if (b.residual_count) layer.set_residual(SiluResidual{std::move(weights)});
     return layer;
 }
 template<class T> NetworkLayer download_stage(Context<T>&, const AffinePlan<T>&, const InputMap& snapshot, const AffineMap&) { return snapshot; }
@@ -1596,8 +1803,8 @@ const InputMapKind& kind_of(const InputMap& map) { return map.map(); }
 // (the blocks tile it, so every element is written), committed with a single
 // copy; always for FP32, which must convert. Direct (FP64 regions above
 // direct_upload_bytes): nothing to convert, so the validated source tensors
-// are copied directly, one copy per nonempty tensor (at most four per KAN
-// layer, two per LayerNorm map). R9 profiling: packing a 117 MB FP64 region
+// are copied directly, one copy per nonempty tensor (at most five per KAN
+// layer with the residual branch, four without, two per LayerNorm map). R9 profiling: packing a 117 MB FP64 region
 // was 40% of its upload (62 -> 45 ms direct, the copy alone 36 ms), while for
 // a 0.4 MB region the six direct copies cost more than packing (0.16 -> 0.24 ms).
 constexpr std::size_t direct_upload_bytes = std::size_t{1} << 20;
@@ -1666,6 +1873,7 @@ void image_stage(ParameterImage<T>& image, const P& plan, const Layer& layer, co
     image.put(b.offset, layer.coefficients(), b.coefficients);
     image.put(b.bias(), layer.bias(), b.outputs);
     image_carrier(image, plan, edges);
+    if (b.residual_count) image.put(b.residual(), layer.residual()->weights, b.residual_count);
 }
 template<class T> void image_stage(ParameterImage<T>&, const AffinePlan<T>&, const InputMap&, const AffineMap&) {}
 template<class T> void image_stage(ParameterImage<T>&, const TanhPlan<T>&, const InputMap&, const TanhMap&) {}
@@ -1699,6 +1907,8 @@ void with_matching_stage(const Plan<T>& plan, const NetworkLayer& snapshot, cons
         const auto* actual = std::get_if<Stage>(&source);
         if (!actual) structure_mismatch(j, "kind (KAN layer or input map)");
         if (!same_dimensions(expected, *actual)) structure_mismatch(j, "dimensions");
+        if constexpr (std::is_same_v<Stage, Layer>)
+            if (expected.residual().has_value() != actual->residual().has_value()) structure_mismatch(j, "residual branch presence");
         const auto* actual_kind = std::get_if<Kind>(&kind_of(*actual));
         if (!actual_kind) structure_mismatch(j, std::is_same_v<Stage, Layer> ? "carrier" : "map kind");
         if (!same_structure(expected_kind, *actual_kind)) structure_mismatch(j, "fixed configuration");
@@ -1793,7 +2003,6 @@ struct Engine final : ResidentExecutor, Context<T> {
     // tensor_ops: cuBLAS TF32 tensor-op math for the FP32 GEMMs (Precision::TensorFloat32).
     Engine(const Network& source, std::size_t maximum, bool tensor_ops = false) : Context<T>{maximum}, model(source) {
         if (model.layers().empty()) throw std::invalid_argument("resident network is empty or moved from");
-        reject_residual(model);
         // Validate the copied CPU state and all shape arithmetic before CUDA allocation.
         model.forward({}, 0);
         for (const auto& stage : model.layers()) {
@@ -1808,7 +2017,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             const auto outputs = extent(plan).outputs;
             activation.push_back(reserve(product(capacity, outputs)));
             upstream.push_back(reserve(product(capacity, outputs)));
-            std::visit([&](auto& p) { reserve_workspace(p, capacity, reserve); }, plan);
+            std::visit([&](auto& p) { reserve_workspace(p, capacity, reserve); reserve_residual(p, capacity, reserve); }, plan);
         }
         std::size_t scratch_size = 0;
         for (const auto& plan : plans) scratch_size = std::max(scratch_size, scratch_extent(plan, capacity));
@@ -1889,11 +2098,14 @@ struct Engine final : ResidentExecutor, Context<T> {
     // that a replay runs exactly the eager kernels.
     void enqueue_forward() {
         for (std::size_t j = 0; j < plans.size() && batch; ++j)
-            std::visit([&](const auto& plan) { run_forward(*this, plan, j); }, plans[j]);
+            std::visit([&](const auto& plan) { run_forward(*this, plan, j); run_residual_forward(*this, plan, j); }, plans[j]);
     }
     void enqueue_backward(T lambda) {
         for (std::size_t j = plans.size(); j-- > 0;)
-            std::visit([&](const auto& plan) { run_backward(*this, plan, j, lambda); }, plans[j]);
+            std::visit([&](const auto& plan) {
+                run_backward(*this, plan, j, lambda);
+                run_residual_backward(*this, plan, j, lambda);
+            }, plans[j]);
     }
     // `node` (during capture only): receives the candidate kernel's graph node.
     void enqueue_update(T rate, cudaGraphNode_t* node = nullptr) {
@@ -2198,7 +2410,6 @@ struct Engine final : ResidentExecutor, Context<T> {
         const auto stages = source.layers();
         if (stages.size() != plans.size())
             throw std::invalid_argument("resident parameter upload: the layer count differs from the executor's network");
-        reject_residual(source);
         // Host only until every layer is checked and staged: structure first,
         // then values with the construction rules. Nothing on the device or
         // in the lifecycle state changes before the commit below.
