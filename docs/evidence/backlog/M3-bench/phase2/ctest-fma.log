@@ -1,0 +1,106 @@
+﻿Test project K:/PycharmProjects/auxiliary_projects/KAN/build-b-m3p2-fma
+      Start  1: basis
+ 1/47 Test  #1: basis ............................   Passed    0.02 sec
+      Start  2: basis_config
+ 2/47 Test  #2: basis_config .....................   Passed    0.02 sec
+      Start  3: carrier
+ 3/47 Test  #3: carrier ..........................   Passed    0.01 sec
+      Start  4: layer
+ 4/47 Test  #4: layer ............................   Passed    0.01 sec
+      Start  5: network
+ 5/47 Test  #5: network ..........................   Passed    0.01 sec
+      Start  6: input_map
+ 6/47 Test  #6: input_map ........................   Passed    0.06 sec
+      Start  7: m3_basis
+ 7/47 Test  #7: m3_basis .........................   Passed    0.02 sec
+      Start  8: m3_layer
+ 8/47 Test  #8: m3_layer .........................   Passed    0.01 sec
+      Start  9: m4_rational
+ 9/47 Test  #9: m4_rational ......................   Passed    0.01 sec
+      Start 10: m4_layer
+10/47 Test #10: m4_layer .........................   Passed    0.04 sec
+      Start 11: m4_allocation
+11/47 Test #11: m4_allocation ....................   Passed    0.02 sec
+      Start 12: initializer
+12/47 Test #12: initializer ......................   Passed    1.33 sec
+      Start 13: initializer_training
+13/47 Test #13: initializer_training .............   Passed   70.96 sec
+      Start 14: residual
+14/47 Test #14: residual .........................   Passed    0.01 sec
+      Start 15: residual_formula
+15/47 Test #15: residual_formula .................   Passed    0.01 sec
+      Start 16: residual_training
+16/47 Test #16: residual_training ................   Passed   97.60 sec
+      Start 17: rational_policy
+17/47 Test #17: rational_policy ..................   Passed    0.01 sec
+      Start 18: package_custom_include
+18/47 Test #18: package_custom_include ...........   Passed    0.34 sec
+      Start 19: package_default_configuration
+19/47 Test #19: package_default_configuration ....   Passed    0.28 sec
+      Start 20: cuda
+20/47 Test #20: cuda .............................   Passed    0.82 sec
+      Start 21: cuda_deprecation_available
+21/47 Test #21: cuda_deprecation_available .......   Passed    0.23 sec
+      Start 22: cuda_deprecation_resident_only
+22/47 Test #22: cuda_deprecation_resident_only ...   Passed    0.22 sec
+      Start 23: cuda_deprecation_legacy
+23/47 Test #23: cuda_deprecation_legacy ..........   Passed    0.56 sec
+      Start 24: resident
+24/47 Test #24: resident .........................   Passed    0.25 sec
+      Start 25: resident_review
+25/47 Test #25: resident_review ..................   Passed    0.27 sec
+      Start 26: m3_resident
+26/47 Test #26: m3_resident ......................   Passed    0.24 sec
+      Start 27: input_map_resident
+27/47 Test #27: input_map_resident ...............   Passed    0.27 sec
+      Start 28: m4_resident
+28/47 Test #28: m4_resident ......................   Passed    0.26 sec
+      Start 29: rational_policy_resident
+29/47 Test #29: rational_policy_resident .........   Passed    0.32 sec
+      Start 30: rational_resident_execution
+30/47 Test #30: rational_resident_execution ......   Passed    6.58 sec
+      Start 31: resident_contraction
+31/47 Test #31: resident_contraction .............   Passed    0.32 sec
+      Start 32: resident_precision
+32/47 Test #32: resident_precision ...............   Passed    1.33 sec
+      Start 33: resident_upload
+33/47 Test #33: resident_upload ..................   Passed    0.49 sec
+      Start 34: resident_training
+34/47 Test #34: resident_training ................   Passed    0.80 sec
+      Start 35: resident_fused_expansion
+35/47 Test #35: resident_fused_expansion .........   Passed    0.25 sec
+      Start 36: initializer_resident
+36/47 Test #36: initializer_resident .............   Passed    3.14 sec
+      Start 37: residual_resident
+37/47 Test #37: residual_resident ................   Passed   33.13 sec
+      Start 38: fit_polynomial
+38/47 Test #38: fit_polynomial ...................   Passed    0.01 sec
+      Start 39: python
+39/47 Test #39: python ...........................   Passed    0.59 sec
+      Start 40: m3_python
+40/47 Test #40: m3_python ........................   Passed    0.42 sec
+      Start 41: m4_python
+41/47 Test #41: m4_python ........................   Passed    0.40 sec
+      Start 42: input_map_python
+42/47 Test #42: input_map_python .................   Passed    0.41 sec
+      Start 43: precision_python
+43/47 Test #43: precision_python .................   Passed    0.43 sec
+      Start 44: resident_upload_python
+44/47 Test #44: resident_upload_python ...........   Passed    0.45 sec
+      Start 45: training_python
+45/47 Test #45: training_python ..................   Passed    0.45 sec
+      Start 46: initializer_python
+46/47 Test #46: initializer_python ...............   Passed    0.55 sec
+      Start 47: residual_python
+47/47 Test #47: residual_python ..................   Passed    0.45 sec
+
+100% tests passed out of 47
+
+Label Time Summary:
+build          =   1.00 sec*proc (3 tests)
+cpu            = 170.77 sec*proc (20 tests)
+cuda           =  49.49 sec*proc (18 tests)
+integration    =   4.78 sec*proc (12 tests)
+python         =   4.15 sec*proc (9 tests)
+
+Total Test time (real) = 224.47 sec

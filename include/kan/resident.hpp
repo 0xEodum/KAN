@@ -42,16 +42,18 @@ public:
     void upload_input(std::span<const double> input, std::size_t batch);
     void upload_output_gradient(std::span<const double> gradient);
     void forward();
-    // Add lambda*c to coefficient/numerator VJPs on device. RBF nonlinear
-    // parameters and rational denominators are unpenalized.
+    // Add lambda*c to coefficient/numerator VJPs and lambda*w to the SiLU
+    // residual-branch weight VJPs (backlog M3) on device. Biases, RBF
+    // nonlinear parameters and rational denominators are unpenalized.
     void backward(double coefficient_l2 = 0.0);
     void sgd(double learning_rate);
     // Replaces every trainable parameter (coefficients, biases, trainable RBF
-    // centers and log widths, rational denominators, LayerNorm gain and bias)
-    // with those of `network` (backlog R9), e.g. after CPU training or to
-    // restore a model. `network` must have the structure of the network the
-    // executor was built from: the same layer kinds and dimensions, carriers
-    // and map kinds, and equal fixed configuration (basis configuration
+    // centers and log widths, rational denominators, SiLU residual-branch
+    // weights, LayerNorm gain and bias) with those of `network` (backlog R9),
+    // e.g. after CPU training or to restore a model. `network` must have the
+    // structure of the network the executor was built from: the same layer
+    // kinds and dimensions, carriers and map kinds, the residual branch on the
+    // same layers, and equal fixed configuration (basis configuration
     // including knots and fixed centers, rational configuration, fixed input
     // maps, LayerNorm epsilon); a network returned by download_parameters()
     // always qualifies. Everything is validated on the host first, with the

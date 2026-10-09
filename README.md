@@ -213,8 +213,8 @@ family's reference measure (`kan::reference_moments`); `NoiseInit` matches pykan
 platform. Python: `kan.initialize(model, kan.VarianceScaling(seed=7))`.
 See the [contract](docs/CONTRACT.md#initializers-backlog-m4).
 
-pykan's SiLU base branch is opt-in per layer (backlog M3; CPU only until the resident
-executor supports it): `layer.set_residual(kan::SiluResidual{std::vector<double>(outputs * inputs)})`
+pykan's SiLU base branch is opt-in per layer (backlog M3; CPU and resident CUDA in every
+precision): `layer.set_residual(kan::SiluResidual{std::vector<double>(outputs * inputs)})`
 adds `sum_i w[o,i]·silu(x_i)` to every output, and `NoiseInit` then draws `w` as pykan's
 `scale_base` (`VarianceScaling` sets it to 0). Python: `layer.set_residual(np.zeros((outputs, inputs)))`.
 See the [contract](docs/CONTRACT.md#residual-branch-backlog-m3).

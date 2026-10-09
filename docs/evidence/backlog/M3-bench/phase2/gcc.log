@@ -1,0 +1,11 @@
+build exit 0
+cpu            = 134.38 sec*proc (20 tests)
+integration    =   9.07 sec*proc (3 tests)
+
+Total Test time (real) = 134.41 sec
+g++.exe (Rev13, Built by MSYS2 project) 15.2.0
+include/kan/resident.hpp:1:9: warning: '#pragma once' in main file [-Wpragma-once-outside-header]
+    1 | #pragma once
+      |         ^~~~
+resident.hpp syntax clean (-Wall -Wextra -Wpedantic)
+100% tests passed out of 20

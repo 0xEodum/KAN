@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3 phase 1 and M4)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3 and M4)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -109,10 +109,11 @@ requirements apply; CPU/GPU equivalence is tolerance-based.
 trainable state with the parameters of a host `Network`, so one executor can be reused for
 weights trained on the CPU or restored from elsewhere: KAN-layer coefficients (rational
 numerators included) and biases, trainable RBF centers and log widths, rational
-denominators, and LayerNorm gain and bias. Structure is what the executor was built for and
+denominators, SiLU residual-branch weights (backlog M3), and LayerNorm gain and bias. Structure is what the executor was built for and
 is never uploaded; it must match exactly, otherwise `std::invalid_argument` names the first
 differing layer: the number of layers; per position the kind (KAN layer or input map) and
-dimensions; the carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`) or map kind;
+dimensions; the carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`) or map kind; whether
+a KAN layer has the residual branch ("residual branch presence");
 and the fixed configuration, compared with `operator==`: the whole `BasisConfig` of a
 `BasisEdges` layer (family, size, Jacobi alpha/beta, Fourier frequency, Gaussian centers and
 width, B-spline degree and knots, Mexican-hat centers and scales), the term count of a
@@ -134,7 +135,8 @@ like SGD. The call is valid at any point after construction, also before any inp
 allocates no device memory (`workspace_allocations()` is unchanged) and writes the active
 parameter region: FP32 executors and FP64 regions up to 1 MiB convert on the host and make
 one host-to-device copy; larger FP64 regions are copied tensor by tensor without host
-staging (at most four copies per KAN layer, two per LayerNorm map) after validating all of
+staging (at most four copies per KAN layer, five with the residual branch, two per LayerNorm
+map) after validating all of
 them. Measured on the RTX 3090: 0.16 ms (FP64) / 0.12 ms (FP32) for a 0.4 MB
 64x64x32x16 Chebyshev network, about 7% of construction; 45 ms / 40 ms for the 117 MB
 1024x1024x1024 network, about 40% of construction, of which the PCIe copy is 36 / 18 ms
@@ -722,12 +724,52 @@ multiplies the carrier and is a reparametrization folded into the coefficients.
 `denominators`). Gradients record the branch's presence: `sgd` with a gradient of the other
 kind raises `ValueError`. `NoiseInit` takes `residual_mean` and `residual_spread`.
 
-**Resident executor (phase 1 of 2).** `kan::cuda::ResidentNetwork` does not execute the branch
-yet: construction and `upload_parameters` from a network containing a layer with the branch
-raise `std::invalid_argument` ("residual branch not supported by the resident executor yet")
-before any allocation or upload, rather than dropping it. The deprecated
-`kan::cuda::forward/backward(Layer)` adapters inherit this. Resident L2 still penalizes the
-coefficients only, which is consistent while no resident layer can hold the branch.
+**Resident executor (phase 2).** `kan::cuda::ResidentNetwork` executes the branch for every
+carrier in every precision (`Float64`, `Float32`, `TensorFloat32`), in the eager calls and in the
+captured training steps; the deprecated `kan::cuda::forward/backward(Layer)` adapters carry it.
+
+- *Layout.* A KAN layer's block in the parameter, gradient and SGD-candidate regions is
+  `[coefficients | bias | nonlinear | residual]`: `W` (outputs, inputs) is a trailing part, empty
+  without the branch, so layers without it keep their blocks and the executor's arena is
+  unchanged for networks without the branch (results bitwise as before in both builds). SGD
+  candidates, their validation and the C9 commit/rollback cover `W` like every other parameter: a
+  failing training step leaves `W` at the last good step. Each layer with the branch reserves two
+  `capacity*inputs` workspace regions, `S = silu(X)` and `silu'(X)`, written by its forward and read
+  by its backward; when a branch takes a cuBLAS path at capacity the arena also holds one 32 MiB
+  cuBLAS workspace used by the branch's GEMMs only (the carriers keep their 4 MiB). All of it is
+  inside the construction-time arena (`workspace_allocations()` unchanged).
+- *Order.* Forward computes `Y += S*W^T` after the carrier's output, backward `dW = U^T*S +
+  lambda*W` and `dX += silu'(X) (.) (U*W)` after the carrier's VJPs. On the device the sums are
+  not separate as on the CPU: for `BasisEdges`/`TrainableRbfEdges` the small forward contraction
+  accumulates the branch into the carrier's per-lane partial sums before one reduction and then
+  adds the bias, and the cuBLAS path adds `S*W^T` to `Phi*C^T` before the bias; rational layers
+  add the branch to their finished output. Small shapes use warp/tile kernels and tiled
+  reductions under the carriers' thresholds (forward `batch*outputs*inputs` at most
+  `2^23`/`2^24` multiply-adds for FP64/FP32 and, rational only, a 32-sample S tile in shared
+  memory; dW the expansion carriers' parameter-VJP rule), larger ones cuBLAS (`TF32` math in
+  `TensorFloat32`). Parity with the CPU is tolerance-based, as for the carriers: FP64 within
+  `1e-11*|e| + 1e-12*max|e|` in the suite; FP32/TF32 within the C1 tolerances, where TF32 adds
+  `2e-3*sum_b |U||S|` for the weight VJP (TF32 operand rounding under cancellation).
+  Results are deterministic for one GPU, driver and cuBLAS version.
+- *L2.* `backward(l2)` and training steps add `lambda*w` to the weight VJPs on the device (the
+  CPU's `regularization` gradient); biases, RBF centers/widths and denominators stay unpenalized.
+- *Training steps.* A step skips the network input gradient: for a first layer with the branch
+  only its `dX` is skipped; `dW` is computed. `Loss::OutputGradient` steps stay bitwise the eager
+  `forward(); backward(l2); sgd(rate)` sequence.
+- *Status.* `S`, `silu'`, the branch's outputs and both VJPs are checked like the carrier results
+  (`std::overflow_error`, attributed to the forward or backward phase of a training step). The
+  formulas never produce a nonfinite intermediate for finite input (x = +-1e3 FP64, +-100 FP32 are
+  tested); an overflowing `S*W^T` or `U^T*S` is reported like a carrier overflow. In the
+  performance build (`KAN_CUDA_FMA=ON`) nvcc may contract `1 + x*(1-sigma)` and the branch's
+  multiply-adds into FMA; results stay within the tolerance and no stated contract depends on
+  the unfused rounding (`rounded_product` is not used).
+- *Upload and download.* Branch presence is structure: `upload_parameters` with a network whose
+  layer has the branch where the executor's has not, or the reverse, raises
+  `std::invalid_argument` naming the layer's "residual branch presence", executor unchanged.
+  The weights are values, validated with the construction rules (finite; FP32 magnitudes at most
+  `FLT_MAX`). Construction accepts the branch on any layer. `download_parameters()` returns the
+  layers with the branch and their current weights (exact widening), `download_gradients()`
+  fills `LayerGradients::residual` (empty without the branch).
 
 ## Extension boundaries
 
