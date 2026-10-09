@@ -36,6 +36,13 @@ std::size_t product(std::size_t a, std::size_t b) {
 void finite(std::span<const double> values) {
     for (double x : values) if (!std::isfinite(x)) throw std::invalid_argument("resident data must be finite");
 }
+// Backlog M3 phase 1: the SiLU residual branch has no resident plan yet; reject
+// it rather than drop it (phase 2 implements it).
+void reject_residual(const Network& network) {
+    for (const auto& stage : network.layers())
+        if (const auto* layer = std::get_if<Layer>(&stage); layer && layer->residual())
+            throw std::invalid_argument("residual branch not supported by the resident executor yet");
+}
 unsigned blocks(std::size_t count,std::size_t work_per_block=256) {
     return static_cast<unsigned>(std::min<std::size_t>((count-1)/work_per_block+1,65535));
 }
@@ -1786,6 +1793,7 @@ struct Engine final : ResidentExecutor, Context<T> {
     // tensor_ops: cuBLAS TF32 tensor-op math for the FP32 GEMMs (Precision::TensorFloat32).
     Engine(const Network& source, std::size_t maximum, bool tensor_ops = false) : Context<T>{maximum}, model(source) {
         if (model.layers().empty()) throw std::invalid_argument("resident network is empty or moved from");
+        reject_residual(model);
         // Validate the copied CPU state and all shape arithmetic before CUDA allocation.
         model.forward({}, 0);
         for (const auto& stage : model.layers()) {
@@ -2190,6 +2198,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         const auto stages = source.layers();
         if (stages.size() != plans.size())
             throw std::invalid_argument("resident parameter upload: the layer count differs from the executor's network");
+        reject_residual(source);
         // Host only until every layer is checked and staged: structure first,
         // then values with the construction rules. Nothing on the device or
         // in the lifecycle state changes before the commit below.
