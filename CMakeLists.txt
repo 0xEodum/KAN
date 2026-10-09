@@ -71,7 +71,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     foreach(suite basis basis_config carrier layer network input_map m3_basis m3_layer m4_rational m4_layer m4_allocation
-                  initializer initializer_training)
+                  initializer initializer_training residual residual_formula residual_training)
         add_executable(${suite}_test tests/${suite}_test.cpp)
         target_include_directories(${suite}_test PRIVATE tests)
         target_link_libraries(${suite}_test PRIVATE kan)
@@ -80,6 +80,10 @@ if(BUILD_TESTING)
     endforeach()
     # Backlog M4: the deep-network training demonstration runs 3000 full-batch epochs per case.
     set_tests_properties(initializer_training PROPERTIES TIMEOUT 900)
+    # Backlog M3: the residual formulas are internal (src/detail); the demonstration
+    # trains ten five-layer networks for 3000 epochs.
+    target_include_directories(residual_formula_test PRIVATE src)
+    set_tests_properties(residual_training PROPERTIES TIMEOUT 900)
     # Backlog M2: rational denominator policies.
     add_executable(rational_policy_test tests/rational_policy_test.cpp)
     target_include_directories(rational_policy_test PRIVATE tests)
@@ -197,6 +201,12 @@ if(BUILD_TESTING)
         target_link_libraries(initializer_resident_test PRIVATE kan::cuda)
         add_test(NAME initializer_resident COMMAND initializer_resident_test)
         set_tests_properties(initializer_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Backlog M3 phase 1: the resident executor rejects the residual branch.
+        add_executable(residual_resident_test tests/residual_resident_test.cpp)
+        target_include_directories(residual_resident_test PRIVATE tests)
+        target_link_libraries(residual_resident_test PRIVATE kan::cuda)
+        add_test(NAME residual_resident COMMAND residual_resident_test)
+        set_tests_properties(residual_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
         # Explicit manual large-launch regression; minimum-memory requirement is
         # outside the ordinary CTest hardware contract.
         add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
@@ -285,6 +295,10 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
                  "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
                  "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/initializer_python_test.py" ${KAN_PYTHON_TEST_ARGS})
         set_tests_properties(initializer_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        add_test(NAME residual_python COMMAND ${CMAKE_COMMAND} -E env
+                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/residual_python_test.py" ${KAN_PYTHON_TEST_ARGS})
+        set_tests_properties(residual_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
     endif()
 endif()
 

@@ -35,7 +35,8 @@ struct DenominatorInit {
 // contributes equally and an output has E[y^2] = gain^2 * variance when the
 // inputs follow the reference measure. Rational numerators use the measure
 // z uniform on [-radius, radius] and the drawn denominator of their edge.
-// Bias is zero.
+// Bias is zero. Residual-branch weights (Layer::residual) are zero, so the
+// variance guarantee is unchanged; their gradient sum_b u * silu(x) is not.
 struct VarianceScaling {
     double gain = 1.0; // finite, > 0
     Distribution distribution = Distribution::Uniform;
@@ -50,11 +51,18 @@ struct VarianceScaling {
 // degree + 1). Uniform draws are U(-a/2, a/2) (pykan), Normal draws have the
 // same variance a^2/12. Rational denominators follow `denominators`. Bias is
 // zero. scale is finite and > 0 (pykan's MultKAN default is 0.3).
+// Residual-branch weights, when the layer has the branch, are pykan's
+// scale_base: (residual_mean + residual_spread * U[-1, 1)) / sqrt(inputs),
+// Normal draws with the same mean and variance (pykan's MultKAN defaults
+// scale_base_mu = 0, scale_base_sigma = 1). residual_mean is finite,
+// residual_spread finite and >= 0.
 struct NoiseInit {
     double scale = 0.3;
     Distribution distribution = Distribution::Uniform;
     std::uint64_t seed = 0;
     DenominatorInit denominators;
+    double residual_mean = 0.0;
+    double residual_spread = 1.0;
     bool operator==(const NoiseInit&) const = default;
 };
 
@@ -76,9 +84,11 @@ struct BasisMoments {
 BasisMoments reference_moments(const BasisConfig& config);
 
 // Validates the initializer for the layer and replaces the layer's trainable
-// parameters atomically (coefficients, bias, rational denominators). Trainable
-// RBF centers and log widths are configuration of the reference measure and
-// stay unchanged. Draw order: coefficients in layout order, then denominators.
+// parameters atomically (coefficients, bias, rational denominators and the
+// residual-branch weights of a layer that has the branch; a layer without it
+// keeps none). Trainable RBF centers and log widths are configuration of the
+// reference measure and stay unchanged. Draw order: coefficients in layout
+// order, then denominators, then residual weights.
 void initialize(Layer& layer, const Initializer& initializer);
 
 // Initializes every KAN layer of the network, the layer at position p with

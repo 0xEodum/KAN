@@ -2,16 +2,27 @@
 
 #include "kan/carrier.hpp"
 #include <concepts>
+#include <optional>
 #include <span>
 #include <type_traits>
 
 namespace kan {
+
+// Optional residual branch of a layer (backlog M3, the base branch of the
+// original KAN): every edge adds weights[o,i] * silu(x[b,i]), with
+// silu(x) = x * sigmoid(x), to its carrier's edge function. It is part of the
+// layer, not of the carrier, so carrier replacements keep it unchanged.
+struct SiluResidual {
+    std::vector<double> weights; // (outputs, inputs)
+    bool operator==(const SiluResidual&) const = default;
+};
 
 struct LayerGradients {
     std::vector<double> input;
     std::vector<double> coefficients; // per-edge coefficients (rational numerators)
     std::vector<double> bias;
     NonlinearGradients nonlinear;     // alternative matches the layer's carrier
+    std::vector<double> residual;     // (outputs, inputs); empty without the residual branch
 };
 
 struct RegularizationResult {
@@ -19,8 +30,10 @@ struct RegularizationResult {
     LayerGradients gradients;
 };
 
-// A KAN layer: dimensions, a per-output bias and one edge carrier. Every
-// operation dispatches on the carrier once per call. Family-specific
+// A KAN layer: dimensions, a per-output bias, one edge carrier and an
+// optional SiLU residual branch:
+//     y[b,o] = bias[o] + carrier_o(x_b) + sum_i weights[o,i] * silu(x[b,i]).
+// Every operation dispatches on the carrier once per call. Family-specific
 // operations (knot insertion, RBF and rational parameter setters) are free
 // functions in kan/families.hpp.
 class Layer {
@@ -43,10 +56,19 @@ public:
     // dimensions, finite parameters) and replaces it, optionally with the bias.
     void set_carrier(Carrier carrier);
     void set_carrier(Carrier carrier, std::span<const double> bias);
+    // The residual branch; std::nullopt (the constructors' default) disables it.
+    const std::optional<SiluResidual>& residual() const noexcept { return residual_; }
+    // Validates the weight shape (outputs * inputs) and finite weights, then
+    // enables, replaces or (std::nullopt) disables the branch atomically.
+    void set_residual(std::optional<SiluResidual> residual);
     std::vector<double> forward(std::span<const double> input, std::size_t batch) const;
     LayerGradients backward(std::span<const double> input, std::size_t batch,
                             std::span<const double> output_gradient) const;
+    // gradients.residual must match the branch: outputs * inputs values when
+    // it is enabled, empty otherwise.
     void sgd(const LayerGradients& gradients, double learning_rate);
+    // 0.5 * lambda * (sum c^2 + sum w^2) over the per-edge coefficients c and
+    // the residual weights w: the linear parameters of every edge function.
     RegularizationResult regularization(double coefficient_l2) const;
 
 private:
@@ -58,6 +80,7 @@ private:
     std::size_t inputs_, outputs_;
     Carrier carrier_;
     std::vector<double> bias_;
+    std::optional<SiluResidual> residual_;
 };
 
 } // namespace kan

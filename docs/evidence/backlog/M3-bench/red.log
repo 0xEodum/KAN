@@ -1,0 +1,27 @@
+# Backlog M3 phase 1 RED: API declarations with stub definitions (set_residual no-op, silu stubs returning 0,
+# NoiseInit fields unused, no Python bindings). build-b-m3, MSVC 19.50 Release CPU+Python, ctest -R residual.
+# residual_test dereferences the absent branch after the no-op set_residual (segfault); residual_resident is CUDA-only.
+1/4 Test #14: residual .........................***Exception: SegFault 19.62 sec
+2/4 Test #15: residual_formula .................***Failed    0.01 sec
+FAIL silu_matches_reference_at_ordinary_arguments_double: actual=0.000000 expected=-0.000000
+FAIL silu_matches_reference_at_ordinary_arguments_float: actual=0.000000 expected=-0.033464
+FAIL silu_is_finite_at_extreme_double_arguments: positive.value == max
+FAIL silu_is_finite_at_extreme_float_arguments: positive.value == max && positive.derivative == 1
+0/4 passed
+3/4 Test #16: residual_training ................***Failed   42.03 sec
+FAIL deep_chebyshev_with_residual_trains_from_noise: noise < 0.5 * variance
+FAIL deep_bspline_with_residual_trains_from_noise: noise < 0.5 * variance
+FAIL deep_rational_guarded_with_residual_trains_from_noise: noise < 0.5 * variance
+FAIL deep_rational_absolute_with_residual_trains_from_noise: noise < 0.5 * variance
+FAIL deep_rational_smooth_with_residual_trains_from_noise: noise < 0.5 * variance
+0/5 passed
+4/4 Test #29: residual_python ..................***Failed    0.23 sec
+AttributeError: '_kan.Layer' object has no attribute 'set_residual'
+AttributeError: '_kan.Layer' object has no attribute 'residual'
+AttributeError: '_kan.Layer' object has no attribute 'set_residual'
+AttributeError: '_kan.NoiseInit' object has no attribute 'residual_mean'
+AttributeError: '_kan.Layer' object has no attribute 'set_residual'
+FAILED (errors=5, skipped=1)
+0% tests passed, 4 tests failed out of 4
+The following tests FAILED:
+Errors while running CTest

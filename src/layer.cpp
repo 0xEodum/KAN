@@ -94,6 +94,10 @@ void Layer::replace(Carrier carrier, std::span<const double> bias) {
     bias_.swap(next_bias);
 }
 
+void Layer::set_residual(std::optional<SiluResidual> residual) {
+    (void)residual; // RED stub
+}
+
 std::vector<double> Layer::forward(std::span<const double> input, std::size_t batch) const {
     validate_state();
     const auto input_size = checked_size(batch, inputs_), output_size = checked_size(batch, outputs_);
@@ -118,7 +122,7 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
     require_finite(output_gradient);
     LayerGradients gradient{std::vector<double>(input_size, 0.0),
                             std::vector<double>(coefficients().size(), 0.0),
-                            std::vector<double>(outputs_, 0.0), {}};
+                            std::vector<double>(outputs_, 0.0), {}, {}};
     for (std::size_t b = 0; b < batch; ++b)
         for (std::size_t o = 0; o < outputs_; ++o) gradient.bias[o] += output_gradient[b * outputs_ + o];
     std::visit([&](const auto& edges) {
