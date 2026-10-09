@@ -1,0 +1,5 @@
+# Backlog M3 phase 1 golden check: build-b-m3-cuda (final sources), golden/golden.cpp default and --layers.
+# Reference: C6-C8-bench/golden.txt (no src/include/python/CMake change between e00dfe4 and 8c489e6).
+6d6dc2e83717da919ed94fb7e49cb367624b4e22fc753b24296dfac48912797e *golden-m3.txt (176087 bytes; reference golden-final-parity.txt 6d6dc2e8...797e)
+c1f44d97541fa79ee54544c32e33eb5ad067f8a9953643def1aa438ae6f27dc9 *golden-layers-m3.txt (33628 bytes; reference c1f44d97...6f27dc9)
+# Both byte-identical.

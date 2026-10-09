@@ -1,0 +1,16 @@
+curve chebyshev noise+residual           0:1.218e-01 100:1.197e-01 300:7.547e-01 1000:4.567e-03 3000:7.866e-04
+curve chebyshev variance+residual        0:3.496e-01 100:4.570e-04 300:1.419e-05 1000:9.271e-10 3000:1.511e-21
+PASS deep_chebyshev_with_residual_trains_from_noise
+curve bspline noise+residual             0:1.210e-01 100:1.204e-01 300:1.201e-01 1000:2.112e-02 3000:1.305e-03
+curve bspline variance+residual          0:8.572e-01 100:4.290e-03 300:1.123e-04 1000:1.485e-07 3000:7.629e-13
+PASS deep_bspline_with_residual_trains_from_noise
+curve rational guarded noise+residual    0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.204e-01 3000:1.201e-01 5000:2.077e-02 10000:8.528e-04
+curve rational guarded variance+residual 0:2.045e-01 100:8.302e-02 300:1.163e-02 1000:4.585e-03 3000:1.077e-03
+PASS deep_rational_guarded_with_residual_trains_from_noise
+curve rational absolute noise+residual   0:1.208e-01 100:1.205e-01 300:1.205e-01 1000:1.204e-01 3000:1.201e-01 5000:9.753e-02 10000:3.885e-03
+curve rational absolute variance+residual 0:1.896e-01 100:9.650e-02 300:2.423e-02 1000:6.369e-03 3000:2.097e-03
+PASS deep_rational_absolute_with_residual_trains_from_noise
+curve rational smooth noise+residual     0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.202e-01 5000:9.673e-02 10000:4.213e-03
+curve rational smooth variance+residual  0:1.937e-01 100:9.770e-02 300:1.806e-02 1000:7.406e-03 3000:1.310e-03
+PASS deep_rational_smooth_with_residual_trains_from_noise
+5/5 passed

@@ -1,0 +1,21 @@
+10/29 Test #10: m4_layer .........................   Passed    0.04 sec
+11/29 Test #11: m4_allocation ....................   Passed    0.02 sec
+12/29 Test #12: initializer ......................   Passed    1.19 sec
+13/29 Test #13: initializer_training .............   Passed   60.11 sec
+14/29 Test #14: residual .........................   Passed    0.03 sec
+15/29 Test #15: residual_formula .................   Passed    0.01 sec
+16/29 Test #16: residual_training ................   Passed   86.36 sec
+17/29 Test #17: rational_policy ..................   Passed    0.03 sec
+18/29 Test #18: package_custom_include ...........   Passed    2.98 sec
+19/29 Test #19: package_default_configuration ....   Passed    3.00 sec
+20/29 Test #20: fit_polynomial ...................   Passed    0.01 sec
+21/29 Test #21: python ...........................   Passed    0.27 sec
+22/29 Test #22: m3_python ........................   Passed    0.23 sec
+23/29 Test #23: m4_python ........................   Passed    0.23 sec
+24/29 Test #24: input_map_python .................   Passed    0.21 sec
+25/29 Test #25: precision_python .................   Passed    0.16 sec
+26/29 Test #26: resident_upload_python ...........   Passed    0.15 sec
+27/29 Test #27: training_python ..................   Passed    0.15 sec
+28/29 Test #28: initializer_python ...............   Passed    0.38 sec
+29/29 Test #29: residual_python ..................   Passed    0.21 sec
+100% tests passed out of 29

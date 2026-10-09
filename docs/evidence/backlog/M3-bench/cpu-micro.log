@@ -1,0 +1,88 @@
+== base
+chebyshev 64x64 K=8    branch=0 forward    3733.5 us  backward    7497.3 us
+bspline 64x64 G=8      branch=0 forward    6561.5 us  backward    9607.0 us
+rational[3/2] 64x64    branch=0 forward   45114.4 us  backward   48204.3 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3740.3 us  backward    7613.2 us
+bspline 64x64 G=8      branch=0 forward    6559.8 us  backward   34684.7 us
+rational[3/2] 64x64    branch=0 forward   44989.8 us  backward   48347.9 us
+chebyshev 64x64 K=8    branch=1 forward    4077.8 us  backward    7847.8 us
+bspline 64x64 G=8      branch=1 forward    6909.5 us  backward    9959.0 us
+rational[3/2] 64x64    branch=1 forward   45705.3 us  backward   49249.9 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3733.0 us  backward    7503.6 us
+bspline 64x64 G=8      branch=0 forward    6574.8 us  backward   22675.7 us
+rational[3/2] 64x64    branch=0 forward   45149.4 us  backward   48065.9 us
+chebyshev 64x64 K=8    branch=1 forward    4034.1 us  backward    7846.7 us
+bspline 64x64 G=8      branch=1 forward    6874.6 us  backward    9838.4 us
+rational[3/2] 64x64    branch=1 forward   45171.7 us  backward   48165.8 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3752.0 us  backward    7463.7 us
+bspline 64x64 G=8      branch=0 forward    6569.8 us  backward   34696.5 us
+rational[3/2] 64x64    branch=0 forward   44979.8 us  backward   48203.9 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3742.4 us  backward    7445.2 us
+bspline 64x64 G=8      branch=0 forward    6552.0 us  backward    9619.1 us
+rational[3/2] 64x64    branch=0 forward   45023.9 us  backward   48165.8 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3766.2 us  backward    7467.9 us
+bspline 64x64 G=8      branch=0 forward    6570.3 us  backward    9892.1 us
+rational[3/2] 64x64    branch=0 forward   44877.8 us  backward   47979.0 us
+chebyshev 64x64 K=8    branch=1 forward    4051.9 us  backward    7858.7 us
+bspline 64x64 G=8      branch=1 forward    6859.7 us  backward   11344.2 us
+rational[3/2] 64x64    branch=1 forward   45226.1 us  backward   48325.8 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3766.2 us  backward    7505.5 us
+bspline 64x64 G=8      branch=0 forward    6564.4 us  backward    9799.9 us
+rational[3/2] 64x64    branch=0 forward   44784.1 us  backward   47934.9 us
+chebyshev 64x64 K=8    branch=1 forward    4033.8 us  backward    7801.5 us
+bspline 64x64 G=8      branch=1 forward    6874.1 us  backward   58926.3 us
+rational[3/2] 64x64    branch=1 forward   45423.1 us  backward   48433.3 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3724.1 us  backward    7470.2 us
+bspline 64x64 G=8      branch=0 forward    6580.6 us  backward    9597.0 us
+rational[3/2] 64x64    branch=0 forward   45135.1 us  backward   48116.3 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3719.2 us  backward    7960.6 us
+bspline 64x64 G=8      branch=0 forward    6563.7 us  backward   10735.5 us
+rational[3/2] 64x64    branch=0 forward   45140.5 us  backward   48076.5 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3732.4 us  backward    7546.9 us
+bspline 64x64 G=8      branch=0 forward    6596.1 us  backward   12222.1 us
+rational[3/2] 64x64    branch=0 forward   45178.1 us  backward   48006.6 us
+chebyshev 64x64 K=8    branch=1 forward    4086.7 us  backward    7860.4 us
+bspline 64x64 G=8      branch=1 forward    6939.9 us  backward   10763.3 us
+rational[3/2] 64x64    branch=1 forward   46093.6 us  backward   49089.8 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3833.0 us  backward    8228.4 us
+bspline 64x64 G=8      branch=0 forward    6640.2 us  backward   10450.6 us
+rational[3/2] 64x64    branch=0 forward   45193.0 us  backward   48052.6 us
+chebyshev 64x64 K=8    branch=1 forward    4082.2 us  backward    8192.8 us
+bspline 64x64 G=8      branch=1 forward    6916.5 us  backward   59506.7 us
+rational[3/2] 64x64    branch=1 forward   45357.7 us  backward   48644.6 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3774.3 us  backward    8062.3 us
+bspline 64x64 G=8      branch=0 forward    6612.0 us  backward    9881.8 us
+rational[3/2] 64x64    branch=0 forward   45079.9 us  backward   48341.4 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3752.9 us  backward    7523.6 us
+bspline 64x64 G=8      branch=0 forward    6574.8 us  backward   12661.5 us
+rational[3/2] 64x64    branch=0 forward   46081.0 us  backward   49470.7 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3838.3 us  backward    7606.9 us
+bspline 64x64 G=8      branch=0 forward    6691.5 us  backward   42639.0 us
+rational[3/2] 64x64    branch=0 forward   45140.1 us  backward   48381.6 us
+chebyshev 64x64 K=8    branch=1 forward    4047.9 us  backward    7867.2 us
+bspline 64x64 G=8      branch=1 forward    6892.8 us  backward    9948.0 us
+rational[3/2] 64x64    branch=1 forward   45452.2 us  backward   49085.2 us
+== m3
+chebyshev 64x64 K=8    branch=0 forward    3738.0 us  backward    8184.5 us
+bspline 64x64 G=8      branch=0 forward    6665.2 us  backward   10426.7 us
+rational[3/2] 64x64    branch=0 forward   45257.5 us  backward   48440.4 us
+chebyshev 64x64 K=8    branch=1 forward    4062.6 us  backward    8370.1 us
+bspline 64x64 G=8      branch=1 forward    6933.1 us  backward   47333.5 us
+rational[3/2] 64x64    branch=1 forward   45996.6 us  backward   49005.1 us
+== base
+chebyshev 64x64 K=8    branch=0 forward    3834.1 us  backward    7694.6 us
+bspline 64x64 G=8      branch=0 forward    6609.0 us  backward   11213.2 us
+rational[3/2] 64x64    branch=0 forward   45286.5 us  backward   48374.2 us
