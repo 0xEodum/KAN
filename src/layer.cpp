@@ -1,8 +1,10 @@
-// Carrier-independent Layer: dimensions, bias, validation and the SGD/L2
-// protocol. Each numerical operation dispatches on the carrier exactly once.
+// Carrier-independent Layer: dimensions, bias, the optional SiLU residual
+// branch, validation and the SGD/L2 protocol. Each numerical operation
+// dispatches on the carrier exactly once.
 #include "kan/layer.hpp"
 #include "carriers/edge_ops.hpp"
 #include "detail/checks.hpp"
+#include "detail/residual_formulas.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -17,6 +19,54 @@ using detail::result_finite;
 // Every carrier has a per-edge coefficient tensor.
 template<class C> auto& coefficients_of(C& carrier) noexcept {
     return std::visit([](auto& edges) -> auto& { return edges.coefficients; }, carrier);
+}
+
+// Residual branch (backlog M3), weights w of layout (outputs, inputs). The
+// silu values are computed once per sample and input. Intermediates are not
+// guarded one by one: a product or sum of finite values that overflows stays
+// nonfinite, and the callers check every result (std::overflow_error).
+constexpr auto unguarded = [](double v) { return v; };
+
+// output[b,o] += sum_i w[o,i] silu(x[b,i]): the sum in ascending i, then
+// added to the carrier's output.
+void residual_forward(std::span<const double> w, std::size_t inputs, std::size_t outputs,
+                      std::span<const double> input, std::size_t batch, std::span<double> output) {
+    std::vector<double> s(inputs);
+    for (std::size_t b = 0; b < batch; ++b) {
+        for (std::size_t i = 0; i < inputs; ++i) s[i] = detail::silu_value(input[b * inputs + i], unguarded);
+        for (std::size_t o = 0; o < outputs; ++o) {
+            const double* row = w.data() + o * inputs;
+            double sum = 0;
+            for (std::size_t i = 0; i < inputs; ++i) sum += row[i] * s[i];
+            output[b * outputs + o] += sum;
+        }
+    }
+}
+
+// dw[o,i] = sum_b u[b,o] silu(x[b,i]) (ascending b); input_gradient[b,i] +=
+// silu'(x[b,i]) * sum_o u[b,o] w[o,i] (ascending o), after the carrier's VJP.
+void residual_backward(std::span<const double> w, std::size_t inputs, std::size_t outputs,
+                       std::span<const double> input, std::size_t batch, std::span<const double> upstream,
+                       std::span<double> input_gradient, std::span<double> weight_gradient) {
+    std::vector<double> s(inputs), ds(inputs), t(inputs);
+    for (std::size_t b = 0; b < batch; ++b) {
+        for (std::size_t i = 0; i < inputs; ++i) {
+            const auto f = detail::silu(input[b * inputs + i], unguarded);
+            s[i] = f.value;
+            ds[i] = f.derivative;
+            t[i] = 0;
+        }
+        for (std::size_t o = 0; o < outputs; ++o) {
+            const double u = upstream[b * outputs + o];
+            const double* row = w.data() + o * inputs;
+            double* dw = weight_gradient.data() + o * inputs;
+            for (std::size_t i = 0; i < inputs; ++i) {
+                dw[i] += u * s[i];
+                t[i] += u * row[i];
+            }
+        }
+        for (std::size_t i = 0; i < inputs; ++i) input_gradient[b * inputs + i] += ds[i] * t[i];
+    }
 }
 
 Carrier basis_carrier(BasisConfig basis) {
@@ -47,6 +97,8 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, Rat
     bias_.resize(checked_size(outputs, 1));
 }
 
+Layer::Layer(const Layer&) = default;
+
 std::size_t Layer::terms() const noexcept {
     return std::visit([](const auto& edges) { return detail::terms(edges); }, carrier_);
 }
@@ -54,7 +106,8 @@ std::size_t Layer::terms() const noexcept {
 std::span<const double> Layer::coefficients() const noexcept { return coefficients_of(carrier_); }
 
 void Layer::validate_state() const {
-    if (inputs_ == 0 || outputs_ == 0 || bias_.size() != outputs_)
+    if (inputs_ == 0 || outputs_ == 0 || bias_.size() != outputs_ ||
+        (residual_ && residual_->weights.size() != inputs_ * outputs_))
         throw std::invalid_argument("layer is uninitialized or moved from");
     std::visit([&](const auto& edges) { detail::validate(edges, {inputs_, outputs_}); }, carrier_);
 }
@@ -95,7 +148,12 @@ void Layer::replace(Carrier carrier, std::span<const double> bias) {
 }
 
 void Layer::set_residual(std::optional<SiluResidual> residual) {
-    (void)residual; // RED stub
+    validate_state();
+    if (residual) {
+        if (residual->weights.size() != inputs_ * outputs_) throw std::invalid_argument("residual weight shape mismatch");
+        require_finite(residual->weights);
+    }
+    residual_ = std::move(residual);
 }
 
 std::vector<double> Layer::forward(std::span<const double> input, std::size_t batch) const {
@@ -108,6 +166,7 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
     std::visit([&](const auto& edges) {
         detail::forward(edges, {inputs_, outputs_}, bias_, input, batch, output);
     }, carrier_);
+    if (residual_) residual_forward(residual_->weights, inputs_, outputs_, input, batch, output);
     result_finite(output);
     return output;
 }
@@ -122,7 +181,8 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
     require_finite(output_gradient);
     LayerGradients gradient{std::vector<double>(input_size, 0.0),
                             std::vector<double>(coefficients().size(), 0.0),
-                            std::vector<double>(outputs_, 0.0), {}, {}};
+                            std::vector<double>(outputs_, 0.0), {},
+                            std::vector<double>(residual_ ? residual_->weights.size() : 0, 0.0)};
     for (std::size_t b = 0; b < batch; ++b)
         for (std::size_t o = 0; o < outputs_; ++o) gradient.bias[o] += output_gradient[b * outputs_ + o];
     std::visit([&](const auto& edges) {
@@ -132,9 +192,13 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
         detail::check_result(nonlinear);
         gradient.nonlinear = std::move(nonlinear);
     }, carrier_);
+    if (residual_)
+        residual_backward(residual_->weights, inputs_, outputs_, input, batch, output_gradient, gradient.input,
+                          gradient.residual);
     result_finite(gradient.input);
     result_finite(gradient.coefficients);
     result_finite(gradient.bias);
+    result_finite(gradient.residual);
     return gradient;
 }
 
@@ -144,8 +208,11 @@ void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
         throw std::invalid_argument("learning rate must be finite and positive");
     if (gradients.coefficients.size() != coefficients().size() || gradients.bias.size() != bias_.size())
         throw std::invalid_argument("parameter gradient shape mismatch");
+    if (gradients.residual.size() != (residual_ ? residual_->weights.size() : 0))
+        throw std::invalid_argument("residual gradient does not match the layer's residual branch");
     require_finite(gradients.coefficients);
     require_finite(gradients.bias);
+    require_finite(gradients.residual);
     // Validate every gradient and candidate before committing any parameter.
     auto next = std::visit([&](const auto& edges) -> Carrier {
         using Edges = std::decay_t<decltype(edges)>;
@@ -163,8 +230,15 @@ void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
     auto next_bias = bias_;
     for (std::size_t i = 0; i < next_bias.size(); ++i) next_bias[i] -= learning_rate * gradients.bias[i];
     result_finite(next_bias);
+    auto next_residual = residual_;
+    if (next_residual) {
+        auto& w = next_residual->weights;
+        for (std::size_t i = 0; i < w.size(); ++i) w[i] -= learning_rate * gradients.residual[i];
+        result_finite(w);
+    }
     carrier_ = std::move(next);
     bias_.swap(next_bias);
+    residual_.swap(next_residual);
 }
 
 RegularizationResult Layer::regularization(double lambda) const {
@@ -183,7 +257,18 @@ RegularizationResult Layer::regularization(double lambda) const {
         r.gradients.coefficients[j] = g;
         r.value += (0.5 * g) * coefficients[j];
     }
+    // The residual weights are linear parameters of the edge functions too.
+    if (residual_) {
+        const auto& w = residual_->weights;
+        r.gradients.residual.resize(w.size());
+        for (std::size_t j = 0; j < w.size(); ++j) {
+            const double g = lambda * w[j];
+            r.gradients.residual[j] = g;
+            r.value += (0.5 * g) * w[j];
+        }
+    }
     result_finite(r.gradients.coefficients);
+    result_finite(r.gradients.residual);
     result_finite(std::span<const double>(&r.value, 1));
     return r;
 }

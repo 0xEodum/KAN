@@ -18,11 +18,12 @@ struct ThrowingGuard {
     }
 };
 
-// Independent reference in long double: x / (1 + exp(-x)) and s + x s (1 - s).
+// Independent reference in long double (double with MSVC): x / (1 + exp(-x))
+// and s + x s (1 - s) with 1 - s = 1 / (1 + exp(x)), not formed by cancellation.
 long double reference_value(long double x) { return x / (1 + std::exp(-x)); }
 long double reference_derivative(long double x) {
-    const long double s = 1 / (1 + std::exp(-x));
-    return s + x * s * (1 - s);
+    const long double s = 1 / (1 + std::exp(-x)), complement = 1 / (1 + std::exp(x));
+    return s + x * s * complement;
 }
 
 template<class Scalar> void bitwise_value_matches(Scalar x) {

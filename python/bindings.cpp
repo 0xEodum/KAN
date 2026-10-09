@@ -96,10 +96,12 @@ Shape denominator_shape(const kan::Layer& layer) {
 // What a gradient snapshot was computed for; sgd requires the same.
 struct Topology {
     std::size_t inputs, outputs, terms, carrier, denominator_size;
+    bool residual; // the SiLU residual branch (backlog M3)
     bool operator==(const Topology&) const = default;
 };
 Topology topology(const kan::Layer& layer) {
-    return {layer.inputs(), layer.outputs(), layer.terms(), layer.carrier().index(), denominator_degree(layer)};
+    return {layer.inputs(), layer.outputs(), layer.terms(), layer.carrier().index(), denominator_degree(layer),
+            layer.residual().has_value()};
 }
 
 // Read-only snapshot of one carrier alternative with its layer's dimensions,
@@ -408,7 +410,11 @@ PYBIND11_MODULE(_kan, module) {
             const auto v = nonlinear_field(g, &kan::RationalGradients::denominators);
             return owned(v, std::holds_alternative<kan::RationalGradients>(g.value.nonlinear) ?
                 Shape{axis(t.outputs), axis(t.inputs), axis(t.denominator_size)} : Shape{0});
-        });
+        })
+        .def_property_readonly("residual", [](const LayerGradient& g) {
+            const auto& t = g.topology;
+            return owned(g.value.residual, t.residual ? Shape{axis(t.outputs), axis(t.inputs)} : Shape{0});
+        }, "Residual-branch weight gradient (outputs, inputs); shape (0,) without the branch.");
     py::class_<MapGradient>(module, "InputMapGradients")
         .def_property_readonly("input", [](const MapGradient& g) {
             return owned(g.value.input, {axis(g.batch), axis(g.topology.features)});
@@ -453,6 +459,21 @@ PYBIND11_MODULE(_kan, module) {
             py::gil_scoped_release release;
             layer.set_parameters(c, b);
         }, py::arg("coefficients").noconvert(), py::arg("bias").noconvert())
+        .def_property_readonly("residual", [](const kan::Layer& layer) -> py::object {
+            if (!layer.residual()) return py::none();
+            return owned(layer.residual()->weights, {axis(layer.outputs()), axis(layer.inputs())});
+        }, "Owned copy of the SiLU residual-branch weights (outputs, inputs), or None without the branch.")
+        .def("set_residual", [](kan::Layer& layer, py::object weights) {
+            std::optional<kan::SiluResidual> residual;
+            if (!weights.is_none()) {
+                if (!py::isinstance<py::array>(weights)) throw py::type_error("expected a float64 NumPy array or None");
+                const auto w = shaped(weights.cast<py::array>(), {axis(layer.outputs()), axis(layer.inputs())});
+                residual = kan::SiluResidual{{w.begin(), w.end()}};
+            }
+            py::gil_scoped_release release;
+            layer.set_residual(std::move(residual));
+        }, py::arg("weights"),
+           "Enables or replaces the SiLU residual branch with weights (outputs, inputs); None disables it.")
         .def("regularization", [](const kan::Layer& layer, double lambda) {
             kan::RegularizationResult r;
             {py::gil_scoped_release release;r=layer.regularization(lambda);}

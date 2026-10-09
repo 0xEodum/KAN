@@ -25,18 +25,29 @@ struct SiluOf {
     Scalar derivative; // silu'(x)
 };
 
+// sigma(x) and 1 - sigma(x), each as one quotient of e = exp(-|x|).
+template<class Scalar>
+struct SigmoidOf {
+    Scalar sigma, complement;
+};
+template<class Scalar>
+KAN_HOST_DEVICE KAN_FORCE_INLINE SigmoidOf<Scalar> sigmoid(Scalar x) {
+    const Scalar e = math::exp(-math::abs(x)), d = Scalar(1) + e;
+    const Scalar small = e / d, large = Scalar(1) / d;
+    return x >= 0 ? SigmoidOf<Scalar>{large, small} : SigmoidOf<Scalar>{small, large};
+}
+
 // silu(x) alone (forward pass); bitwise equal to silu(x, guard).value.
 template<class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar silu_value(Scalar x, const Guard& guard) {
-    (void)x; (void)guard;
-    return Scalar(0); // RED stub
+    return guard(x * sigmoid(x).sigma);
 }
 
 // silu(x) and silu'(x) (backward pass).
 template<class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE SiluOf<Scalar> silu(Scalar x, const Guard& guard) {
-    (void)x; (void)guard;
-    return {Scalar(0), Scalar(0)}; // RED stub
+    const auto s = sigmoid(x);
+    return {guard(x * s.sigma), guard(s.sigma * guard(Scalar(1) + guard(x * s.complement)))};
 }
 
 } // namespace kan::detail

@@ -45,7 +45,8 @@ public:
     // KAN layer at layer_index; an input map there raises invalid_argument.
     void insert_knot(std::size_t layer_index, double x);
     double adapt_grid(std::size_t layer_index, std::span<const double> samples);
-    // Coefficient L2 of the KAN layers; input maps contribute zero value and
+    // Coefficient L2 of the KAN layers (coefficients and residual-branch
+    // weights, Layer::regularization); input maps contribute zero value and
     // zero gradients of their trainable parameters.
     NetworkRegularizationResult regularization(double coefficient_l2) const;
 private:

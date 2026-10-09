@@ -44,6 +44,14 @@ public:
     template<class Config> requires std::same_as<std::remove_cvref_t<Config>, RationalConfig>
     Layer(std::size_t inputs, std::size_t outputs, Config&& config)
         : Layer(inputs, outputs, config, RationalTag{}) {}
+    // Value semantics. The copy constructor is defined out of line: inlined
+    // into copies of std::vector<NetworkLayer>, GCC 15 -O3 reports a false
+    // -Wmaybe-uninitialized in libstdc++'s variant cleanup path.
+    Layer(const Layer&);
+    Layer(Layer&&) noexcept = default;
+    Layer& operator=(const Layer&) = default;
+    Layer& operator=(Layer&&) noexcept = default;
+    ~Layer() = default;
     std::size_t inputs() const noexcept { return inputs_; }
     std::size_t outputs() const noexcept { return outputs_; }
     const Carrier& carrier() const noexcept { return carrier_; }

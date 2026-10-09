@@ -33,14 +33,18 @@ void bind_initializers(py::module_& module) {
         .def(py::self == py::self)
         .def(py::self != py::self);
     py::class_<kan::NoiseInit>(module, "NoiseInit", "pykan-style small coefficient noise")
-        .def(py::init([](double scale, kan::Distribution distribution, std::uint64_t seed, kan::DenominatorInit d) {
-            return kan::NoiseInit{scale, distribution, seed, d};
+        .def(py::init([](double scale, kan::Distribution distribution, std::uint64_t seed, kan::DenominatorInit d,
+                         double residual_mean, double residual_spread) {
+            return kan::NoiseInit{scale, distribution, seed, d, residual_mean, residual_spread};
         }), py::arg("scale") = 0.3, py::arg("distribution") = kan::Distribution::Uniform, py::arg("seed") = 0,
-            py::arg("denominators") = kan::DenominatorInit{})
+            py::arg("denominators") = kan::DenominatorInit{}, py::arg("residual_mean") = 0.0,
+            py::arg("residual_spread") = 1.0)
         .def_readwrite("scale", &kan::NoiseInit::scale)
         .def_readwrite("distribution", &kan::NoiseInit::distribution)
         .def_readwrite("seed", &kan::NoiseInit::seed)
         .def_readwrite("denominators", &kan::NoiseInit::denominators)
+        .def_readwrite("residual_mean", &kan::NoiseInit::residual_mean)
+        .def_readwrite("residual_spread", &kan::NoiseInit::residual_spread)
         .def(py::self == py::self)
         .def(py::self != py::self);
     module.def("reference_moments", [](const kan::BasisConfig& config) {

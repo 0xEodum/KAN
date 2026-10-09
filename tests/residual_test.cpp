@@ -489,15 +489,18 @@ TEST(network_initialization_keeps_branch_presence_per_layer) {
 }
 
 TEST(branch_draws_are_pinned_across_platforms) {
+    // Pinned digests of the parameter bits, branch weights included (MSVC and
+    // GCC must agree). The M4 pins of layers without the branch are in
+    // initializer_test and unchanged.
     kan::RationalConfig smooth;
     smooth.denominator_policy = kan::DenominatorPolicy::Smooth;
     smooth.numerator_degree = 4;
     smooth.denominator_degree = 3;
     struct Case { kan::Layer layer; kan::Initializer init; const char* pinned; };
     std::vector<Case> cases{
-        {zero_branch(kan::Layer(5, 4, uniform_spline(3, 7))), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "0000000000000000"},
-        {zero_branch(kan::Layer(5, 4, kan::FourierConfig{5, 2.5})), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}, 0.2, 0.7}, "0000000000000000"},
-        {zero_branch(kan::Layer(5, 4, smooth)), kan::NoiseInit{0.3, kan::Distribution::Normal, 9, {0.4, 2}}, "0000000000000000"},
+        {zero_branch(kan::Layer(5, 4, uniform_spline(3, 7))), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "1ef218a170c967fd"},
+        {zero_branch(kan::Layer(5, 4, kan::FourierConfig{5, 2.5})), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}, 0.2, 0.7}, "3b6cb65c8b613b2f"},
+        {zero_branch(kan::Layer(5, 4, smooth)), kan::NoiseInit{0.3, kan::Distribution::Normal, 9, {0.4, 2}}, "af64dc9297fd02da"},
     };
     std::string failures;
     for (auto& c : cases) {

@@ -9,8 +9,9 @@ namespace kan {
 
 // Edge carriers. A Layer holds exactly one carrier: the configuration and the
 // trainable parameters of all its edges. Every carrier has a per-edge
-// coefficient tensor of layout (outputs, inputs, terms), the tensor that the
-// coefficient L2 penalty acts on; a carrier may add nonlinear parameters.
+// coefficient tensor of layout (outputs, inputs, terms), which the coefficient
+// L2 penalty acts on (together with the layer's residual-branch weights,
+// kan/layer.hpp); a carrier may add nonlinear parameters.
 
 // Linear in its parameters: each edge is sum_k coefficients[o,i,k] * Phi_k(x).
 // A layer is the expansion Phi: R^I -> R^(I*K) followed by the dense

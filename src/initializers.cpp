@@ -1,6 +1,7 @@
 // Explicit typed initializers (backlog M4). Each initializer builds a complete
-// replacement carrier and bias and commits it through Layer::set_carrier, so a
-// failure leaves the layer unchanged. Random draws and every value derived
+// replacement carrier and bias (and residual-branch weights, backlog M3) and
+// commits them through Layer::set_carrier (and set_residual), so a failure
+// leaves the layer unchanged. Random draws and every value derived
 // from them use only portable arithmetic (init/portable_math.hpp).
 #include "kan/initializers.hpp"
 #include "init/moments.hpp"
@@ -30,8 +31,11 @@ Common validate(const Initializer& initializer) {
     return std::visit([](const auto& i) {
         if constexpr (std::is_same_v<std::decay_t<decltype(i)>, VarianceScaling>)
             require_positive(i.gain, "variance scaling gain must be finite and positive");
-        else
+        else {
             require_positive(i.scale, "noise scale must be finite and positive");
+            if (!std::isfinite(i.residual_mean) || !std::isfinite(i.residual_spread) || i.residual_spread < 0)
+                throw std::invalid_argument("noise residual mean must be finite and spread finite and nonnegative");
+        }
         if (i.distribution != Distribution::Uniform && i.distribution != Distribution::Normal)
             throw std::invalid_argument("invalid initializer distribution");
         const auto& d = i.denominators;
@@ -133,6 +137,22 @@ RationalEdges rational_edges(const RationalEdges& edges, const Initializer& init
     }
     return next;
 }
+// Residual-branch weights (backlog M3), drawn after the carrier's parameters.
+// VarianceScaling: zero, which keeps its E[y^2] guarantee exact. NoiseInit:
+// pykan's scale_base (mean + spread * U[-1, 1)) / sqrt(inputs); a Normal draw
+// has the same variance, spread^2 / 3 before the division.
+std::vector<double> residual_weights(const Initializer& initializer, std::size_t inputs, std::size_t outputs,
+                                     Generator& generator, Distribution distribution) {
+    std::vector<double> w(inputs * outputs, 0.0);
+    if (const auto* noise = std::get_if<NoiseInit>(&initializer)) {
+        const double root = std::sqrt(double(inputs));
+        const double factor = distribution == Distribution::Uniform ? noise->residual_spread
+                                                                    : noise->residual_spread / std::sqrt(3.0);
+        for (auto& v : w) v = noise->residual_mean / root + factor * raw_draw(generator, distribution) / root;
+    }
+    finite_parameters(w);
+    return w;
+}
 } // namespace
 
 void initialize(Layer& layer, const Initializer& initializer) {
@@ -152,7 +172,16 @@ void initialize(Layer& layer, const Initializer& initializer) {
         if constexpr (requires { edges.denominators; }) finite_parameters(edges.denominators);
     }, next);
     const std::vector<double> bias(layer.outputs(), 0.0);
-    layer.set_carrier(std::move(next), bias);
+    if (!layer.residual()) {
+        layer.set_carrier(std::move(next), bias);
+        return;
+    }
+    // Carrier, bias and branch are committed together: built on a copy.
+    auto weights = residual_weights(initializer, layer.inputs(), layer.outputs(), generator, common.distribution);
+    Layer candidate = layer;
+    candidate.set_carrier(std::move(next), bias);
+    candidate.set_residual(SiluResidual{std::move(weights)});
+    layer = std::move(candidate);
 }
 
 void initialize(Network& network, const Initializer& initializer) {
