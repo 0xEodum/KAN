@@ -1,6 +1,7 @@
 # CUTLASS experiment reproduction
 
-See [PLAN.md](PLAN.md) for the frozen control, matrix and acceptance gates.
+See [RESULTS.md](RESULTS.md) for measured conclusions and [PLAN.md](PLAN.md)
+for the frozen control, matrix and acceptance gates.
 Production defaults and public precision contracts are unchanged. Set
 `KAN_CUTLASS_EXPERIMENT=OFF` (default) for the normal build; the CPU build
 does not include CUTLASS headers or acquire any CUDA dependency.
@@ -12,11 +13,27 @@ git clone --depth 1 --branch v3.9.2 https://github.com/NVIDIA/cutlass.git build-
 git -C build-cutlass-deps/cutlass rev-parse HEAD
 # Must be ad7b2f5e84fcfa124cb02b91d5bd26d238c0459e
 & docs/evidence/cutlass-experiments/build.ps1
+# Fresh output: a rebuilt executable must not reuse archived measurements.
+$env:KAN_EXPERIMENT_EVIDENCE=Join-Path (Get-Location) 'build-cutlass-rerun-evidence'
 python docs/evidence/cutlass-experiments/run.py screen
 python docs/evidence/cutlass-experiments/run.py confirm
 python docs/evidence/cutlass-experiments/run.py learn
 python docs/evidence/cutlass-experiments/run.py summarize
+python docs/evidence/cutlass-experiments/adaptive.py screen
+python docs/evidence/cutlass-experiments/adaptive.py confirm
+python docs/evidence/cutlass-experiments/adaptive.py summarize
+& docs/evidence/cutlass-experiments/profile.ps1
+python docs/evidence/cutlass-experiments/sanitize.py
+python docs/evidence/cutlass-experiments/report.py
+python docs/evidence/cutlass-experiments/verify.py
 ```
+
+To audit the committed archive, unset `KAN_EXPERIMENT_EVIDENCE` and run
+`verify.py`; no CUDA installation is needed. All timing, profiling, sanitizer
+and report scripts respect the fresh evidence directory. Optional telemetry:
+start `monitor.py` after removing the previous nonrecursive
+`build-cutlass-experiment/monitor.stop` marker, then create that marker to stop
+collection before generating the final manifest.
 
 Validated installation: RTX 3090 SM86; CUDA toolkit 13.1.115; driver 591.86;
 MSVC 19.50.35724 (explicit nvcc unsupported-host-compiler override). CUTLASS
@@ -24,6 +41,14 @@ requires MSVC `/Zc:__cplusplus`, supplied only to the experimental translation
 unit, as in upstream CUTLASS's CMake setup. Upstream headers are unmodified.
 The default experiment build uses `KAN_CUDA_FMA=ON`; `build.ps1 -NoFma`
 builds the parity configuration separately.
+The reported experiment is FMA ON; an experimental FMA OFF matrix was not
+run. `-NoFma` defaults to `build-cutlass-parity` to preserve the measured binary.
+Completed runs can be resumed. `run-environment.json` locks the confirmation
+and later series to the executable/backend SHA-256 and GPU driver; a mismatch
+stops reuse. Set `KAN_EXPERIMENT_EVIDENCE` to a fresh output directory for a
+different build, and run its screen before confirmation. The early screen's
+backend is the same; its harness was extended with FP64 overflow and learning
+parameter dumps before the confirmation executable was frozen.
 
 ## Modes
 

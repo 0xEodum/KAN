@@ -1,0 +1,71 @@
+[
+  {
+    "tool": "racecheck",
+    "verdict": "passed",
+    "exit": 0,
+    "seconds": 15.110546500000055,
+    "timeout_seconds": 240,
+    "command": [
+      "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\compute-sanitizer.BAT",
+      "--tool",
+      "racecheck",
+      "--error-exitcode",
+      "99",
+      "K:\\PycharmProjects\\auxiliary_projects\\KAN\\build-cutlass-experiment\\cutlass_experiment.exe",
+      "check",
+      "4",
+      "2",
+      "f32",
+      "resident",
+      "small",
+      "1",
+      "0"
+    ]
+  },
+  {
+    "tool": "synccheck",
+    "verdict": "passed",
+    "exit": 0,
+    "seconds": 2.6776620999880834,
+    "timeout_seconds": 240,
+    "command": [
+      "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\compute-sanitizer.BAT",
+      "--tool",
+      "synccheck",
+      "--error-exitcode",
+      "99",
+      "K:\\PycharmProjects\\auxiliary_projects\\KAN\\build-cutlass-experiment\\cutlass_experiment.exe",
+      "check",
+      "4",
+      "2",
+      "f32",
+      "resident",
+      "small",
+      "1",
+      "0"
+    ]
+  },
+  {
+    "tool": "initcheck",
+    "verdict": "passed",
+    "exit": 0,
+    "seconds": 3.018268400002853,
+    "timeout_seconds": 240,
+    "command": [
+      "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\compute-sanitizer.BAT",
+      "--tool",
+      "initcheck",
+      "--error-exitcode",
+      "99",
+      "K:\\PycharmProjects\\auxiliary_projects\\KAN\\build-cutlass-experiment\\cutlass_experiment.exe",
+      "check",
+      "4",
+      "2",
+      "f32",
+      "resident",
+      "small",
+      "1",
+      "0"
+    ]
+  }
+]

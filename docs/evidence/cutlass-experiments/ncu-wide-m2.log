@@ -1,0 +1,11 @@
+==PROF== Connected to process 61724 (K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\cutlass_experiment.exe)
+==PROF== Profiling "input_kernel": 0%....50%....100% - 44 passes
+==PROF== Profiling "input_kernel": 0%....50%....100% - 44 passes
+==PROF== Disconnected from process 61724
+check,output,81920,0,0,0,PASS
+check,gradients,3166730,0,0,0,PASS
+check,SGD,1069578,0,0,0,PASS
+check,graph-eager,1069578,0,0,0,PASS
+check,overflow-rollback,1069578,0,0,0,PASS
+check,lifecycle,PASS
+==PROF== Report: K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\profiles\ncu-wide-m2.ncu-rep

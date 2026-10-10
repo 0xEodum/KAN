@@ -1,0 +1,8 @@
+========= COMPUTE-SANITIZER
+check,output,16384,2.98023224e-08,2.74166435e-08,10194,PASS
+check,gradients,118896,5.39876055e-09,5.39770525e-09,110117,PASS
+check,SGD,53360,9.31322575e-10,9.23720854e-10,935,PASS
+check,graph-eager,53360,0,0,0,PASS
+check,overflow-rollback,53360,0,0,0,PASS
+check,lifecycle,PASS
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)

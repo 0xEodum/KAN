@@ -98,6 +98,9 @@ def screen():
         valid = [s for s in scores if s.get("correct") and "score" in s]
         selections[str(mode)] = dict(scores=scores, tile=min(valid, key=lambda s: s["score"])["tile"] if valid else None)
         (HERE / "selection.json").write_text(json.dumps(selections, indent=2)+"\n", encoding="utf8")
+    fp64 = run(["check", 4, 2, "f64", "resident", "tail", 1, 0], "check-f64-unchanged")
+    if not ok(fp64):
+        raise RuntimeError("unchanged FP64 check failed")
     return selections
 
 

@@ -1,5 +1,6 @@
 param([string]$BuildDirectory='build-cutlass-experiment',[switch]$NoFma)
 $ErrorActionPreference='Stop'
+if($NoFma -and -not $PSBoundParameters.ContainsKey('BuildDirectory')){$BuildDirectory='build-cutlass-parity'}
 $root=[System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $buildPath=Join-Path $root $BuildDirectory
 $vcvars='C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat'

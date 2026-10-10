@@ -1,0 +1,10 @@
+==PROF== Connected to process 60464 (K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\cutlass_experiment.exe)
+==PROF== Profiling "contract_kernel": 0%....50%....100% - 44 passes
+==PROF== Disconnected from process 60464
+check,output,81920,4.61935997e-07,4.03058234e-07,78508,PASS
+check,gradients,3166730,1.34459697e-08,1.34436153e-08,3079235,PASS
+check,SGD,1069578,9.31322575e-10,9.23988204e-10,13189,PASS
+check,graph-eager,1069578,0,0,0,PASS
+check,overflow-rollback,1069578,0,0,0,PASS
+check,lifecycle,PASS
+==PROF== Report: K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\profiles\ncu-wide-virtual-dc.ncu-rep

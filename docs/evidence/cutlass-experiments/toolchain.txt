@@ -1,0 +1,14 @@
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_Dec_16_19:27:18_Pacific_Standard_Time_2025
+Cuda compilation tools, release 13.1, V13.1.115
+Build cuda_13.1.r13.1/compiler.37061995_0
+name, driver_version, compute_cap, memory.total [MiB]
+NVIDIA GeForce RTX 3090, 591.86, 8.6, 24576 MiB
+cmake version 4.4.3
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+usage: cl [ option... ] filename... [ /link linkoption... ]
+Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35724 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+

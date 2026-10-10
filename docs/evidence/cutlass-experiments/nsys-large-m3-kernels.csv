@@ -1,0 +1,18 @@
+Generating SQLite file K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\profiles\nsys-large-m3.sqlite from K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\profiles\nsys-large-m3.nsys-rep
+Processing [K:\PycharmProjects\auxiliary_projects\KAN\build-cutlass-experiment\profiles\nsys-large-m3.sqlite] with [C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.5.2\host-windows-x64\reports\cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+61.3,246373138,30,8212437.9,8231065.5,7698280,8591017,161361.7,"void kan::cuda::experiment::<unnamed>::contract_kernel<kan::cuda::experiment::<unnamed>::Configuration<(int)0, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>, (bool)1, (bool)0>(const float *, const float *, const float *, float *, int, int, int, int, int, int, float, int *)"
+20.6,82839000,60,1380650.0,1352449.5,390465,2669443,987510.2,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_nt_align1>(T1::Params)
+8.5,34347780,15,2289852.0,2296418.0,2245154,2311907,16460.7,void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1::Params)
+3.2,12979439,30,432648.0,432833.0,428896,435936,1677.5,ampere_sgemm_128x64_tn
+1.5,6223174,15,414878.3,415233.0,408448,417312,2116.1,ampere_sgemm_128x64_nn
+1.5,6175690,30,205856.3,205777.0,204993,206688,388.9,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)0, (bool)1, float>(const T3 *, T3 *, T3 *, T3 *, unsigned long long, kan::detail::BasisViewOf<T3>, unsigned int, kan::cuda::<unnamed>::SiluRows<T3>, int *)"
+1.3,5232811,30,174427.0,172480.5,63264,286304,111712.5,"void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::BasisKind)0, float>, float>(T1, const T2 *, T2 *, unsigned long long, unsigned long long, T2 *, unsigned long long, const T2 *, unsigned int, const T2 *, unsigned long long, T2, unsigned int, int *)"
+0.9,3571012,15,238067.5,237953.0,237313,239392,561.6,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, int *)"
+0.3,1348260,30,44942.0,44912.0,6016,83904,39409.3,"void kan::cuda::<unnamed>::residual_finish_kernel<float>(const T1 *, unsigned int, unsigned long long, bool, const T1 *, T1 *, unsigned long long, T1, const T1 *, const T1 *, const T1 *, T1 *, unsigned long long, unsigned long long, unsigned long long, int *)"
+0.3,1237856,30,41261.9,41248.0,40896,41536,145.5,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long long, unsigned long long, int *)"
+0.3,1012798,15,67519.9,67520.0,66688,68640,624.5,"void kan::cuda::<unnamed>::mse_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long long, T1, T1, T1 *, T1 *, unsigned int *, int *)"
+0.2,704767,30,23492.2,23472.0,23168,23840,160.1,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)9, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T13)"
+0.0,55809,15,3720.6,3712.0,3616,3777,44.5,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,1664,1,1664.0,1664.0,1664,1664,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long long, T1)"
+
