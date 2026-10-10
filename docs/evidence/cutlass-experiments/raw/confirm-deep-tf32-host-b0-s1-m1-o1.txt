@@ -1,0 +1,8 @@
+mode,tile,precision,protocol,case,branch,seed,window,steps,ms_per_step,loss,checksum,allocations
+1,0,tf32,host,deep,0,1,0,100,0.570765000,0.00500016799197,0,2
+1,0,tf32,host,deep,0,1,1,100,0.580234000,0.00500016799197,0,2
+1,0,tf32,host,deep,0,1,2,100,0.570600000,0.00500016799197,0,2
+1,0,tf32,host,deep,0,1,3,100,0.577886000,0.00500016799197,0,2
+1,0,tf32,host,deep,0,1,4,100,0.577519000,0.00500016799197,0.987104589831,2
+
+EXIT=0

@@ -14,18 +14,39 @@ import subprocess
 import sys
 import time
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
-EXE = ROOT / "build-cutlass-experiment/cutlass_experiment.exe"
+SOURCE = Path(__file__).resolve().parent
+HERE = Path(os.environ.get("KAN_EXPERIMENT_EVIDENCE", str(SOURCE))).resolve()
+ROOT = SOURCE.parents[2]
+EXE = Path(os.environ.get("KAN_EXPERIMENT_BINARY", str(ROOT / "build-cutlass-experiment/cutlass_experiment.exe"))).resolve()
 RAW = HERE / "raw"
 RAW.mkdir(exist_ok=True)
 CASES = ["tiny", "small", "irregular", "deep", "medium", "wide", "large"]
 STEPS = dict(tiny=400, small=300, irregular=400, deep=100, medium=80, wide=40, large=10)
 MODE_NAMES = {0: "cuBLAS", 1: "CUTLASS-dense-forward", 2: "CUTLASS-input-fusion",
               3: "CUTLASS-virtual-forward", 4: "CUTLASS-full-fusion", 5: "CUTLASS-residual-fusion"}
+_environment_checked = False
+
+
+def ensure_environment():
+    global _environment_checked
+    if _environment_checked:
+        return
+    actual = dict(executable_sha256=hashlib.sha256(EXE.read_bytes()).hexdigest(),
+                  backend_sha256=hashlib.sha256((SOURCE/"backend.cu").read_bytes()).hexdigest(),
+                  driver=subprocess.check_output(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], text=True).strip())
+    path = HERE/"run-environment.json"
+    if path.exists():
+        previous = json.loads(path.read_text())
+        if actual != previous:
+            raise RuntimeError("Existing evidence belongs to a different binary, backend or driver. "
+                               "Set KAN_EXPERIMENT_EVIDENCE to a fresh directory; do not overwrite frozen results.")
+    else:
+        path.write_text(json.dumps(actual, indent=2)+"\n", encoding="utf8")
+    _environment_checked = True
 
 
 def run(args, label, timeout=600):
+    ensure_environment()
     path = RAW / (label + ".txt")
     if path.exists() and path.read_text(encoding="utf8").endswith("\nEXIT=0\n"):
         return path
