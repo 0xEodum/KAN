@@ -1,9 +1,9 @@
 # M1–M4 review backlog
 
 Original review: 2026-10-01, branch `cpp-foundation`, HEAD `7b58b61` (M4 was closed;
-M5 was NEXT at the time). Current context verified on 2026-10-07 against `6d59ffd`
-(C3 closure) and the subsequent CUDA library policy decision; status updated for the
-C6–C8 closure (`f39004d`).
+M5 was NEXT at the time). Current context verified on 2026-10-10 against `9c71a07`
+(M3 phases 1 and 2), with the documentation corrections in `f51d48c`; status updated
+for the M3 closure below. Earlier closures and policy decisions remain in the journal.
 [ROADMAP.md](ROADMAP.md) is the source of truth for stages; this file records review
 findings, their rationale and the proposed work order. Changes to ROADMAP (a new
 stage or a change to M5 scope) require a separate record in `docs/evidence`, as
@@ -17,8 +17,8 @@ specified by `AGENTS.md`.
   original R → C1/C2 → M5 recommendation is historical; it does not bypass the
   [backlog gate](evidence/backlog-gate.md). Backlog IDs M1–M7 are review items,
   distinct from roadmap milestones with the same names.
-- **Status:** 28 items, 19 closed and 9 open. R1–R3 and R7–R9 are closed; R4–R6
-  remain open. M1, M2 and M4 are closed; M3 and M5–M7 remain open. C1–C4 and C6–C11
+- **Status:** 28 items, 20 closed and 8 open. R1–R3 and R7–R9 are closed; R4–R6
+  remain open. M1–M4 are closed; M5–M7 remain open. C1–C4 and C6–C11
   are closed (C3 at stage 1); C5 and C12 remain open. All P0 items are closed.
   C12 is still open for FP64; its FP32 portion was addressed in C1.
 - **Architecture:** typed per-family `BasisConfig`; `Carrier` separates fixed-basis
@@ -105,7 +105,7 @@ definition and is the basis of C2.
 |---|---|---|---|
 | M1 | P0 | (DONE, [evidence](evidence/backlog/M1.md)) Explicit typed input map (affine / tanh / LayerNorm) as a separate layer | The contract forbids implicit normalization, but no tool existed. For \|x\|≫1, polynomials grow as (2\|x\|)^n → exploding gradients; local bases outside [t_p, t_K] give zero and zero gradient (a "dead" edge) |
 | M2 | P0 | (DONE, [evidence](evidence/backlog/M2.md)) Rational: safe pole-free denominator — PAU (Molina et al. 2019) `Q = 1+\|Σ b_k z^k\|` or smooth `Q = 1+(Σ…)²` — as an optional singularity policy | The guard throws `domain_error` (`src/rational.cpp:41`, GPU status 2): one SGD step into a pole aborts training without recovery |
-| M3 | P1 | Optional residual branch `w_b·silu(x)` (as in the original KAN) | Only gradient path outside the grid for B-spline/RBF |
+| M3 | P1 | (DONE, [evidence](evidence/backlog/M3.md#closure-2026-10-10)) Optional residual branch `w_b·silu(x)` (as in the original KAN) | Gradient path when B-spline derivatives vanish outside support or RBF tails underflow |
 | M4 | P1 | (DONE, [evidence](evidence/backlog/M4.md)) Initializers (family-specific variance preservation, noise initialization as in pykan) | The contract acknowledges that zero initialization does not train multilayer networks |
 | M5 | P1 | Normalized Hermite functions `H_n(x)e^{−x²/2}/√(2^n n! √π)` as an option | Physicists' H_n grow as ~2^n·n!, with poor conditioning |
 | M6 | P2 | Per-input grid (as in pykan), rather than one grid per layer; refit the grid by quantiles; `adapt_grid` with samples propagated through preceding layers | Knots/centers/scales are shared across a layer; `adapt_grid` inserts one knot at a time |
@@ -196,3 +196,4 @@ the time; later entries and linked evidence describe subsequent changes.
 | 2026-10-07 | Owner-approved CUDA library policy added to `AGENTS.md` rule 8 and this backlog: library primitives and their extension preferred when suitable; custom kernels chosen for missing operations/contracts or demonstrated advantage. Complete English translation and quick-context refresh distinguish current stage B/architecture from historical findings and measurements. No item status, runtime dependency or stage order changed; C3 remains closed at stage 1 ([decision and verification](evidence/cuda-library-policy.md)) |
 | 2026-10-07 | Pass 6: C6, C7, C8 (all in the resident rational path, dependency-free P1; no P0 items remained) |
 | 2026-10-07 | C6, C7 and C8 closed ([evidence](evidence/backlog/C6-C8.md)). C6: sample is the fastest index in the rational forward and input-VJP kernels (coalesced edge-major cache writes; FP32 store sectors/request 32 → 4). C7: forward still detects parameter-VJP overflow (resident `forward()` keeps raising where the CPU does; C9 attribution unchanged), but a sufficient bound (largest power, ≤ 1 division, two products against max/4) skips the full check, which runs only near the overflow threshold — reported status identical (host fuzz 8.33M samples). C8: one warp per edge accumulates all m+n+1 sums and the bias in one pass with each lane's sample order and shuffle tree preserved. Additional bitwise-neutral profiling fixes: integer exponent-bit finiteness tests in FP64 device code (`src/detail/host_device.hpp`, also benefits FP64 basis kernels), z cached per input/sample, one guard per Horner chain; CUB `WarpReduce`/cuBLAS evaluated and not adopted (summation order / no GEMM form). Rational kernels per step (256→256→256→10, B=2048): FP64 494 → 191 ms (now FP64-division bound), FP32 170 → 16.1 ms; full `train_step` (ABBA n=9, three policies): FP64 2.3–2.9×, FP32 3.2–13.9× faster. Results byte-identical to `7abbb7d` in both builds (golden, C3 FP32 dump, new rational dump); 42/42 CTest in both builds (re-run by the coordinator at `f39004d`), GCC 17/17, clean sanitizers, no frozen m2/m3/m4 regression; `CONTRACT.md` records the rational layout (one extra `capacity·inputs` arena region per rational layer, allocation count unchanged). Open owner questions: optional reciprocal-multiply for FP64 rational quotients (≈30–40% of those kernels, ≤ 1 ulp, breaks bitwise CPU parity); applying the C7 bound to the CPU forward |
+| 2026-10-10 | M3 closed after source/evidence review and documentation corrections ([closure and validation limits](evidence/backlog/M3.md#closure-2026-10-10)): optional carrier-independent SiLU branch on CPU Layer/Network, Python and resident CUDA in FP64/FP32/TF32; forward, all VJPs, L2/SGD, parameter/gradient round trips, structure validation, captured training and atomic rollback verified. Defaults retained: branch off in constructors, VarianceScaling w = 0, NoiseInit residual_spread = 1. Recorded phase-2 CTest 47/47 in both builds, GCC CPU 20/20; review rebuilt both CUDA configurations and verified all 47 parity checks and 45 FMA checks with compilation-probe reruns under MSVC (two long CPU training tests not repeated in FMA). Golden comparisons byte-identical, full-step profiling and frozen measurements recorded; completed sanitizers clean, aborted FMA racecheck explicitly has no result. Documentation clarifies zero-weight gradients and decaying RBF/Mexican-hat tails. 20/28 items closed, 8 remain open; B stays NEXT and roadmap M5 stays PLANNED |
