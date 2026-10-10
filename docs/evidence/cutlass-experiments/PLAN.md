@@ -21,6 +21,12 @@ under ignored `build-cutlass-deps/`; the experiment uses its C++ headers, not
 Python DSL, Hopper or Blackwell-only instructions. Record installation smoke
 test, CUDA/compiler/driver versions and source hashes with results.
 
+Follow-up frozen during the main confirmation (2026-10-10): the globally
+selected input-VJP tile 1 underfills small grids. Compare the same three existing
+tiles on tiny/small/irregular/deep cases, select using independent seed 6 and
+confirm per-shape selections with ABBA and new seeds 3,4,5. No new backend or
+kernel configuration; the main matrix remains intact. See `adaptive.py`.
+
 ## Complete-call matrix
 
 Chebyshev K=7: tiny 16->24->8/b1024; small 64->64->32->16/b1024;
