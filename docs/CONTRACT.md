@@ -519,8 +519,10 @@ resident plan; Layer and Network do not change.
 
 ## Input maps (backlog M1)
 
-Polynomial bases grow like `(2|x|)^n` outside `[-1,1]` and localized bases (B-spline,
-RBF, Mexican hat) are zero, with zero gradient, outside their support. Nothing rescales
+Polynomial bases grow like `(2|x|)^n` outside `[-1,1]`. B-splines have compact support
+and are zero, with zero gradient, outside it. Gaussian RBF and Mexican-hat bases have
+decaying tails rather than compact support; their values and derivatives can underflow
+to zero far from their centers in floating-point arithmetic. Nothing rescales
 inputs implicitly; the explicit tool is an input map, a network layer kind of shape
 `features -> features` (`include/kan/input_map.hpp`). `kan::InputMap(features, map)` holds
 one `InputMapKind = std::variant<AffineMap, TanhMap, LayerNormMap>`:
@@ -678,10 +680,14 @@ not to the carrier: `set_carrier`, `set_parameters`, `insert_knot`, `adapt_grid`
 `set_rbf_parameters` and `set_rational_parameters` keep it unchanged. Copies are values;
 `SiluResidual` has `operator==`.
 
-Purpose: B-spline, Gaussian RBF and Mexican-hat carriers are exactly zero, with zero input
-gradient, outside their support, so without the branch no gradient crosses a layer whose
-inputs left the support (`tests/residual_test.cpp` asserts both zero without and nonzero with
-the branch, including the first layer's coefficient gradients behind such a layer).
+Purpose: B-splines are exactly zero, with zero input gradient, outside their compact
+support. Gaussian RBF and Mexican-hat bases have decaying tails; sufficiently far from
+their centers, both values and derivatives can underflow to zero. If every carrier
+derivative vanishes at a layer's inputs, no input gradient crosses that layer without
+the branch. `tests/residual_test.cpp` checks zero gradients without the branch and
+nonzero gradients with it on the tested B-spline and remote Gaussian-RBF inputs,
+including the preceding layer's coefficient gradients. The branch itself does not
+guarantee a nonzero gradient for every input or upstream.
 
 **Formulas** (single host/device source `src/detail/residual_formulas.hpp`, templated on the
 scalar): with `e = exp(-|x|)`, `sigma = 1/(1+e)` and `1-sigma = e/(1+e)` for `x >= 0`,
@@ -713,8 +719,12 @@ initialized exactly as before (the nine M4 digests are unchanged). For a layer w
 Normal draws `(residual_mean + residual_spread/sqrt(3)·z)/sqrt(inputs)`, equal mean and
 variance), after the carrier's draws; `residual_mean` must be finite and `residual_spread`
 finite and `>= 0` (`std::invalid_argument`). `VarianceScaling` sets `w = 0`: the carrier keeps
-the exact `E[y²] = gain²·variance` guarantee, and `w = 0` is not stationary, since
-`dw = sum_b u·silu(x)`. pykan's trainable `scale_sp` is not a separate parameter here: it
+the `E[y²] = gain²·variance` guarantee under the reference measure, in expectation over
+initialization. Zero weights do not force `dw = sum_b u·silu(x)` to vanish: the branch
+can learn on the first step, depending on its inputs and upstream (the sum can also
+be zero). Its contribution to `dx` is zero while `w = 0`, so it starts passing input
+gradients only after a weight update makes that contribution nonzero.
+pykan's trainable `scale_sp` is not a separate parameter here: it
 multiplies the carrier and is a reparametrization folded into the coefficients.
 
 **Python.** `Layer.residual` returns an owned `(outputs, inputs)` float64 array or `None`;
