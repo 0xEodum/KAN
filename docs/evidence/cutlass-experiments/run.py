@@ -19,7 +19,7 @@ HERE = Path(os.environ.get("KAN_EXPERIMENT_EVIDENCE", str(SOURCE))).resolve()
 ROOT = SOURCE.parents[2]
 EXE = Path(os.environ.get("KAN_EXPERIMENT_BINARY", str(ROOT / "build-cutlass-experiment/cutlass_experiment.exe"))).resolve()
 RAW = HERE / "raw"
-RAW.mkdir(exist_ok=True)
+RAW.mkdir(parents=True, exist_ok=True)
 CASES = ["tiny", "small", "irregular", "deep", "medium", "wide", "large"]
 STEPS = dict(tiny=400, small=300, irregular=400, deep=100, medium=80, wide=40, large=10)
 MODE_NAMES = {0: "cuBLAS", 1: "CUTLASS-dense-forward", 2: "CUTLASS-input-fusion",
@@ -152,12 +152,16 @@ def learn():
                         if not path.exists():
                             continue
                         b = array.array("d"); b.frombytes(path.read_bytes())
+                        if len(a) != len(b):
+                            raise RuntimeError("learning parameter shape mismatch: " + str(path))
                         loss = float(rows(RAW/(prefix+str(mode)+".txt"))[-1]["loss"])
                         delta = max(abs(x-y) for x, y in zip(a, b))
                         normalized = max(abs(x-y)/(1+abs(x)) for x, y in zip(a, b))
                         learning.append(dict(case=c, precision=p, branch=branch, seed=seed, mode=mode,
                                              control_loss=ref, candidate_loss=loss, loss_ratio=loss/ref,
                                              parameter_max_abs=delta, parameter_max_normalized=normalized,
+                                             parameter_values=len(a),
+                                             control_parameters_sha256=hashlib.sha256((dumps/(prefix+"0.bin")).read_bytes()).hexdigest(),
                                              candidate_parameters_sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     with (HERE/"learning-summary.csv").open("w", newline="", encoding="utf8") as f:
         writer = csv.DictWriter(f, fieldnames=list(learning[0])); writer.writeheader(); writer.writerows(learning)
