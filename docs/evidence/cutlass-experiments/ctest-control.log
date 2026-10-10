@@ -1,0 +1,83 @@
+Test project K:/PycharmProjects/auxiliary_projects/KAN/build-cutlass-experiment
+      Start  1: basis
+ 1/36 Test  #1: basis ............................   Passed    0.01 sec
+      Start  2: basis_config
+ 2/36 Test  #2: basis_config .....................   Passed    0.01 sec
+      Start  3: carrier
+ 3/36 Test  #3: carrier ..........................   Passed    0.01 sec
+      Start  4: layer
+ 4/36 Test  #4: layer ............................   Passed    0.01 sec
+      Start  5: network
+ 5/36 Test  #5: network ..........................   Passed    0.01 sec
+      Start  6: input_map
+ 6/36 Test  #6: input_map ........................   Passed    0.04 sec
+      Start  7: m3_basis
+ 7/36 Test  #7: m3_basis .........................   Passed    0.01 sec
+      Start  8: m3_layer
+ 8/36 Test  #8: m3_layer .........................   Passed    0.01 sec
+      Start  9: m4_rational
+ 9/36 Test  #9: m4_rational ......................   Passed    0.01 sec
+      Start 10: m4_layer
+10/36 Test #10: m4_layer .........................   Passed    0.04 sec
+      Start 11: m4_allocation
+11/36 Test #11: m4_allocation ....................   Passed    0.02 sec
+      Start 12: initializer
+12/36 Test #12: initializer ......................   Passed    1.26 sec
+      Start 13: residual
+13/36 Test #13: residual .........................   Passed    0.02 sec
+      Start 14: residual_formula
+14/36 Test #14: residual_formula .................   Passed    0.01 sec
+      Start 15: rational_policy
+15/36 Test #15: rational_policy ..................   Passed    0.01 sec
+      Start 16: package_custom_include
+16/36 Test #16: package_custom_include ...........   Passed    4.65 sec
+      Start 17: package_default_configuration
+17/36 Test #17: package_default_configuration ....   Passed    4.61 sec
+      Start 18: cuda
+18/36 Test #18: cuda .............................   Passed    0.79 sec
+      Start 19: cuda_deprecation_available
+19/36 Test #19: cuda_deprecation_available .......   Passed    0.86 sec
+      Start 20: cuda_deprecation_resident_only
+20/36 Test #20: cuda_deprecation_resident_only ...   Passed    0.87 sec
+      Start 21: cuda_deprecation_legacy
+21/36 Test #21: cuda_deprecation_legacy ..........   Passed    0.53 sec
+      Start 22: resident
+22/36 Test #22: resident .........................   Passed    0.26 sec
+      Start 23: resident_review
+23/36 Test #23: resident_review ..................   Passed    0.27 sec
+      Start 24: m3_resident
+24/36 Test #24: m3_resident ......................   Passed    0.25 sec
+      Start 25: input_map_resident
+25/36 Test #25: input_map_resident ...............   Passed    0.27 sec
+      Start 26: m4_resident
+26/36 Test #26: m4_resident ......................   Passed    0.28 sec
+      Start 27: rational_policy_resident
+27/36 Test #27: rational_policy_resident .........   Passed    0.36 sec
+      Start 28: rational_resident_execution
+28/36 Test #28: rational_resident_execution ......   Passed    6.60 sec
+      Start 29: resident_contraction
+29/36 Test #29: resident_contraction .............   Passed    0.31 sec
+      Start 30: resident_precision
+30/36 Test #30: resident_precision ...............   Passed    1.41 sec
+      Start 31: resident_upload
+31/36 Test #31: resident_upload ..................   Passed    1.20 sec
+      Start 32: resident_training
+32/36 Test #32: resident_training ................   Passed    1.90 sec
+      Start 33: resident_fused_expansion
+33/36 Test #33: resident_fused_expansion .........   Passed    0.37 sec
+      Start 34: initializer_resident
+34/36 Test #34: initializer_resident .............   Passed    3.10 sec
+      Start 35: residual_resident
+35/36 Test #35: residual_resident ................   Passed   33.86 sec
+      Start 36: fit_polynomial
+36/36 Test #36: fit_polynomial ...................   Passed    0.01 sec
+
+100% tests passed out of 36
+
+Label Time Summary:
+build          =   2.26 sec*proc (3 tests)
+cpu            =  10.77 sec*proc (18 tests)
+cuda           =  53.49 sec*proc (18 tests)
+integration    =   9.27 sec*proc (3 tests)
+
+Total Test time (real) =  64.31 sec

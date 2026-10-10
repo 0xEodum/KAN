@@ -1,0 +1,8 @@
+check,output,15903,0,0,0,PASS
+check,gradients,559841,1.00008037e-08,1.00004096e-08,98747,PASS
+check,SGD,460832,0,0,0,PASS
+check,graph-eager,460832,0,0,0,PASS
+check,overflow-rollback,460832,0,0,0,PASS
+check,lifecycle,PASS
+
+EXIT=0

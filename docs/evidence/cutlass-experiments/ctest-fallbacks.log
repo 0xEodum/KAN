@@ -1,0 +1,20 @@
+Test project K:/PycharmProjects/auxiliary_projects/KAN/build-cutlass-experiment
+    Start 26: m3_resident
+1/6 Test #26: m3_resident ......................   Passed    0.26 sec
+    Start 27: input_map_resident
+2/6 Test #27: input_map_resident ...............   Passed    0.25 sec
+    Start 28: m4_resident
+3/6 Test #28: m4_resident ......................   Passed    0.26 sec
+    Start 29: rational_policy_resident
+4/6 Test #29: rational_policy_resident .........   Passed    0.34 sec
+    Start 34: resident_training
+5/6 Test #34: resident_training ................   Passed    0.78 sec
+    Start 37: residual_resident
+6/6 Test #37: residual_resident ................   Passed   43.82 sec
+
+100% tests passed out of 6
+
+Label Time Summary:
+cuda    =  45.71 sec*proc (6 tests)
+
+Total Test time (real) =  45.73 sec

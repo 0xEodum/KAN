@@ -13,6 +13,11 @@ option(KAN_BENCH_RESIDENT "Include M2 resident backend in benchmarks" ON)
 # Backlog C10: OFF is the parity build (CUDA kernels compiled with --fmad=false,
 # the C2 behaviour); ON is the performance build (nvcc contracts a*b+c into FMA).
 option(KAN_CUDA_FMA "Allow fused multiply-add contraction in the CUDA kernels (performance build)" OFF)
+option(KAN_CUTLASS_EXPERIMENT "Build opt-in CUTLASS experiment paths and harness" OFF)
+set(KAN_CUTLASS_ROOT "" CACHE PATH "CUTLASS 3.9.2 source checkout for the experiment")
+if(KAN_CUTLASS_EXPERIMENT AND NOT KAN_ENABLE_CUDA)
+    message(FATAL_ERROR "The CUTLASS experiment requires KAN_ENABLE_CUDA")
+endif()
 
 add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp src/input_map.cpp
             src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp src/initializers.cpp
@@ -66,6 +71,22 @@ if(KAN_ENABLE_CUDA)
         target_compile_options(kan_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
     endif()
     target_link_libraries(kan_cuda PUBLIC kan PRIVATE CUDA::cudart CUDA::cublas)
+    if(KAN_CUTLASS_EXPERIMENT)
+        if(NOT EXISTS "${KAN_CUTLASS_ROOT}/include/cutlass/cutlass.h")
+            message(FATAL_ERROR "Set KAN_CUTLASS_ROOT to the pinned CUTLASS checkout")
+        endif()
+        target_sources(kan_cuda PRIVATE docs/evidence/cutlass-experiments/backend.cu)
+        if(MSVC)
+            # CUTLASS gates C++17 traits on __cplusplus; MSVC needs this flag
+            # even when nvcc -std=c++20 is present (upstream CUTLASS build policy).
+            set_source_files_properties(docs/evidence/cutlass-experiments/backend.cu
+                PROPERTIES COMPILE_OPTIONS "-Xcompiler=/Zc:__cplusplus")
+        endif()
+        target_include_directories(kan_cuda PRIVATE "${KAN_CUTLASS_ROOT}/include" docs/evidence/cutlass-experiments src)
+        target_compile_definitions(kan_cuda PRIVATE KAN_CUTLASS_EXPERIMENT=1)
+        add_executable(cutlass_experiment docs/evidence/cutlass-experiments/bench.cpp)
+        target_link_libraries(cutlass_experiment PRIVATE kan::cuda)
+    endif()
 endif()
 
 include(CTest)

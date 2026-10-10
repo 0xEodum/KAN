@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -126,7 +127,7 @@ int main(int argc,char** argv) try {
         if(!candidate.download_output().empty()) throw std::runtime_error("nonempty zero-batch output");
         // Overflow must still reject the whole graph update and leave parameters unchanged.
         candidate.upload_parameters(net);
-        auto huge=std::vector<double>(xs[0].size(),1e10);
+        auto huge=std::vector<double>(xs[0].size(),precision_name=="f64"?1e100:1e10);
         candidate.upload_input(huge,c.batch);candidate.upload_output_gradient(up);
         bool rejected=false;
         try {candidate.train_step(.01);} catch(const std::overflow_error&) {rejected=true;}
@@ -157,6 +158,13 @@ int main(int argc,char** argv) try {
                 std::printf("%d,%d,%s,%s,%s,%d,%d,%d,%.12g,%.6f\n",mode,tile,precision_name.c_str(),protocol.c_str(),c.name,branch,seed,j+1,loss,ms);
                 std::fflush(stdout);
             }
+        }
+        if(argc>11) {
+            const auto values=parameters(r.download_parameters());
+            std::ofstream out(argv[11],std::ios::binary);
+            if(!out) throw std::runtime_error("cannot write training parameter dump");
+            out.write(reinterpret_cast<const char*>(values.data()),values.size()*sizeof(double));
+            if(!out) throw std::runtime_error("training parameter dump failed");
         }
         return 0;
     }

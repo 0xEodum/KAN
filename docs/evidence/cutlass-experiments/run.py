@@ -4,6 +4,7 @@ python docs/evidence/cutlass-experiments/run.py screen|confirm|learn|summarize
 Large profiler files live under build-cutlass-experiment, not this directory.
 """
 import csv
+import array
 import hashlib
 import json
 import os
@@ -103,6 +104,8 @@ def confirm():
 
 def learn():
     selected = json.loads((HERE / "selection.json").read_text())
+    dumps = ROOT / "build-cutlass-experiment/learning-params"
+    dumps.mkdir(exist_ok=True)
     for c in ("small", "deep", "medium"):
         for p in ("f32", "tf32"):
             for branch in (0, 1):
@@ -111,10 +114,32 @@ def learn():
                         tile = 0 if mode == 0 else selected[str(mode)]["tile"]
                         if tile is None or (mode == 5 and branch == 0):
                             continue
-                        path = run(["train", mode, tile, p, "resident", c, branch, seed, 1, 1000],
-                                   f"learn-{c}-{p}-b{branch}-s{seed}-m{mode}")
+                        label = f"learn-{c}-{p}-b{branch}-s{seed}-m{mode}"
+                        path = run(["train", mode, tile, p, "resident", c, branch, seed, 1, 1000, str(dumps/(label+".bin"))], label)
                         if not ok(path):
                             raise RuntimeError("learning failed: " + str(path))
+    learning = []
+    for c in ("small", "deep", "medium"):
+        for p in ("f32", "tf32"):
+            for branch in (0, 1):
+                for seed in range(3):
+                    prefix = f"learn-{c}-{p}-b{branch}-s{seed}-m"
+                    a = array.array("d"); a.frombytes((dumps/(prefix+"0.bin")).read_bytes())
+                    ref = float(rows(RAW/(prefix+"0.txt"))[-1]["loss"])
+                    for mode in range(1, 6):
+                        path = dumps/(prefix+str(mode)+".bin")
+                        if not path.exists():
+                            continue
+                        b = array.array("d"); b.frombytes(path.read_bytes())
+                        loss = float(rows(RAW/(prefix+str(mode)+".txt"))[-1]["loss"])
+                        delta = max(abs(x-y) for x, y in zip(a, b))
+                        normalized = max(abs(x-y)/(1+abs(x)) for x, y in zip(a, b))
+                        learning.append(dict(case=c, precision=p, branch=branch, seed=seed, mode=mode,
+                                             control_loss=ref, candidate_loss=loss, loss_ratio=loss/ref,
+                                             parameter_max_abs=delta, parameter_max_normalized=normalized,
+                                             candidate_parameters_sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
+    with (HERE/"learning-summary.csv").open("w", newline="", encoding="utf8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(learning[0])); writer.writeheader(); writer.writerows(learning)
 
 
 def summarize():

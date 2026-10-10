@@ -17,6 +17,9 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#ifdef KAN_CUTLASS_EXPERIMENT
+#include "backend.hpp"
+#endif
 
 // Precision policy (backlog C1): every kernel, plan and the execution engine
 // are templates over the device scalar T. Engine<double> is the FP64 executor
@@ -970,6 +973,9 @@ constexpr std::size_t residual_workspace_bytes = std::size_t{32} << 20;
 template<class T>
 struct Context {
     std::size_t capacity, batch = 0;
+#ifdef KAN_CUTLASS_EXPERIMENT
+    int experiment_mode = experiment::mode(), experiment_tile = experiment::tile();
+#endif
     // Training steps (C9) never expose the gradient with respect to the
     // network input (gradients are stale after a step), so they skip it, as
     // PyTorch does for an input that does not require grad.
@@ -1438,6 +1444,19 @@ detail::BasisViewOf<T> device_basis(const Context<T>& s, const ExpansionPlan<T>&
 template<class T> SiluRows<T> silu_rows(Context<T>& s, const ParameterBlock& b) {
     return {s.ptr(b.silu), s.ptr(b.silu_derivative)};
 }
+#ifdef KAN_CUTLASS_EXPERIMENT
+template<class T> bool experiment_basis(const Context<T>& s, const ExpansionPlan<T>& p) {
+    return std::is_same_v<T,float> && s.batch && p.view.kind == detail::BasisKind::Chebyshev &&
+           !p.view.trainable && p.block.terms == 7;
+}
+template<class T> bool experiment_elide_phi(const Context<T>& s, const ExpansionPlan<T>& p) {
+    const auto& b = p.block;
+    const auto checked = b.coefficients+b.outputs;
+    const bool small_parameters = checked <= small_parameter_vjp<T> && s.batch <= small_parameter_work<T>/checked;
+    return s.experiment_mode == 4 && experiment_basis(s,p) && !small_parameters &&
+           s.batch*b.outputs > small_forward_contraction<T>/(b.inputs*b.terms);
+}
+#endif
 template<class T> bool small_residual_work(const ParameterBlock& b, std::size_t batch) {
     return !batch || b.outputs*b.inputs <= small_forward_contraction<T>/batch;
 }
@@ -1480,6 +1499,12 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     // With the residual branch (backlog M3) the same pass writes S and silu'.
     const bool residual = b.residual_count != 0;
     const auto silu = residual ? silu_rows(s, b) : SiluRows<T>{nullptr, nullptr};
+#ifdef KAN_CUTLASS_EXPERIMENT
+    const bool elide_phi = experiment_elide_phi(s,p);
+    if (elide_phi) {
+        if (residual) silu_kernel<<<blocks(count),256,0,s.stream>>>(s.ptr(s.activation[j]),silu,count,s.status);
+    } else
+#endif
     detail::visit_basis_family(basis.kind, [&](auto family) {
         const auto launch = [&](auto with_residual) {
             basis_kernel<decltype(family)::value, decltype(with_residual)::value>
@@ -1507,6 +1532,18 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     // Y^T = C^T(op T) * Phi^T with C stored as column-major IK x O.
     const auto ik = static_cast<std::int64_t>(b.inputs*b.terms), o = static_cast<std::int64_t>(b.outputs);
     const T one = 1, zero = 0;
+#ifdef KAN_CUTLASS_EXPERIMENT
+    bool experiment_forward = false;
+    if constexpr (std::is_same_v<T,float>) {
+        if (experiment_basis(s,p) && (s.experiment_mode == 1 || s.experiment_mode == 3 || s.experiment_mode == 4)) {
+            experiment::forward(s.ptr(p.values),s.ptr(s.activation[j]),s.ptr(s.parameters+b.offset),
+                s.ptr(s.activation[j+1]),int(s.batch),int(b.inputs),int(b.outputs),s.experiment_mode != 1,
+                s.experiment_tile,s.status,s.stream);
+            experiment_forward = true;
+        }
+    }
+    if (!experiment_forward)
+#endif
     check(gemm(s.blas, CUBLAS_OP_T, CUBLAS_OP_N, o, static_cast<std::int64_t>(s.batch), ik, &one,
                s.ptr(s.parameters+b.offset), ik, s.ptr(p.values), ik, &zero, s.ptr(s.activation[j+1]), o),
           "resident forward contraction");
@@ -1589,9 +1626,23 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
     } else if (s.batch) {
         // Coefficient VJP + L2: column-major dC^T (IK x O) = Phi^T * U + lambda*C^T.
         // beta = 0 never reads the output, so lambda = 0 needs no copy.
+#ifdef KAN_CUTLASS_EXPERIMENT
+        bool experiment_coefficients = false;
+        if constexpr (std::is_same_v<T,float>) {
+            if (experiment_elide_phi(s,p)) {
+                experiment::coefficient(s.ptr(s.activation[j]),u,c,dc,int(s.batch),int(b.inputs),int(b.outputs),
+                    lambda,s.experiment_tile,s.status,s.stream);
+                experiment_coefficients = true;
+            }
+        }
+        if (!experiment_coefficients) {
+#endif
         if (lambda != 0) check(cudaMemcpyAsync(dc, c, b.coefficients*sizeof(T), cudaMemcpyDeviceToDevice, s.stream), "resident L2 copy");
         check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_T, ik, o, n, &one, s.ptr(p.values), ik, u, o,
                    &lambda, dc, ik), "resident coefficient VJP");
+#ifdef KAN_CUTLASS_EXPERIMENT
+        }
+#endif
         // Bias VJP: column sums of U, as U^T * 1 (U^T is column-major O x batch).
         check(gemv(s.blas, o, n, &one, u, o, s.ptr(s.ones), &zero, db), "resident bias VJP");
     } else {
@@ -1603,12 +1654,28 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
         }
         check(cudaMemsetAsync(db, 0, b.outputs*sizeof(T), s.stream), "resident bias VJP reset");
     }
+#ifdef KAN_CUTLASS_EXPERIMENT
+    bool experiment_dx = false;
+    if constexpr (std::is_same_v<T,float>) {
+        if (with_dx && experiment_basis(s,p) && (s.experiment_mode == 2 || s.experiment_mode == 4)) {
+            experiment::input(s.ptr(s.activation[j]),u,c,s.ptr(s.upstream[j]),int(s.batch),int(b.inputs),
+                int(b.outputs),s.experiment_tile,s.status,s.stream);
+            experiment_dx = true;
+        }
+    }
+    if (s.batch && with_w && !experiment_dx) {
+#else
     if (s.batch && with_w) {
+#endif
         // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
         check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
               "resident input VJP contraction");
     }
-    const auto rows = with_dx ? s.batch*b.inputs : 0;
+    const auto rows = with_dx
+#ifdef KAN_CUTLASS_EXPERIMENT
+        && !experiment_dx
+#endif
+        ? s.batch*b.inputs : 0;
     const auto finish = [&](auto source) {
         constexpr auto planes = stage_planes<decltype(source)>;
         const auto tile_rows = stage_rows<T>(b.terms, planes);
@@ -1751,7 +1818,19 @@ template<class T> void residual_backward(Context<T>& s, const ParameterBlock& b,
     }
     const bool dx = s.batch && s.input_gradient(j);
     const T* tw = nullptr;
+#ifdef KAN_CUTLASS_EXPERIMENT
+    bool experiment_residual_dx = false;
+    if constexpr (std::is_same_v<T,float>) {
+        if (dx && !small_residual_work<T>(b,s.batch) && (s.experiment_mode == 4 || s.experiment_mode == 5)) {
+            experiment::residual(s.ptr(b.silu_derivative),u,w,s.ptr(s.upstream[j]),int(s.batch),int(b.inputs),
+                int(b.outputs),s.experiment_tile,s.status,s.stream);
+            experiment_residual_dx = true;
+        }
+    }
+    if (dx && !small_residual_work<T>(b,s.batch) && !experiment_residual_dx) {
+#else
     if (dx && !small_residual_work<T>(b, s.batch)) {
+#endif
         // Column-major T^T (I x batch) = W^T(W as column-major I x O) * U^T.
         s.with_residual_workspace([&] {
             check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, i, n, o, &one, w, i, u, o, &zero, s.ptr(s.scratch), i),
@@ -1759,7 +1838,11 @@ template<class T> void residual_backward(Context<T>& s, const ParameterBlock& b,
         });
         tw = s.ptr(s.scratch);
     }
-    const auto rows = dx ? s.batch*b.inputs : 0;
+    const auto rows = dx
+#ifdef KAN_CUTLASS_EXPERIMENT
+        && !experiment_residual_dx
+#endif
+        ? s.batch*b.inputs : 0;
     residual_finish_kernel<<<std::max(blocks(b.residual_count), rows ? blocks(rows) : 1u), 256, 0, s.stream>>>(
         s.ptr(s.partials), tiles, checked, reduce, w, dw, b.residual_count, lambda, s.ptr(b.silu_derivative), u, tw,
         s.ptr(s.upstream[j]), rows, b.inputs, b.outputs, s.status);

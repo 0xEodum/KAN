@@ -1,0 +1,10 @@
+CMake Warning at CMakeLists.txt:56 (message):
+  nvcc host compiler guard explicitly overridden; validate this toolchain
+  carefully
+
+
+-- Configuring done (1.9s)
+-- Generating done (0.1s)
+-- Build files have been written to: K:/PycharmProjects/auxiliary_projects/KAN/build-cutlass-experiment
+[1/2] Building CXX object CMakeFiles\cutlass_experiment.dir\docs\evidence\cutlass-experiments\bench.cpp.obj
+[2/2] Linking CXX executable cutlass_experiment.exe
