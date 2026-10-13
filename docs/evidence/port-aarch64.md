@@ -152,6 +152,9 @@ it, see below.) `docs/CONTRACT.md` (precision section) records the
 term. **Decision for the coordinator/owner:** this is a test-tolerance contract change for the
 opt-in TF32 mode, required by GB10/cuBLAS 13.1 kernel selection.
 
+**Owner decision (2026-10-13):** the owner accepted `2^-11` (over the tighter 2.5e-4 alternative);
+the allowance stays as committed in `6dc1fdc`.
+
 ## Test results (final tree)
 
 | Configuration | Result | Log |
