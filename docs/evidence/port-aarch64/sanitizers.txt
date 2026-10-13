@@ -1,0 +1,148 @@
+== build-cuda memcheck cuda_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck rational_resident_execution_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck initializer_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck residual_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda racecheck residual_resident_test
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-cuda racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-cuda racecheck resident_fused_expansion_test
+1/1 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-cuda synccheck residual_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda synccheck resident_fused_expansion_test
+1/1 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda initcheck residual_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda initcheck resident_fused_expansion_test
+FAIL float32_fixed_basis_layer_reserves_no_derivative_rows: 7 more terms took 154583040 bytes, 2.632533 row tensors
+0/1 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck cuda_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck m3_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck input_map_resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck m4_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck rational_policy_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck rational_resident_execution_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_contraction_test
+6/6 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_precision_test
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_training_test
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck resident_fused_expansion_test
+1/1 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck initializer_resident_test
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck residual_resident_test
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors

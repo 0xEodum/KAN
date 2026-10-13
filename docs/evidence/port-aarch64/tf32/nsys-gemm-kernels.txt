@@ -1,0 +1,8 @@
+void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_tn_align1>(T1::Params)|16|1|3|2
+void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nn_align1>(T1::Params)|64|1|1|4
+void cutlass::Kernel2<cutlass_80_simt_sgemm_64x64_8x5_nt_align1>(T1::Params)|16|1|13|2
+std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)8, (bool)0, cublasGemvPar
+void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x64_16x6_tn_align4>(T1::Params)|32|1|1|2
+void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_32x3_nn_align1>(T1::Params)|32|1|1|2
+void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_32x3_nt_align4>(T1::Params)|8|1|6|2
+void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x4_nn_align4>(T1::Params)|32|1|1|2

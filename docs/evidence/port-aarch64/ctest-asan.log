@@ -1,0 +1,57 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-asan
+Test project /home/core_ai/PyProjects/KAN/build-asan
+      Start  1: basis
+      Start  2: basis_config
+      Start  3: carrier
+      Start  4: layer
+      Start  5: network
+      Start  6: input_map
+ 1/20 Test  #2: basis_config .....................   Passed    0.01 sec
+      Start  7: m3_basis
+ 2/20 Test  #1: basis ............................   Passed    0.01 sec
+      Start  8: m3_layer
+ 3/20 Test  #3: carrier ..........................   Passed    0.01 sec
+      Start  9: m4_rational
+ 4/20 Test  #4: layer ............................   Passed    0.01 sec
+      Start 10: m4_layer
+ 5/20 Test  #8: m3_layer .........................   Passed    0.01 sec
+      Start 11: m4_allocation
+ 6/20 Test  #9: m4_rational ......................   Passed    0.01 sec
+      Start 12: initializer
+ 7/20 Test  #5: network ..........................   Passed    0.02 sec
+      Start 13: initializer_training
+ 8/20 Test  #7: m3_basis .........................   Passed    0.08 sec
+      Start 14: residual
+ 9/20 Test #14: residual .........................   Passed    0.05 sec
+      Start 15: residual_formula
+10/20 Test #15: residual_formula .................   Passed    0.01 sec
+      Start 16: residual_training
+11/20 Test #11: m4_allocation ....................   Passed    0.46 sec
+      Start 17: rational_policy
+12/20 Test #17: rational_policy ..................   Passed    0.03 sec
+      Start 18: package_custom_include
+13/20 Test  #6: input_map ........................   Passed    0.66 sec
+      Start 19: package_default_configuration
+14/20 Test #10: m4_layer .........................   Passed    2.69 sec
+      Start 20: fit_polynomial
+15/20 Test #20: fit_polynomial ...................   Passed    0.02 sec
+16/20 Test #19: package_default_configuration ....   Passed    2.48 sec
+17/20 Test #18: package_custom_include ...........   Passed    3.16 sec
+18/20 Test #12: initializer ......................   Passed   49.59 sec
+19/20 Test #13: initializer_training .............***Timeout 900.08 sec
+
+20/20 Test #16: residual_training ................***Timeout 900.07 sec
+
+
+90% tests passed, 2 tests failed out of 20
+
+Label Time Summary:
+cpu            = 1859.45 sec*proc (20 tests)
+integration    =   5.66 sec*proc (3 tests)
+
+Total Test time (real) = 900.22 sec
+
+The following tests FAILED:
+	 13 - initializer_training (Timeout)
+	 16 - residual_training (Timeout)
+Errors while running CTest

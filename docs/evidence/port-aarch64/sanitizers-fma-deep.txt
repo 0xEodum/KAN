@@ -1,0 +1,38 @@
+# FMA build deep sanitizer runs (inline loop, same format as scripts/sanitizers.sh: synccheck, initcheck, racecheck; timeout 5400 s each)
+== build-cuda-fma synccheck resident_fused_expansion_test
+1/1 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda-fma synccheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda-fma synccheck residual_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 22 s)
+== build-cuda-fma initcheck resident_fused_expansion_test
+FAIL float32_fixed_basis_layer_reserves_no_derivative_rows: 7 more terms took 158294016 bytes, 2.695731 row tensors
+0/1 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 1, 1 s)
+== build-cuda-fma initcheck resident_training_test
+13/13 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 5 s)
+== build-cuda-fma initcheck residual_resident_test
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 52 s)
+== build-cuda-fma racecheck resident_fused_expansion_test
+1/1 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 1 s)
+== build-cuda-fma racecheck resident_training_test
+13/13 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 132 s)
+== build-cuda-fma racecheck residual_resident_test
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 1248 s)

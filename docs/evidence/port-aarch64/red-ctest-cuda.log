@@ -1,0 +1,147 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cuda
+Test project /home/core_ai/PyProjects/KAN/build-cuda
+      Start  1: basis
+ 1/47 Test  #1: basis ............................   Passed    0.00 sec
+      Start  2: basis_config
+ 2/47 Test  #2: basis_config .....................   Passed    0.00 sec
+      Start  3: carrier
+ 3/47 Test  #3: carrier ..........................   Passed    0.00 sec
+      Start  4: layer
+ 4/47 Test  #4: layer ............................   Passed    0.00 sec
+      Start  5: network
+ 5/47 Test  #5: network ..........................   Passed    0.00 sec
+      Start  6: input_map
+ 6/47 Test  #6: input_map ........................   Passed    0.02 sec
+      Start  7: m3_basis
+ 7/47 Test  #7: m3_basis .........................   Passed    0.00 sec
+      Start  8: m3_layer
+ 8/47 Test  #8: m3_layer .........................   Passed    0.00 sec
+      Start  9: m4_rational
+ 9/47 Test  #9: m4_rational ......................   Passed    0.00 sec
+      Start 10: m4_layer
+10/47 Test #10: m4_layer .........................   Passed    0.01 sec
+      Start 11: m4_allocation
+11/47 Test #11: m4_allocation ....................   Passed    0.01 sec
+      Start 12: initializer
+12/47 Test #12: initializer ......................   Passed    0.57 sec
+      Start 13: initializer_training
+13/47 Test #13: initializer_training .............   Passed   22.91 sec
+      Start 14: residual
+14/47 Test #14: residual .........................***Failed    0.00 sec
+PASS constructors_have_no_branch_and_gradients_leave_it_empty
+PASS forward_adds_the_branch_after_the_carrier_in_ascending_input_order
+PASS all_vjps_of_each_carrier_with_the_branch
+PASS all_vjps_of_mixed_networks_with_and_without_the_branch
+PASS branch_is_the_only_gradient_path_outside_localized_supports
+PASS branch_restores_first_layer_gradients_behind_a_saturated_localized_layer
+PASS set_residual_validates_shape_and_finiteness_atomically
+PASS branch_survives_every_carrier_replacement_and_copies
+FAIL sgd_updates_the_branch_and_validates_its_gradient: l.residual()->weights[j] == before.residual()->weights[j] - 0.1 * g.residual[j]
+PASS l2_penalizes_coefficients_and_branch_weights
+PASS network_backward_sgd_and_regularization_carry_the_branch
+PASS nonfinite_branch_results_raise_overflow
+PASS initializers_leave_layers_without_the_branch_unchanged_in_kind
+PASS noise_init_draws_pykan_scale_base
+PASS noise_init_validates_branch_fields_before_any_change
+PASS variance_scaling_sets_branch_weights_to_zero
+PASS network_initialization_keeps_branch_presence_per_layer
+pinned 1ef218a170c967fd
+pinned 3b6cb65c8b613b2f
+pinned af64dc9297fd02da
+PASS branch_draws_are_pinned_across_platforms
+17/18 passed
+
+      Start 15: residual_formula
+15/47 Test #15: residual_formula .................   Passed    0.00 sec
+      Start 16: residual_training
+16/47 Test #16: residual_training ................   Passed   33.51 sec
+      Start 17: rational_policy
+17/47 Test #17: rational_policy ..................   Passed    0.00 sec
+      Start 18: package_custom_include
+18/47 Test #18: package_custom_include ...........   Passed    2.00 sec
+      Start 19: package_default_configuration
+19/47 Test #19: package_default_configuration ....   Passed    1.99 sec
+      Start 20: cuda
+20/47 Test #20: cuda .............................   Passed    1.69 sec
+      Start 21: cuda_deprecation_available
+21/47 Test #21: cuda_deprecation_available .......   Passed    0.51 sec
+      Start 22: cuda_deprecation_resident_only
+22/47 Test #22: cuda_deprecation_resident_only ...   Passed    0.53 sec
+      Start 23: cuda_deprecation_legacy
+23/47 Test #23: cuda_deprecation_legacy ..........   Passed    0.43 sec
+      Start 24: resident
+24/47 Test #24: resident .........................   Passed    0.55 sec
+      Start 25: resident_review
+25/47 Test #25: resident_review ..................   Passed    0.57 sec
+      Start 26: m3_resident
+26/47 Test #26: m3_resident ......................   Passed    0.56 sec
+      Start 27: input_map_resident
+27/47 Test #27: input_map_resident ...............   Passed    0.54 sec
+      Start 28: m4_resident
+28/47 Test #28: m4_resident ......................   Passed    0.55 sec
+      Start 29: rational_policy_resident
+29/47 Test #29: rational_policy_resident .........   Passed    0.57 sec
+      Start 30: rational_resident_execution
+30/47 Test #30: rational_resident_execution ......   Passed    4.22 sec
+      Start 31: resident_contraction
+31/47 Test #31: resident_contraction .............   Passed    0.61 sec
+      Start 32: resident_precision
+32/47 Test #32: resident_precision ...............***Failed    1.34 sec
+PASS default_precision_is_float64
+PASS float32_every_family_and_input_map_trains_like_fp64_cpu
+PASS float32_high_degree_recurrences_match_fp64_cpu
+PASS float32_rational_policies_match_fp64_cpu
+PASS float32_contraction_paths_match_fp64_cpu
+FAIL tensor_float32_contractions_match_fp64_cpu: index 21 of 80 actual=-0.0161088146 expected=-0.0174858991 scale=0.0964217672
+PASS float32_reports_overflow_beyond_float_range
+PASS float32_rejects_unrepresentable_data_and_configuration
+PASS float32_log_space_tails_keep_representable_derivatives
+PASS float32_guarded_pole_threshold_follows_float_resolution
+PASS float32_zero_batch_and_parameter_rounding
+10/11 passed
+
+      Start 33: resident_upload
+33/47 Test #33: resident_upload ..................   Passed    0.93 sec
+      Start 34: resident_training
+34/47 Test #34: resident_training ................   Passed    1.21 sec
+      Start 35: resident_fused_expansion
+35/47 Test #35: resident_fused_expansion .........   Passed    0.47 sec
+      Start 36: initializer_resident
+36/47 Test #36: initializer_resident .............   Passed    1.84 sec
+      Start 37: residual_resident
+37/47 Test #37: residual_resident ................   Passed   15.94 sec
+      Start 38: fit_polynomial
+38/47 Test #38: fit_polynomial ...................   Passed    0.00 sec
+      Start 39: python
+39/47 Test #39: python ...........................   Passed    0.67 sec
+      Start 40: m3_python
+40/47 Test #40: m3_python ........................   Passed    0.61 sec
+      Start 41: m4_python
+41/47 Test #41: m4_python ........................   Passed    0.49 sec
+      Start 42: input_map_python
+42/47 Test #42: input_map_python .................   Passed    0.60 sec
+      Start 43: precision_python
+43/47 Test #43: precision_python .................   Passed    0.62 sec
+      Start 44: resident_upload_python
+44/47 Test #44: resident_upload_python ...........   Passed    0.77 sec
+      Start 45: training_python
+45/47 Test #45: training_python ..................   Passed    0.76 sec
+      Start 46: initializer_python
+46/47 Test #46: initializer_python ...............   Passed    0.55 sec
+      Start 47: residual_python
+47/47 Test #47: residual_python ..................   Passed    0.76 sec
+
+96% tests passed, 2 tests failed out of 47
+
+Label Time Summary:
+build          =   1.46 sec*proc (3 tests)
+cpu            =  61.05 sec*proc (20 tests)
+cuda           =  33.06 sec*proc (18 tests)
+integration    =   9.81 sec*proc (12 tests)
+python         =   5.83 sec*proc (9 tests)
+
+Total Test time (real) =  99.97 sec
+
+The following tests FAILED:
+	 14 - residual (Failed)
+	 32 - resident_precision (Failed)

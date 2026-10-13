@@ -1,0 +1,12 @@
+== initializer_training
+curve rational smooth zero         0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+curve rational smooth variance     0:1.937e-01 100:1.011e-01 300:2.244e-02 1000:8.930e-03 3000:1.844e-03
+curve rational smooth noise        0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+5/5 passed
+3519.48 s
+== residual_training
+curve rational absolute variance+residual 0:1.896e-01 100:9.650e-02 300:2.423e-02 1000:6.369e-03 3000:2.097e-03
+curve rational smooth noise+residual     0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.202e-01 5000:9.673e-02 10000:4.210e-03
+curve rational smooth variance+residual  0:1.937e-01 100:9.770e-02 300:1.806e-02 1000:7.428e-03 3000:1.314e-03
+5/5 passed
+5029.85 s

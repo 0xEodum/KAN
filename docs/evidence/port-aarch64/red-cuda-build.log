@@ -1,0 +1,4 @@
+/home/core_ai/PyProjects/KAN/src/resident.cu:2587:122:   required from here
+/home/core_ai/PyProjects/KAN/src/resident.cu:2146:53: error: ‘capacity’ was not declared in this scope
+/home/core_ai/PyProjects/KAN/src/resident.cu:2588:121:   required from here
+/home/core_ai/PyProjects/KAN/src/resident.cu:2146:53: error: ‘capacity’ was not declared in this scope

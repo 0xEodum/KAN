@@ -1,0 +1,96 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cpu
+Test project /home/core_ai/PyProjects/KAN/build-cpu
+      Start  1: basis
+      Start  2: basis_config
+      Start  3: carrier
+      Start  4: layer
+      Start  5: network
+      Start  6: input_map
+      Start  7: m3_basis
+      Start  8: m3_layer
+ 1/29 Test  #1: basis ............................   Passed    0.01 sec
+      Start  9: m4_rational
+ 2/29 Test  #2: basis_config .....................   Passed    0.01 sec
+      Start 10: m4_layer
+ 3/29 Test  #3: carrier ..........................   Passed    0.01 sec
+      Start 11: m4_allocation
+ 4/29 Test  #4: layer ............................   Passed    0.01 sec
+      Start 12: initializer
+ 5/29 Test  #5: network ..........................   Passed    0.01 sec
+      Start 13: initializer_training
+ 6/29 Test  #7: m3_basis .........................   Passed    0.01 sec
+      Start 14: residual
+ 7/29 Test  #8: m3_layer .........................   Passed    0.01 sec
+      Start 15: residual_formula
+ 8/29 Test  #9: m4_rational ......................   Passed    0.01 sec
+      Start 16: residual_training
+ 9/29 Test #15: residual_formula .................   Passed    0.00 sec
+      Start 17: rational_policy
+10/29 Test #14: residual .........................***Failed    0.00 sec
+PASS constructors_have_no_branch_and_gradients_leave_it_empty
+PASS forward_adds_the_branch_after_the_carrier_in_ascending_input_order
+PASS all_vjps_of_each_carrier_with_the_branch
+PASS all_vjps_of_mixed_networks_with_and_without_the_branch
+PASS branch_is_the_only_gradient_path_outside_localized_supports
+PASS branch_restores_first_layer_gradients_behind_a_saturated_localized_layer
+PASS set_residual_validates_shape_and_finiteness_atomically
+PASS branch_survives_every_carrier_replacement_and_copies
+FAIL sgd_updates_the_branch_and_validates_its_gradient: l.residual()->weights[j] == before.residual()->weights[j] - 0.1 * g.residual[j]
+PASS l2_penalizes_coefficients_and_branch_weights
+PASS network_backward_sgd_and_regularization_carry_the_branch
+PASS nonfinite_branch_results_raise_overflow
+PASS initializers_leave_layers_without_the_branch_unchanged_in_kind
+PASS noise_init_draws_pykan_scale_base
+PASS noise_init_validates_branch_fields_before_any_change
+PASS variance_scaling_sets_branch_weights_to_zero
+PASS network_initialization_keeps_branch_presence_per_layer
+pinned 1ef218a170c967fd
+pinned 3b6cb65c8b613b2f
+pinned af64dc9297fd02da
+PASS branch_draws_are_pinned_across_platforms
+17/18 passed
+
+      Start 18: package_custom_include
+11/29 Test #17: rational_policy ..................   Passed    0.00 sec
+      Start 19: package_default_configuration
+12/29 Test #11: m4_allocation ....................   Passed    0.01 sec
+      Start 20: fit_polynomial
+13/29 Test #10: m4_layer .........................   Passed    0.01 sec
+      Start 21: python
+14/29 Test #20: fit_polynomial ...................   Passed    0.00 sec
+      Start 22: m3_python
+15/29 Test  #6: input_map ........................   Passed    0.02 sec
+      Start 23: m4_python
+16/29 Test #22: m3_python ........................   Passed    0.14 sec
+      Start 24: input_map_python
+17/29 Test #21: python ...........................   Passed    0.16 sec
+      Start 25: precision_python
+18/29 Test #23: m4_python ........................   Passed    0.16 sec
+      Start 26: resident_upload_python
+19/29 Test #24: input_map_python .................   Passed    0.16 sec
+      Start 27: training_python
+20/29 Test #25: precision_python .................   Passed    0.16 sec
+      Start 28: initializer_python
+21/29 Test #26: resident_upload_python ...........   Passed    0.15 sec
+      Start 29: residual_python
+22/29 Test #27: training_python ..................   Passed    0.11 sec
+23/29 Test #29: residual_python ..................   Passed    0.14 sec
+24/29 Test #28: initializer_python ...............   Passed    0.73 sec
+25/29 Test #12: initializer ......................   Passed    1.18 sec
+26/29 Test #19: package_default_configuration ....   Passed    2.42 sec
+27/29 Test #18: package_custom_include ...........   Passed    2.58 sec
+28/29 Test #13: initializer_training .............   Passed   23.14 sec
+29/29 Test #16: residual_training ................   Passed   33.89 sec
+
+97% tests passed, 1 tests failed out of 29
+
+Label Time Summary:
+cpu            =  63.33 sec*proc (20 tests)
+integration    =   6.90 sec*proc (12 tests)
+python         =   1.90 sec*proc (9 tests)
+
+Total Test time (real) =  33.91 sec
+
+The following tests FAILED:
+	 14 - residual (Failed)
+Errors while running CTest

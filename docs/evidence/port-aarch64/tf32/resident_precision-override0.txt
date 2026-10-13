@@ -1,0 +1,2 @@
+FAIL tensor_float32_contractions_match_fp64_cpu: a != b
+10/11 passed
