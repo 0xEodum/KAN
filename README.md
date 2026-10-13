@@ -252,7 +252,7 @@ refine explicitly, then construct a new executor. `gpu.backward(0.01)` adds
 coefficient L2 gradients on the GPU; CPU callers explicitly add the regularization
 VJP to their loss gradients. Python exposes the same operations (`kan.insert_knot(layer, x)`,
 `layer.carrier`); see
-[localized Python examples](tests/m3_python_test.py).
+[localized Python examples](tests/python/local_python_test.py).
 
 ## Rational use
 
@@ -276,7 +276,7 @@ choose an input domain and validate it for your application. Numerator parameter
 use `coefficients`; denominators live in `kan::RationalEdges::denominators` and their
 VJPs in `kan::RationalGradients`. Python exposes
 the same typed constructor and strict float64 arrays; see
-[rational Python examples](tests/m4_python_test.py). Resident CUDA accepts rational
+[rational Python examples](tests/python/rational_python_test.py). Resident CUDA accepts rational
 layers in any compatible network without host numerical fallback. The original
 synchronous CUDA layer API remains Chebyshev-only. See the
 [rational numerical contract](docs/CONTRACT.md#rational-edges-m4).
@@ -325,17 +325,18 @@ Python wheels and distribution packaging remain M6 work.
 
 The NumPy interface requires C-contiguous float64 arrays, preserving caller dtype
 and layout decisions. Tensor results own their memory. See
-[Python test examples](tests/python_test.py) for layer/network construction,
+[Python test examples](tests/python/python_test.py) for layer/network construction,
 gradients, training, and resident uploads/downloads, and
-[input map examples](tests/input_map_python_test.py) for
+[input map examples](tests/python/input_map_python_test.py) for
 `kan.Network([kan.InputMap(2, kan.affine_from_range(x)), kan.Layer(2, 1, ...)])`.
 
 ## Full-call benchmarks and profiling
 
 ```powershell
 ./scripts/build.ps1 -Cuda -AllowUnsupportedCudaCompiler -Benchmarks -BuildDirectory build-m2-bench
-./build-m2-bench/m2_benchmark.exe
-./build-m2-bench/m3_benchmark.exe
+./build-m2-bench/basis_benchmark.exe
+./build-m2-bench/local_benchmark.exe
+./build-m2-bench/rational_benchmark.exe
 ```
 
 The benchmark freezes deterministic inputs and parameter initialization, verifies
@@ -363,6 +364,17 @@ that matter for execution (backlog R4):
 
 Each carrier group holds its single host/device formula source, shared by both
 backends. Quantum carriers (roadmap M5) are planned under `src/carriers/quantum/`.
+
+Tests mirror this layout and are named by feature (backlog R5): `tests/core/`,
+`tests/carriers/` (with `local/` and `rational/`), `tests/init/`, `tests/backends/cuda/`
+(every suite that needs a GPU, including the per-carrier `*_resident` suites) and
+`tests/python/`; shared helpers are in `tests/support/`. A file `<name>_test.cpp` or
+`<name>_test.py` is the CTest `<name>`. Labels give the requirement (`cpu`, `cuda`,
+`python`) and the feature group (`core`, `carriers`, `local`, `rational`, `init`,
+`resident`), e.g. `ctest -L rational`. The frozen benchmarks are `basis_benchmark`
+(polynomial, Fourier, Gaussian RBF), `local_benchmark` (B-spline, Mexican hat, trainable
+RBF) and `rational_benchmark`, formerly `m2/m3/m4_benchmark`; recorded CSVs with the old
+labels still compare through `docs/evidence/backlog/compare_bench.py`.
 
 ## Development evidence
 

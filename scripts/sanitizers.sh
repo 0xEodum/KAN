@@ -11,7 +11,7 @@
 # Usage (repository root): scripts/sanitizers.sh <build-dir> [<build-dir> ...] > sanitizers.txt
 set -uo pipefail
 cs=${COMPUTE_SANITIZER:-$(command -v compute-sanitizer || echo /usr/local/cuda/bin/compute-sanitizer)}
-memcheck_tests="cuda_test resident_test resident_review_test m3_resident_test input_map_resident_test m4_resident_test
+memcheck_tests="cuda_test resident_test resident_review_test local_resident_test input_map_resident_test rational_resident_test
   rational_policy_resident_test rational_resident_execution_test resident_contraction_test resident_precision_test
   resident_upload_test resident_training_test resident_fused_expansion_test initializer_resident_test residual_resident_test"
 deep_tests="resident_fused_expansion_test resident_training_test residual_resident_test"

@@ -96,13 +96,36 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(suite basis basis_config carrier layer network input_map m3_basis m3_layer m4_rational m4_layer m4_allocation
-                  initializer initializer_training residual residual_formula residual_training)
-        add_executable(${suite}_test tests/${suite}_test.cpp)
-        target_include_directories(${suite}_test PRIVATE tests)
-        target_link_libraries(${suite}_test PRIVATE kan)
-        add_test(NAME ${suite} COMMAND ${suite}_test)
-        set_tests_properties(${suite} PROPERTIES LABELS "cpu" TIMEOUT 60)
+    # Backlog R5: tests are named by feature and grouped like src/ (core/, carriers/,
+    # carriers/local/, carriers/rational/, init/, backends/cuda/; Python suites in
+    # python/). Labels carry the execution requirement (cpu, cuda, python) and the
+    # feature group (core, carriers, local, rational, init, resident), so for example
+    # `ctest -L rational` runs the rational CPU, CUDA and Python suites. Executables
+    # are built in the build root.
+    # kan_add_test(<dir> <name> <labels> <timeout> <libraries>...) builds
+    # tests/<dir>/<name>_test.cpp as <name>_test and registers it as CTest <name>.
+    function(kan_add_test dir name labels timeout)
+        add_executable(${name}_test tests/${dir}/${name}_test.cpp)
+        target_include_directories(${name}_test PRIVATE tests)
+        target_link_libraries(${name}_test PRIVATE ${ARGN})
+        add_test(NAME ${name} COMMAND ${name}_test)
+        set_tests_properties(${name} PROPERTIES LABELS "${labels}" TIMEOUT ${timeout})
+    endfunction()
+    foreach(suite layer network input_map residual residual_formula residual_training)
+        kan_add_test(core ${suite} "cpu;core" 60 kan)
+    endforeach()
+    foreach(suite basis basis_config carrier)
+        kan_add_test(carriers ${suite} "cpu;carriers" 60 kan)
+    endforeach()
+    foreach(suite local_basis local_layer)
+        kan_add_test(carriers/local ${suite} "cpu;local" 60 kan)
+    endforeach()
+    # Backlog M2: rational denominator policies (rational_policy).
+    foreach(suite rational rational_layer rational_allocation rational_policy)
+        kan_add_test(carriers/rational ${suite} "cpu;rational" 60 kan)
+    endforeach()
+    foreach(suite initializer initializer_training)
+        kan_add_test(init ${suite} "cpu;init" 60 kan)
     endforeach()
     # Backlog M4: the deep-network training demonstration runs 3000 full-batch epochs per case.
     set_tests_properties(initializer_training PROPERTIES TIMEOUT 900)
@@ -110,12 +133,6 @@ if(BUILD_TESTING)
     # trains ten five-layer networks for 3000 epochs.
     target_include_directories(residual_formula_test PRIVATE src)
     set_tests_properties(residual_training PROPERTIES TIMEOUT 900)
-    # Backlog M2: rational denominator policies.
-    add_executable(rational_policy_test tests/rational_policy_test.cpp)
-    target_include_directories(rational_policy_test PRIVATE tests)
-    target_link_libraries(rational_policy_test PRIVATE kan)
-    add_test(NAME rational_policy COMMAND rational_policy_test)
-    set_tests_properties(rational_policy PROPERTIES LABELS "cpu" TIMEOUT 60)
     add_test(NAME package_custom_include COMMAND ${CMAKE_COMMAND}
              "-DKAN_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
              "-DKAN_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
@@ -135,17 +152,14 @@ if(BUILD_TESTING)
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_test.cmake")
     set_tests_properties(package_default_configuration PROPERTIES LABELS "integration;cpu" TIMEOUT 120)
     if(KAN_ENABLE_CUDA)
-        add_executable(cuda_test tests/cuda_test.cpp)
-        target_include_directories(cuda_test PRIVATE tests)
         find_package(Threads REQUIRED)
-        target_link_libraries(cuda_test PRIVATE kan::cuda CUDA::cudart Threads::Threads)
-        add_test(NAME cuda COMMAND cuda_test)
-        set_tests_properties(cuda PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Legacy M1 synchronous API (deprecated since backlog R7).
+        kan_add_test(backends/cuda cuda "cuda" 120 kan::cuda CUDA::cudart Threads::Threads)
         # Backlog R7: kan::cuda::forward/backward are [[deprecated]], available() is not.
         # Probes compile with deprecation warnings as errors; the legacy one must fail.
         # R8: resident_only includes kan/resident.hpp alone and must see available().
         foreach(probe available resident_only legacy)
-            add_executable(cuda_deprecation_${probe} EXCLUDE_FROM_ALL tests/cuda_deprecation_probe.cpp)
+            add_executable(cuda_deprecation_${probe} EXCLUDE_FROM_ALL tests/backends/cuda/cuda_deprecation_probe.cpp)
             target_link_libraries(cuda_deprecation_${probe} PRIVATE kan::cuda)
             target_compile_options(cuda_deprecation_${probe} PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/we4996,-Werror=deprecated-declarations>)
             add_test(NAME cuda_deprecation_${probe} COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --config $<CONFIG> --target cuda_deprecation_${probe})
@@ -155,88 +169,32 @@ if(BUILD_TESTING)
         target_compile_definitions(cuda_deprecation_resident_only PRIVATE KAN_PROBE_RESIDENT_ONLY)
         set_tests_properties(cuda_deprecation_legacy PROPERTIES
             PASS_REGULAR_EXPRESSION "C4996.*ResidentNetwork;ResidentNetwork.*deprecated-declarations")
-        add_executable(resident_test tests/resident_test.cpp)
-        target_include_directories(resident_test PRIVATE tests)
-        target_link_libraries(resident_test PRIVATE kan::cuda Threads::Threads)
-        add_test(NAME resident COMMAND resident_test)
-        set_tests_properties(resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        add_executable(resident_review_test tests/resident_review_test.cpp)
-        target_include_directories(resident_review_test PRIVATE tests)
-        target_link_libraries(resident_review_test PRIVATE kan::cuda)
-        add_test(NAME resident_review COMMAND resident_review_test)
-        set_tests_properties(resident_review PROPERTIES LABELS "cuda" TIMEOUT 120)
-        add_executable(m3_resident_test tests/m3_resident_test.cpp)
-        target_include_directories(m3_resident_test PRIVATE tests)
-        target_link_libraries(m3_resident_test PRIVATE kan::cuda)
-        add_test(NAME m3_resident COMMAND m3_resident_test)
-        set_tests_properties(m3_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        add_executable(input_map_resident_test tests/input_map_resident_test.cpp)
-        target_include_directories(input_map_resident_test PRIVATE tests)
-        target_link_libraries(input_map_resident_test PRIVATE kan::cuda)
-        add_test(NAME input_map_resident COMMAND input_map_resident_test)
-        set_tests_properties(input_map_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        add_executable(m4_resident_test tests/m4_resident_test.cpp)
-        target_include_directories(m4_resident_test PRIVATE tests)
-        target_link_libraries(m4_resident_test PRIVATE kan::cuda)
-        add_test(NAME m4_resident COMMAND m4_resident_test)
-        set_tests_properties(m4_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        add_executable(rational_policy_resident_test tests/rational_policy_resident_test.cpp)
-        target_include_directories(rational_policy_resident_test PRIVATE tests)
-        target_link_libraries(rational_policy_resident_test PRIVATE kan::cuda)
-        add_test(NAME rational_policy_resident COMMAND rational_policy_resident_test)
-        set_tests_properties(rational_policy_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog C6-C8: rational kernel layout, forward VJP checks, launch bounds.
-        add_executable(rational_resident_execution_test tests/rational_resident_execution_test.cpp)
-        target_include_directories(rational_resident_execution_test PRIVATE tests)
-        target_link_libraries(rational_resident_execution_test PRIVATE kan::cuda)
-        add_test(NAME rational_resident_execution COMMAND rational_resident_execution_test)
-        set_tests_properties(rational_resident_execution PROPERTIES LABELS "cuda" TIMEOUT 180)
-        # Backlog C2: GEMM contraction engine.
-        add_executable(resident_contraction_test tests/resident_contraction_test.cpp)
-        target_include_directories(resident_contraction_test PRIVATE tests)
-        target_link_libraries(resident_contraction_test PRIVATE kan::cuda)
-        add_test(NAME resident_contraction COMMAND resident_contraction_test)
-        set_tests_properties(resident_contraction PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog C1: resident precision policy (FP32 executor).
-        add_executable(resident_precision_test tests/resident_precision_test.cpp)
-        target_include_directories(resident_precision_test PRIVATE tests)
-        target_link_libraries(resident_precision_test PRIVATE kan::cuda)
-        add_test(NAME resident_precision COMMAND resident_precision_test)
-        set_tests_properties(resident_precision PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog R9: parameter upload into an existing executor.
-        add_executable(resident_upload_test tests/resident_upload_test.cpp)
-        target_include_directories(resident_upload_test PRIVATE tests)
-        target_link_libraries(resident_upload_test PRIVATE kan::cuda)
-        add_test(NAME resident_upload COMMAND resident_upload_test)
-        set_tests_properties(resident_upload PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog C9: graph-captured training steps, deferred status, on-device MSE.
-        add_executable(resident_training_test tests/resident_training_test.cpp)
-        target_include_directories(resident_training_test PRIVATE tests)
-        target_link_libraries(resident_training_test PRIVATE kan::cuda)
-        add_test(NAME resident_training COMMAND resident_training_test)
-        set_tests_properties(resident_training PROPERTIES LABELS "cuda" TIMEOUT 180)
-        # Backlog C3: fused basis expansion (no stored derivative rows).
-        add_executable(resident_fused_expansion_test tests/resident_fused_expansion_test.cpp)
-        target_include_directories(resident_fused_expansion_test PRIVATE tests)
-        target_link_libraries(resident_fused_expansion_test PRIVATE kan::cuda CUDA::cudart)
-        add_test(NAME resident_fused_expansion COMMAND resident_fused_expansion_test)
-        set_tests_properties(resident_fused_expansion PROPERTIES LABELS "cuda" TIMEOUT 120)
-        # Backlog M4: initialized networks on the resident executor.
-        add_executable(initializer_resident_test tests/initializer_resident_test.cpp)
-        target_include_directories(initializer_resident_test PRIVATE tests)
-        target_link_libraries(initializer_resident_test PRIVATE kan::cuda)
-        add_test(NAME initializer_resident COMMAND initializer_resident_test)
-        set_tests_properties(initializer_resident PROPERTIES LABELS "cuda" TIMEOUT 120)
+        # Resident executor, carrier-independent: review checks, C2 GEMM contraction
+        # engine, C1 precision policy, R9 parameter upload, C9 graph-captured
+        # training, C3 fused basis expansion (no stored derivative rows).
+        kan_add_test(backends/cuda resident "cuda;resident" 120 kan::cuda Threads::Threads)
+        foreach(suite resident_review resident_contraction resident_precision resident_upload)
+            kan_add_test(backends/cuda ${suite} "cuda;resident" 120 kan::cuda)
+        endforeach()
+        kan_add_test(backends/cuda resident_training "cuda;resident" 180 kan::cuda)
+        kan_add_test(backends/cuda resident_fused_expansion "cuda;resident" 120 kan::cuda CUDA::cudart)
+        # Carrier and network features on the resident executor (parity with the CPU).
+        kan_add_test(backends/cuda local_resident "cuda;local" 120 kan::cuda)
+        # Backlog M2 (rational_policy_resident); C6-C8: rational kernel layout,
+        # forward VJP checks, launch bounds (rational_resident_execution).
+        foreach(suite rational_resident rational_policy_resident)
+            kan_add_test(backends/cuda ${suite} "cuda;rational" 120 kan::cuda)
+        endforeach()
+        kan_add_test(backends/cuda rational_resident_execution "cuda;rational" 180 kan::cuda)
+        kan_add_test(backends/cuda input_map_resident "cuda;core" 120 kan::cuda)
         # Backlog M3 phase 2: the residual branch on the resident executor.
-        add_executable(residual_resident_test tests/residual_resident_test.cpp)
-        target_include_directories(residual_resident_test PRIVATE tests)
-        target_link_libraries(residual_resident_test PRIVATE kan::cuda)
-        add_test(NAME residual_resident COMMAND residual_resident_test)
-        set_tests_properties(residual_resident PROPERTIES LABELS "cuda" TIMEOUT 600)
-        # Explicit manual large-launch regression; minimum-memory requirement is
-        # outside the ordinary CTest hardware contract.
-        add_executable(m3_large_basis_test tests/m3_large_basis_test.cpp)
-        target_link_libraries(m3_large_basis_test PRIVATE kan::cuda CUDA::cudart)
+        kan_add_test(backends/cuda residual_resident "cuda;core" 600 kan::cuda)
+        # Backlog M4: initialized networks on the resident executor.
+        kan_add_test(backends/cuda initializer_resident "cuda;init" 120 kan::cuda)
+        # Explicit manual large-launch regression (trainable RBF); minimum-memory
+        # requirement is outside the ordinary CTest hardware contract.
+        add_executable(local_large_basis_test tests/backends/cuda/local_large_basis_test.cpp)
+        target_link_libraries(local_large_basis_test PRIVATE kan::cuda CUDA::cudart)
     endif()
 endif()
 
@@ -289,42 +247,23 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
         if(KAN_ENABLE_CUDA)
             set(KAN_PYTHON_TEST_ARGS --cuda)
         endif()
-        add_test(NAME python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME m3_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/m3_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(m3_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME m4_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/m4_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(m4_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME input_map_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_map_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(input_map_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME precision_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/precision_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(precision_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME resident_upload_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/resident_upload_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(resident_upload_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME training_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/training_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(training_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME initializer_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/initializer_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(initializer_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
-        add_test(NAME residual_python COMMAND ${CMAKE_COMMAND} -E env
-                 "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
-                 "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/residual_python_test.py" ${KAN_PYTHON_TEST_ARGS})
-        set_tests_properties(residual_python PROPERTIES LABELS "python;integration" TIMEOUT 120)
+        # Backlog R5: tests/python/<name>_test.py registered as CTest <name>, with the
+        # feature group label of the corresponding C++ suites where there is one.
+        function(kan_add_python_test name labels)
+            add_test(NAME ${name} COMMAND ${CMAKE_COMMAND} -E env
+                     "PYTHONPATH=$<TARGET_FILE_DIR:_kan>"
+                     "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/${name}_test.py" ${KAN_PYTHON_TEST_ARGS})
+            set_tests_properties(${name} PROPERTIES LABELS "${labels}" TIMEOUT 120)
+        endfunction()
+        kan_add_python_test(python "python;integration")
+        kan_add_python_test(local_python "python;integration;local")
+        kan_add_python_test(rational_python "python;integration;rational")
+        kan_add_python_test(input_map_python "python;integration;core")
+        kan_add_python_test(residual_python "python;integration;core")
+        kan_add_python_test(initializer_python "python;integration;init")
+        foreach(suite precision_python resident_upload_python training_python)
+            kan_add_python_test(${suite} "python;integration;resident")
+        endforeach()
     endif()
 endif()
 
@@ -332,16 +271,19 @@ if(KAN_BUILD_BENCHMARKS)
     if(NOT KAN_ENABLE_CUDA)
         message(FATAL_ERROR "Matched benchmarks require KAN_ENABLE_CUDA")
     endif()
-    add_executable(m2_benchmark benchmarks/m2_benchmark.cpp)
-    target_link_libraries(m2_benchmark PRIVATE kan::cuda)
-    add_executable(m3_benchmark benchmarks/m3_benchmark.cpp)
-    target_link_libraries(m3_benchmark PRIVATE kan::cuda)
-    target_compile_definitions(m3_benchmark PRIVATE KAN_BENCH_RESIDENT)
-    add_executable(m4_benchmark benchmarks/m4_benchmark.cpp)
-    target_link_libraries(m4_benchmark PRIVATE kan::cuda)
-    target_compile_definitions(m4_benchmark PRIVATE KAN_BENCH_RESIDENT)
+    # Backlog R5: frozen suites named by their case sets (formerly m2/m3/m4_benchmark):
+    # basis (polynomial, Fourier, Gaussian RBF), local (B-spline, Mexican hat, trainable
+    # RBF), rational. Cases, options and CSV columns are unchanged.
+    add_executable(basis_benchmark benchmarks/basis_benchmark.cpp)
+    target_link_libraries(basis_benchmark PRIVATE kan::cuda)
+    add_executable(local_benchmark benchmarks/local_benchmark.cpp)
+    target_link_libraries(local_benchmark PRIVATE kan::cuda)
+    target_compile_definitions(local_benchmark PRIVATE KAN_BENCH_RESIDENT)
+    add_executable(rational_benchmark benchmarks/rational_benchmark.cpp)
+    target_link_libraries(rational_benchmark PRIVATE kan::cuda)
+    target_compile_definitions(rational_benchmark PRIVATE KAN_BENCH_RESIDENT)
     if(KAN_BENCH_RESIDENT)
-        target_compile_definitions(m2_benchmark PRIVATE KAN_BENCH_RESIDENT)
+        target_compile_definitions(basis_benchmark PRIVATE KAN_BENCH_RESIDENT)
     endif()
 endif()
 

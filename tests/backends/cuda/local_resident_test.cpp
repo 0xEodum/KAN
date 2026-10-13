@@ -51,17 +51,17 @@ void parity(test::Family kind) {
     REQUIRE(allocations==gpu.workspace_allocations());
 }
 }
-TEST(m3_resident_spline_independent_hat_values) {
+TEST(local_resident_spline_independent_hat_values) {
     const kan::BSplineConfig b{1,{-1,-1,0,1,1}};
     kan::Layer l(1,3,b);l.set_parameters(std::vector<double>{1,0,0,0,1,0,0,0,1},std::vector<double>{0,0,0});
     kan::cuda::ResidentNetwork gpu(kan::Network({l}),3);
     gpu.upload_input(std::vector<double>{-0.5,0,1},3);gpu.forward();
     compare(gpu.download_output(),std::vector<double>{0.5,0.5,0,0,1,0,0,0,1});
 }
-TEST(m3_resident_mixed_families_and_learned_parameter_snapshots) {
+TEST(local_resident_mixed_families_and_learned_parameter_snapshots) {
     for(auto kind:{test::Family::BSpline,test::Family::MexicanHat,test::Family::TrainableRbf}) parity(kind);
 }
-TEST(m3_resident_localized_extreme_tails_and_spline_contracts) {
+TEST(local_resident_localized_extreme_tails_and_spline_contracts) {
     const double maximum=std::numeric_limits<double>::max();
     const kan::BSplineConfig huge{1,{-maximum,-maximum,maximum,maximum}};
     const kan::BSplineConfig repeated{2,{-1,-1,-1,0,0,0,1,1,1}};
@@ -78,7 +78,7 @@ TEST(m3_resident_localized_extreme_tails_and_spline_contracts) {
     gpu.upload_input(std::vector<double>{55*tail.scales[0]},1);gpu.upload_output_gradient(std::vector<double>{1});gpu.forward();gpu.backward();
     const auto dx=gpu.download_gradients().input[0];REQUIRE(dx!=0);test::near(dx/1.769123639250348e-167,1,3e-11);
 }
-TEST(m3_resident_nonzero_batch_l2_combines_with_data_vjp) {
+TEST(local_resident_nonzero_batch_l2_combines_with_data_vjp) {
     auto cpu=model(test::Family::TrainableRbf);kan::cuda::ResidentNetwork gpu(cpu,2);
     const std::vector<double> x{0.1,-0.3,0.6,0.7},dy{0.2,-0.4};gpu.upload_input(x,2);gpu.upload_output_gradient(dy);gpu.forward();gpu.backward(0.2);
     const auto actual=gpu.download_gradients();auto expected=cpu.backward(x,2,dy);const auto regularizer=cpu.regularization(0.2);
@@ -89,7 +89,7 @@ TEST(m3_resident_nonzero_batch_l2_combines_with_data_vjp) {
     }
     compare(actual.input,expected.input);
 }
-TEST(m3_resident_zero_batch_regularization_and_validation) {
+TEST(local_resident_zero_batch_regularization_and_validation) {
     auto cpu=model(test::Family::TrainableRbf); kan::cuda::ResidentNetwork gpu(cpu,0);
     gpu.upload_input({},0); gpu.upload_output_gradient({}); gpu.forward();
     test::throws<std::invalid_argument>([&]{gpu.backward(-1);});
@@ -103,7 +103,7 @@ TEST(m3_resident_zero_batch_regularization_and_validation) {
     }
     gpu.sgd(0.1); cpu.sgd(e,0.1); compare(test::layer(gpu.download_parameters(),0).coefficients(),test::layer(cpu,0).coefficients());
 }
-TEST(m3_resident_width_candidate_validation_is_atomic) {
+TEST(local_resident_width_candidate_validation_is_atomic) {
     const kan::TrainableRbfConfig b{{0},{0}};
     kan::Layer first(1,1,b); first.set_parameters(std::vector<double>{1},std::vector<double>{0});
     kan::Layer second(1,1,kan::ChebyshevConfig{2}); second.set_parameters(std::vector<double>{0,1},std::vector<double>{0});
@@ -114,7 +114,7 @@ TEST(m3_resident_width_candidate_validation_is_atomic) {
     compare(test::layer(same,1).coefficients(),second.coefficients()); compare(test::trainable(test::layer(same,0)).log_widths,b.log_widths);
     gpu.sgd(0.01); REQUIRE(test::trainable(test::layer(gpu.download_parameters(),0)).log_widths[0]<0);
 }
-TEST(m3_resident_explicit_refinement_reconstruction) {
+TEST(local_resident_explicit_refinement_reconstruction) {
     auto cpu=model(test::Family::BSpline); kan::cuda::ResidentNetwork before(cpu,2);
     const std::vector<double> x{-0.7,0.2,0.9,-0.1}; before.upload_input(x,2);before.forward();const auto expected=before.download_output();
     auto snapshot=before.download_parameters(); snapshot.insert_knot(0,0.1);

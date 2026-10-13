@@ -17,7 +17,7 @@ def layer():
     return l
 
 
-class M4(unittest.TestCase):
+class Rational(unittest.TestCase):
     def test_pade_and_owned_snapshots(self):
         l = layer()
         x = np.array([[-.4], [0.], [.7]])

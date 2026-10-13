@@ -26,7 +26,7 @@ void gradients(const kan::NetworkGradients& a,const kan::NetworkGradients& b) {
     }
 }
 }
-TEST(m4_resident_independent_pade_identity_and_vjp) {
+TEST(rational_resident_independent_pade_identity_and_vjp) {
     kan::RationalConfig r;r.numerator_degree=1;r.denominator_degree=1;kan::Layer l(1,1,r);
     kan::set_rational_parameters(l,std::vector<double>{1,0.5},std::vector<double>{-0.5},std::vector<double>{0});
     kan::cuda::ResidentNetwork gpu(kan::Network({l}),3);const std::vector<double>x{-0.5,0,0.5};
@@ -36,7 +36,7 @@ TEST(m4_resident_independent_pade_identity_and_vjp) {
     compare(test::grad(g,0).coefficients,std::vector<double>{0.8+1+4.0/3.0,-0.4+2.0/3.0});
     compare(test::denominators(test::grad(g,0)),std::vector<double>{0.24-10.0/9.0});
 }
-TEST(m4_resident_mixed_network_all_vjps_and_trajectory) {
+TEST(rational_resident_mixed_network_all_vjps_and_trajectory) {
     for(const auto orders:{std::pair<std::size_t,std::size_t>{0,0},{0,3},{4,1},{16,16}}) {
         kan::Layer basis(3,2,kan::ChebyshevConfig{3});basis.set_parameters(std::vector<double>(18,0.02),std::vector<double>(2,0));
         kan::Network cpu({rational(2,3,orders.first,orders.second),basis,rational(2,1)});kan::cuda::ResidentNetwork gpu(cpu,8);
@@ -53,7 +53,7 @@ TEST(m4_resident_mixed_network_all_vjps_and_trajectory) {
         REQUIRE(count==gpu.workspace_allocations());
     }
 }
-TEST(m4_resident_guard_invalidation_recovery_and_overflow) {
+TEST(rational_resident_guard_invalidation_recovery_and_overflow) {
     kan::RationalConfig r;r.numerator_degree=1;r.denominator_degree=1;kan::Layer l(1,1,r);
     kan::set_rational_parameters(l,std::vector<double>{1,-1},std::vector<double>{-1},std::vector<double>{0});
     kan::cuda::ResidentNetwork gpu(kan::Network({l}),1);
@@ -66,7 +66,7 @@ TEST(m4_resident_guard_invalidation_recovery_and_overflow) {
     auto huge=rational(1,1,16,0);kan::cuda::ResidentNetwork over(kan::Network({huge}),1);over.upload_input(std::vector<double>{1e100},1);
     test::throws<std::overflow_error>([&]{over.forward();});test::throws<std::logic_error>([&]{over.download_output();});
 }
-TEST(m4_resident_relative_conditioning_and_failed_backward_recovery) {
+TEST(rational_resident_relative_conditioning_and_failed_backward_recovery) {
     kan::RationalConfig r;r.numerator_degree=0;r.denominator_degree=2;kan::Layer l(1,1,r);
     kan::set_rational_parameters(l,std::vector<double>{0},std::vector<double>{1e9,-1e9},std::vector<double>{0});
     kan::cuda::ResidentNetwork cancel(kan::Network({l}),1);cancel.upload_input(std::vector<double>{1},1);
@@ -83,7 +83,7 @@ TEST(m4_resident_relative_conditioning_and_failed_backward_recovery) {
     test::throws<std::logic_error>([&]{gpu.sgd(0.1);});compare(gpu.download_output(),std::vector<double>{0});
     gpu.upload_output_gradient(std::vector<double>{1});gpu.backward();test::near(gpu.download_gradients().input[0]/1e200,1);
 }
-TEST(m4_resident_zero_batch_l2_and_atomic_sgd) {
+TEST(rational_resident_zero_batch_l2_and_atomic_sgd) {
     auto l=rational(1,1);kan::Network cpu({l});kan::cuda::ResidentNetwork empty(cpu,0);
     empty.upload_input({},0);empty.upload_output_gradient({});empty.forward();empty.backward(0.3);gradients(empty.download_gradients(),cpu.regularization(0.3).gradients);
     auto g=cpu.regularization(0.3).gradients;empty.sgd(0.1);cpu.sgd(g,0.1);compare(test::denominators(test::layer(empty.download_parameters(),0)),test::denominators(l));
@@ -94,7 +94,7 @@ TEST(m4_resident_zero_batch_l2_and_atomic_sgd) {
     test::throws<std::overflow_error>([&]{gpu.sgd(1e200);});auto same=gpu.download_parameters();compare(test::layer(same,0).coefficients(),first.coefficients());compare(test::denominators(test::layer(same,1)),test::denominators(last));
     gpu.sgd(1e-201);REQUIRE(std::isfinite(test::denominators(test::layer(gpu.download_parameters(),1))[0]));
 }
-TEST(m4_resident_representable_extreme_denominator_derivatives) {
+TEST(rational_resident_representable_extreme_denominator_derivatives) {
     kan::RationalConfig r;r.numerator_degree=0;r.denominator_degree=2;kan::Layer l(1,1,r);
     kan::set_rational_parameters(l,std::vector<double>{1e300},std::vector<double>{0,0},std::vector<double>{0});
     kan::cuda::ResidentNetwork gpu(kan::Network({l}),1);gpu.upload_input(std::vector<double>{1e-200},1);
@@ -120,7 +120,7 @@ TEST(m4_resident_representable_extreme_denominator_derivatives) {
     smallscale.upload_output_gradient(std::vector<double>{1});smallscale.forward();smallscale.backward();
     test::near(smallscale.download_gradients().input[0]/(-r.scale*1e10),1,1e-8);
 }
-TEST(m4_resident_capped_warp_launch_preserves_large_parameter_tail) {
+TEST(rational_resident_capped_warp_launch_preserves_large_parameter_tail) {
     kan::RationalConfig r;r.numerator_degree=0;r.denominator_degree=0;
     kan::Layer layer(1,600001,r);kan::set_rational_parameters(layer,std::vector<double>(600001,0.2),{},std::vector<double>(600001,0));
     kan::cuda::ResidentNetwork gpu(kan::Network({layer}),0);gpu.upload_input({},0);gpu.upload_output_gradient({});gpu.forward();gpu.backward(0.5);

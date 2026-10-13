@@ -6,7 +6,9 @@
 #   <cuda-build-dir> must be configured with -DKAN_BUILD_BENCHMARKS=ON.
 # The harnesses are linked into <out-dir>/bin with scripts/link_harness.sh (delete it
 # before committing an evidence directory). gpu-after.txt is taken right after the
-# last benchmark, so it shows this run's own load.
+# last benchmark, so it shows this run's own load. The frozen suites are written as
+# frozen-{basis,local,rational}.csv (frozen-m{2,3,4}.csv before backlog R5); compare
+# two such directories with docs/evidence/backlog/compare_bench.py --frozen.
 set -uo pipefail
 failed=0
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -27,7 +29,7 @@ gpu_state > "$out/gpu-before.txt"
 nvidia-smi dmon -s puc -d 1 > "$out/dmon.txt" 2>&1 &
 dmon=$!
 trap 'kill $dmon 2>/dev/null' EXIT
-for suite in m2 m3 m4; do
+for suite in basis local rational; do
   echo "frozen $suite $(date +%T)" >&2
   "$build/${suite}_benchmark" --warmups 2 --repeats 7 > "$out/frozen-$suite.csv" || { echo "failed: $suite" >&2; failed=1; }
 done

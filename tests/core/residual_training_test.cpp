@@ -1,5 +1,5 @@
 // Backlog M3 demonstration (closes the M4 open point): the five-layer x1*x2
-// network of tests/initializer_training_test.cpp, every KAN layer with the
+// network of tests/init/initializer_training_test.cpp, every KAN layer with the
 // SiLU residual branch. pykan-style NoiseInit, which stays at the mean
 // predictor (MSE 0.1205) without the branch, leaves that saddle with it:
 // within 3000 epochs for Chebyshev and B-spline edges, between 3000 and 10000

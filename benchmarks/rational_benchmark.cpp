@@ -1,4 +1,5 @@
 #include "kan/cuda.hpp"
+#include "kan/families.hpp"
 #include "kan/network.hpp"
 #ifdef KAN_BENCH_RESIDENT
 #include "kan/resident.hpp"
@@ -25,30 +26,27 @@ std::vector<std::reference_wrapper<const kan::Layer>> kan_layers(const kan::Netw
 const kan::LayerGradients& kan_grad(const kan::NetworkGradients& g, std::size_t j) { return std::get<kan::LayerGradients>(g.layers[j]); }
 using Clock = std::chrono::steady_clock;
 constexpr double learning_rate = 0.001;
-const char* names[] = {"chebyshev", "legendre", "jacobi", "hermite", "fourier", "gaussian_rbf"};
+const char* names[] = {"rational_1_1", "rational_3_2", "rational_6_4"};
 struct Case { int id, family; std::vector<std::size_t> widths; std::size_t batch; };
-kan::BasisConfig family_basis(int family) {
-    const std::vector<double> centers{-1.0, -2.0/3.0, -1.0/3.0, 0.0, 1.0/3.0, 2.0/3.0, 1.0};
-    switch (family) {
-    case 0: return kan::ChebyshevConfig{7};
-    case 1: return kan::LegendreConfig{7};
-    case 2: return kan::JacobiConfig{7, 0.25, 0.5};
-    case 3: return kan::HermiteConfig{7};
-    case 4: return kan::FourierConfig{7, 1.25};
-    default: return kan::GaussianRbfConfig{centers, 0.65};
-    }
-}
+// Rational denominators of a layer and of its gradients (every layer here is rational).
+std::span<const double> denominators(const kan::Layer& l) { return std::get<kan::RationalEdges>(l.carrier()).denominators; }
+std::span<const double> denominators(const kan::LayerGradients& g) { return std::get<kan::RationalGradients>(g.nonlinear).denominators; }
 kan::Network network(const Case& c) {
-    const auto basis = family_basis(c.family);
+    kan::RationalConfig config;
+    config.numerator_degree = c.family == 0 ? 1 : c.family == 1 ? 3 : 6;
+    config.denominator_degree = c.family == 0 ? 1 : c.family == 1 ? 2 : 4;
+    config.center = 0.1; config.scale = 1.2;
     std::vector<kan::Layer> layers;
     for (std::size_t l = 1; l < c.widths.size(); ++l) {
-        kan::Layer layer(c.widths[l-1], c.widths[l], basis);
+        kan::Layer layer(c.widths[l-1], c.widths[l], config);
         std::vector<double> coefficients(layer.coefficients().size()), bias(layer.outputs());
         for (std::size_t j = 0; j < coefficients.size(); ++j)
             coefficients[j] = 0.02 * std::sin(static_cast<double>((j + 1) * (l + 1))) /
-                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % kan::basis_size(basis)));
+                              (static_cast<double>(layer.inputs()) * static_cast<double>(1 + j % (config.numerator_degree+1)));
         for (std::size_t j = 0; j < bias.size(); ++j) bias[j] = 0.01 * std::cos(static_cast<double>(j + l));
-        layer.set_parameters(coefficients, bias); layers.push_back(std::move(layer));
+        std::vector<double> denominator(denominators(layer).size());
+        for (std::size_t j=0;j<denominator.size();++j) denominator[j]=0.01*std::cos(static_cast<double>((j+3)*(l+1)));
+        kan::set_rational_parameters(layer, coefficients, denominator, bias); layers.push_back(std::move(layer));
     }
     return kan::Network(std::move(layers));
 }
@@ -71,12 +69,12 @@ double checksum(std::span<const double> values) {
 }
 double checksum(const kan::NetworkGradients& g) {
     double result = checksum(g.input);
-    for (std::size_t j = 0; j < g.layers.size(); ++j) { const auto& layer = kan_grad(g, j); result += checksum(layer.coefficients) + checksum(layer.bias); }
+    for (std::size_t j = 0; j < g.layers.size(); ++j) { const auto& layer = kan_grad(g, j); result += checksum(layer.coefficients) + checksum(layer.bias) + checksum(denominators(layer)); }
     return result;
 }
 double checksum(const kan::Network& n) {
     double result = 0;
-    for (const kan::Layer& l : kan_layers(n)) result += checksum(l.coefficients()) + checksum(l.bias());
+    for (const kan::Layer& l : kan_layers(n)) result += checksum(l.coefficients()) + checksum(l.bias()) + checksum(denominators(l));
     return result;
 }
 struct Result {
@@ -86,15 +84,6 @@ struct Result {
     double setup_ms = 0;
     std::size_t allocations = 0;
 };
-// The frozen m1_host_full protocol measures the legacy per-call API on purpose
-// (deprecated since backlog R7); suppress its deprecation warning here only.
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4996)
-#elif defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
 Result host(const Case& c, const std::vector<double>& input, const std::vector<double>& upstream,
             int warmups, int repeats, bool legacy) {
     auto start = Clock::now();
@@ -104,26 +93,6 @@ Result host(const Case& c, const std::vector<double>& input, const std::vector<d
         if (!legacy) {
             result.output = result.parameters.forward(input, c.batch);
             result.gradients = result.parameters.backward(input, c.batch, upstream);
-        } else {
-            const auto layers = kan_layers(result.parameters);
-            std::vector<std::vector<double>> activations;
-            auto current = std::span<const double>(input);
-            for (const auto& layer : layers) {
-                activations.push_back(kan::cuda::forward(layer, current, c.batch)); current = activations.back();
-            }
-            result.output = activations.back();
-            // Match Network::backward's public full-call behavior: recompute activations.
-            activations.clear(); current = input;
-            for (const auto& layer : layers) {
-                activations.push_back(kan::cuda::forward(layer, current, c.batch)); current = activations.back();
-            }
-            result.gradients.layers.resize(layers.size()); auto dy = std::span<const double>(upstream);
-            for (std::size_t l = layers.size(); l-- > 0;) {
-                auto x = l == 0 ? std::span<const double>(input) : std::span<const double>(activations[l-1]);
-                result.gradients.layers[l] = kan::cuda::backward(layers[l], x, c.batch, dy);
-                dy = kan_grad(result.gradients,l).input;
-            }
-            result.gradients.input = kan_grad(result.gradients, 0).input;
         }
         result.parameters.sgd(result.gradients, learning_rate);
         const auto elapsed = milliseconds(start);
@@ -131,11 +100,6 @@ Result host(const Case& c, const std::vector<double>& input, const std::vector<d
     }
     return result;
 }
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#elif defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
 #ifdef KAN_BENCH_RESIDENT
 Result resident(const Case& c, const std::vector<double>& input, const std::vector<double>& upstream,
                 int warmups, int repeats, bool transfers) {
@@ -174,7 +138,8 @@ Result resident(const Case& c, const std::vector<double>& input, const std::vect
             const auto expected = kan_layer(result.parameters,l);
             const auto actual = kan_layer(replay_parameters,l);
             if (!std::equal(expected.coefficients().begin(), expected.coefficients().end(), actual.coefficients().begin()) ||
-                !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()))
+                !std::equal(expected.bias().begin(), expected.bias().end(), actual.bias().begin()) ||
+                !std::equal(denominators(expected).begin(), denominators(expected).end(), denominators(actual).begin()))
                 throw std::runtime_error("resident verification replay changed parameters");
         }
     }
@@ -198,6 +163,8 @@ double verify(const Result& expected, const Result& actual) {
     for (std::size_t l = 0; l < expected.parameters.layers().size(); ++l) {
         error = std::max(error, compare(kan_grad(expected.gradients,l).coefficients, kan_grad(actual.gradients,l).coefficients));
         error = std::max(error, compare(kan_grad(expected.gradients,l).bias, kan_grad(actual.gradients,l).bias));
+        error = std::max(error, compare(denominators(kan_grad(expected.gradients,l)), denominators(kan_grad(actual.gradients,l))));
+        error = std::max(error, compare(denominators(kan_layer(expected.parameters,l)), denominators(kan_layer(actual.parameters,l))));
         error = std::max(error, compare(kan_layer(expected.parameters,l).coefficients(), kan_layer(actual.parameters,l).coefficients()));
         error = std::max(error, compare(kan_layer(expected.parameters,l).bias(), kan_layer(actual.parameters,l).bias()));
     }
@@ -206,7 +173,7 @@ double verify(const Result& expected, const Result& actual) {
 void print(const Case& c, const char* backend, const Result& result, double error, int warmups, int repeats) {
     std::cout << c.id << ',' << names[c.family] << ',';
     for (std::size_t i = 0; i < c.widths.size(); ++i) std::cout << (i ? "x" : "") << c.widths[i];
-    std::cout << ',' << c.batch << ",7,double," << backend << ',' << warmups << ',' << repeats << ','
+    std::cout << ',' << c.batch << "," << (c.family==0?"1/1":c.family==1?"3/2":"6/4") << ",double," << backend << ',' << warmups << ',' << repeats << ','
               << result.setup_ms << ',' << quantile(result.times, 0.5) << ','
               << quantile(result.times, 0.75)-quantile(result.times, 0.25) << ','
               << checksum(result.output) << ',' << checksum(result.gradients) << ',' << checksum(result.parameters) << ','
@@ -228,16 +195,16 @@ int main(int argc, char** argv) {
             else if (option == "--backend") backend = value;
             else throw std::invalid_argument("unknown option");
         }
-        if (warmups < 0 || repeats < 1 || selected < -1 || selected >= 24) throw std::invalid_argument("invalid benchmark options");
-        if (backend != "all" && backend != "cpu" && backend != "legacy" && backend != "resident") throw std::invalid_argument("unknown backend");
+        if (warmups < 0 || repeats < 1 || selected < -1 || selected >= 12) throw std::invalid_argument("invalid benchmark options");
+        if (backend != "all" && backend != "cpu" && backend != "resident") throw std::invalid_argument("unknown backend");
 #ifndef KAN_BENCH_RESIDENT
         if (backend == "resident") throw std::runtime_error("resident benchmark not built");
 #endif
         if (backend != "cpu" && !kan::cuda::available()) throw std::runtime_error("real CUDA device required");
         std::cout << std::setprecision(17)
-          << "case,family,topology,batch,terms,precision,backend,warmups,repeats,setup_ms,median_ms,iqr_ms,output_checksum,gradient_checksum,parameter_checksum,max_abs_error,workspace_allocations,samples_ms\n";
+          << "case,family,topology,batch,degrees,precision,backend,warmups,repeats,setup_ms,median_ms,iqr_ms,output_checksum,gradient_checksum,parameter_checksum,max_abs_error,workspace_allocations,samples_ms\n";
         int id = 0;
-        for (int family = 0; family < 6; ++family)
+        for (int family = 0; family < 3; ++family)
             for (int shape = 0; shape < 2; ++shape)
                 for (const std::size_t batch : {32u, 1024u}) {
                     Case c{id++, family, shape == 0 ? std::vector<std::size_t>{16,24,8} : std::vector<std::size_t>{64,64,32,16}, batch};
@@ -246,15 +213,11 @@ int main(int argc, char** argv) {
                     const auto upstream = data(batch*c.widths.back(), 0.02/static_cast<double>(batch), 23);
                     const auto reference = host(c, input, upstream, warmups, repeats, false);
                     if (backend == "all" || backend == "cpu") print(c, "cpu_full", reference, 0, warmups, repeats);
-                    if ((backend == "all" || backend == "legacy") && family == 0) {
-                        const auto result = host(c, input, upstream, warmups, repeats, true);
-                        print(c, "m1_host_full", result, verify(reference, result), warmups, repeats);
-                    }
 #ifdef KAN_BENCH_RESIDENT
                     if (backend == "all" || backend == "resident") {
                         for (const bool transfers : {false, true}) {
                             const auto result = resident(c, input, upstream, warmups, repeats, transfers);
-                            print(c, transfers ? "m2_transfer_full" : "m2_resident_full", result, verify(reference, result), warmups, repeats);
+                            print(c, transfers ? "transfer_full" : "resident_full", result, verify(reference, result), warmups, repeats);
                         }
                     }
 #endif

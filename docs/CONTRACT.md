@@ -605,7 +605,7 @@ Marsaglia polar method (pairs, rejecting `s >= 1` and `s = 0`) with a logarithm 
 from IEEE basic operations. Every derived quantity (moments, scales, the exponential of
 trainable log widths) uses basic operations, `sqrt`, `frexp`, `ldexp` and `nearbyint` only,
 so the same configuration and seed give bitwise-identical parameters with MSVC and GCC
-(pinned digests in `tests/initializer_test.cpp`). Draw order: coefficients in layout order,
+(pinned digests in `tests/init/initializer_test.cpp`). Draw order: coefficients in layout order,
 then denominators in layout order, then (layers with the residual branch only) residual
 weights in layout order. A parameter is a per-term factor times one raw draw. Normal draws
 come in pairs from one generator: a pending second value of the coefficient draws survives
@@ -687,7 +687,7 @@ Purpose: B-splines are exactly zero, with zero input gradient, outside their com
 support. Gaussian RBF and Mexican-hat bases have decaying tails; sufficiently far from
 their centers, both values and derivatives can underflow to zero. If every carrier
 derivative vanishes at a layer's inputs, no input gradient crosses that layer without
-the branch. `tests/residual_test.cpp` checks zero gradients without the branch and
+the branch. `tests/core/residual_test.cpp` checks zero gradients without the branch and
 nonzero gradients with it on the tested B-spline and remote Gaussian-RBF inputs,
 including the preceding layer's coefficient gradients. The branch itself does not
 guarantee a nonzero gradient for every input or upstream.

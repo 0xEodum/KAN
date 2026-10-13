@@ -1,5 +1,5 @@
 param(
-    [string]$Executable = 'build-m2-bench/m2_benchmark.exe',
+    [string]$Executable = 'build-m2-bench/basis_benchmark.exe',
     [string]$Output = 'docs/evidence/m2/final.csv',
     [ValidateSet('all','cpu','legacy','resident')][string]$Backend = 'all',
     [int]$Case = -1,

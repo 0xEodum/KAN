@@ -13,7 +13,7 @@ def config(kind):
     return kan.TrainableRbfConfig(centers=[0., .3, .6, 1.], log_widths=[-1., -.8, -.6, -.4])
 
 
-class M3(unittest.TestCase):
+class Local(unittest.TestCase):
     def test_new_basis_contracts(self):
         b = config(kan.BSplineConfig)
         v, d = kan.evaluate_basis(b, .5)
