@@ -45,8 +45,19 @@ void validate(const TrainableRbfEdges& edges, EdgeShape shape) {
     require_coefficient_shape(edges.coefficients.size(), shape, terms(edges));
 }
 
+// B-splines take the sparse engine (backlog C5): bitwise the dense result.
 void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> bias,
              std::span<const double> input, std::size_t batch, std::span<double> output) {
+    if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
+        if (batch == 0) return;
+        SplineExpansion expansion(basis_view(*spline), shape.inputs);
+        for (std::size_t b = 0; b < batch; ++b) {
+            expansion.expand(input.data() + b * shape.inputs);
+            contract_sparse(edges.coefficients.data(), bias.data(), expansion, shape.inputs, shape.outputs,
+                            output.data() + b * shape.outputs);
+        }
+        return;
+    }
     expansion_forward(edges.basis, edges.coefficients, shape, bias, input, batch, output);
 }
 
@@ -61,6 +72,17 @@ void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> 
               std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, std::monostate&) {
     if (batch == 0) return;
+    if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
+        SplineExpansion expansion(basis_view(*spline), shape.inputs);
+        const auto magnitudes = edge_magnitudes(edges.coefficients.data(), shape.inputs * shape.outputs, expansion.terms());
+        for (std::size_t b = 0; b < batch; ++b) {
+            expansion.expand(input.data() + b * shape.inputs);
+            contract_vjp_sparse(edges.coefficients.data(), magnitudes.data(), upstream.data() + b * shape.outputs,
+                                expansion, shape.inputs, shape.outputs, coefficient_gradient.data(),
+                                input_gradient.data() + b * shape.inputs);
+        }
+        return;
+    }
     Expansion expansion(basis_view(edges.basis), shape.inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);

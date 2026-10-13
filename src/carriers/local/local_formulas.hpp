@@ -54,14 +54,24 @@ KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree
 
 // Clamped B-spline by Cox-de Boor on the single active span. Only degree+1
 // terms can be nonzero, so fixed scratch covers every admissible degree.
-template<class Scalar, class Guard>
-KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
-                                  Scalar* v, Scalar* d, const Guard& guard) {
-    for (std::size_t k = 0; k < terms; ++k) {
-        v[k] = 0;
-        d[k] = 0;
+//
+// Dense = false is the sparse form (backlog C5): returns the index `first` =
+// span - degree of the first of the degree+1 terms that can be nonzero and
+// writes their values and input derivatives to v[0..degree] and d[0..degree]
+// (term first + r at r); every other term is exactly zero. Inputs outside the
+// domain return `terms` and write nothing: all terms are zero. Dense = true
+// writes all `terms` values and derivatives (zero outside the span) in place,
+// the M3 evaluation; both forms perform the same operations.
+template<bool Dense, class Scalar, class Guard>
+KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                            Scalar* v, Scalar* d, const Guard& guard) {
+    if constexpr (Dense) {
+        for (std::size_t k = 0; k < terms; ++k) {
+            v[k] = 0;
+            d[k] = 0;
+        }
     }
-    if (x < t[degree] || x > t[terms]) return;
+    if (x < t[degree] || x > t[terms]) return terms;
     // Seed the last inward span at the upper end; the search selects the
     // right side of repeated interior knots.
     std::size_t span = terms - 1;
@@ -78,6 +88,10 @@ KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_
     Scalar next[max_spline_degree + 2] = {};
     lower[degree] = 1;
     const auto start = span - degree;
+    const auto out = Dense ? start : 0; // output index of term start
+    if constexpr (!Dense) {
+        if (degree == 0) d[0] = 0; // degree-zero derivatives are zero
+    }
     for (std::size_t p = 1; p <= degree; ++p) {
         for (std::size_t r = degree - p; r <= degree; ++r) {
             const auto i = start + r;
@@ -87,12 +101,23 @@ KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_
                 value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
             next[r] = guard(value);
             if (p == degree)
-                d[i] = guard(spline_slope_term(lower[r], p, t[i + p], t[i]) -
-                             spline_slope_term(lower[r + 1], p, t[i + p + 1], t[i + 1]));
+                d[out + r] = guard(spline_slope_term(lower[r], p, t[i + p], t[i]) -
+                                   spline_slope_term(lower[r + 1], p, t[i + p + 1], t[i + 1]));
         }
         for (std::size_t r = degree - p; r <= degree; ++r) lower[r] = next[r];
     }
-    for (std::size_t r = 0; r <= degree; ++r) v[start + r] = lower[r];
+    for (std::size_t r = 0; r <= degree; ++r) v[out + r] = lower[r];
+    return start;
+}
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE std::size_t spline_span_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                              Scalar* v, Scalar* d, const Guard& guard) {
+    return spline_evaluate<false>(t, terms, degree, x, v, d, guard);
+}
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                  Scalar* v, Scalar* d, const Guard& guard) {
+    spline_evaluate<true>(t, terms, degree, x, v, d, guard);
 }
 
 // log(2/sqrt(3)) - log(pi)/4 per scalar type, as literals so device code does
