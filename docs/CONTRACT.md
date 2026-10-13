@@ -48,7 +48,7 @@ No device returns `available() == false`; actual operations fail explicitly with
 `std::runtime_error`. `available()` is the supported device query for every CUDA API.
 It is declared in `kan/cuda_runtime.hpp` (backlog R8), which both `kan/resident.hpp` and
 the legacy `kan/cuda.hpp` include, so resident code needs no legacy header; the header has
-no CUDA dependency and the definition (`src/cuda_runtime.cpp`) is in `kan::cuda`.
+no CUDA dependency and the definition (`src/backends/cuda/cuda_runtime.cpp`) is in `kan::cuda`.
 
 **Legacy synchronous layer API (M1, deprecated by backlog R7).** `kan::cuda::forward`
 and `kan::cuda::backward` keep their signatures and are `[[deprecated]]` in favour of
@@ -514,10 +514,10 @@ requires its carrier and basis type, raises `std::invalid_argument` otherwise, a
 commits through `set_carrier`.
 
 Every Layer operation dispatches on the carrier once per call. The CPU loops of each
-carrier live in `src/carriers/` (`linear_engine.hpp` holds the expansion and
+carrier live in `src/backends/cpu/` (`linear_engine.hpp` holds the expansion and
 contraction shared by `BasisEdges` and `TrainableRbfEdges`); the resident executor
 holds one execution plan per carrier. A new carrier adds a `Carrier` and a
-`NonlinearGradients` alternative, its overloads in `src/carriers/edge_ops.hpp` and a
+`NonlinearGradients` alternative, its overloads in `src/backends/cpu/edge_ops.hpp` and a
 resident plan; Layer and Network do not change.
 
 ## Input maps (backlog M1)
@@ -692,7 +692,7 @@ nonzero gradients with it on the tested B-spline and remote Gaussian-RBF inputs,
 including the preceding layer's coefficient gradients. The branch itself does not
 guarantee a nonzero gradient for every input or upstream.
 
-**Formulas** (single host/device source `src/detail/residual_formulas.hpp`, templated on the
+**Formulas** (single host/device source `src/core/residual_formulas.hpp`, templated on the
 scalar): with `e = exp(-|x|)`, `sigma = 1/(1+e)` and `1-sigma = e/(1+e)` for `x >= 0`,
 `sigma = e/(1+e)` and `1-sigma = 1/(1+e)` for `x < 0`; `silu = x·sigma`,
 `silu' = sigma·(1 + x·(1-sigma))`. No intermediate is nonfinite for any finite double or float
@@ -787,19 +787,43 @@ captured training steps; the deprecated `kan::cuda::forward/backward(Layer)` ada
 ## Extension boundaries
 
 Basis, rational and residual-branch formulas have a single source shared by the CPU
-backend and the resident CUDA kernels: `KAN_HOST_DEVICE` templates in
-`src/detail/basis_formulas.hpp`, `src/detail/rational_formulas.hpp` and
-`src/detail/residual_formulas.hpp`, parameterized by a finiteness guard (CPU throws,
-device records status). Public declarations and validation live in
-`include/kan/basis.hpp`/`src/basis.cpp` and `include/kan/rational.hpp`/`src/rational.cpp`;
-the carrier-independent Layer protocol, including the SiLU residual branch, lives in `src/layer.cpp`, per-carrier CPU
-loops in `src/carriers/`, family operations in `src/families.cpp`; initializers in `src/initializers.cpp` with portable draws and moments in `src/init/`; input maps in `src/input_map.cpp`
-with their shared host/device formulas in `src/detail/input_map_formulas.hpp`; topology in `src/network.cpp`; persistent
-kernels in `src/resident.cu`, with one basis kernel instantiation per family and the
-dense contractions delegated to cuBLAS; the device query in `src/cuda_runtime.cpp`; the
-deprecated M1 layer API in `src/cuda.cu` is a kernel-free adapter over the resident executor. No symbolic parser, Eigen, Torch,
-Python runtime or imported KAN implementation is required. Quantum carriers need
-separate physical/measurement contracts at M5.
+backend and the resident CUDA kernels: `KAN_HOST_DEVICE` templates parameterized by a
+finiteness guard (CPU throws, device records status). Sources are grouped by execution
+properties (backlog R4). The basis family tag and flat views are in
+`src/carriers/basis_types.hpp`, the compile-time and runtime family dispatch in
+`src/carriers/basis_formulas.hpp`, and the evaluators with their family group:
+`src/carriers/polynomial/polynomial_formulas.hpp` (Chebyshev, Legendre, Jacobi, Hermite:
+global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
+(Fourier) and `src/carriers/local/local_formulas.hpp` (B-spline, Gaussian RBF, Mexican
+hat: local support or decaying tails). Rational formulas are in
+`src/carriers/rational/rational_formulas.hpp`; residual-branch formulas in
+`src/core/residual_formulas.hpp`. Public declarations and validation live in
+`include/kan/basis.hpp`/`src/carriers/basis.cpp` and
+`include/kan/rational.hpp`/`src/carriers/rational/rational.cpp`. Family operations
+(`include/kan/families.hpp`) are in `src/carriers/local/local_operations.cpp` (knots, RBF
+parameters) and `src/carriers/rational/rational_operations.cpp`. The carrier-independent
+Layer protocol, including the SiLU residual branch, lives in `src/core/layer.cpp`;
+topology in `src/core/network.cpp`; input maps in `src/core/input_map.cpp` with their
+shared host/device formulas in `src/core/input_map_formulas.hpp`; shape and finiteness
+checks in `src/core/checks.hpp`. Per-carrier CPU loops and the shared expansion +
+contraction engine are in `src/backends/cpu/`. The optional `kan::cuda` target is
+`src/backends/cuda/`: persistent kernels in `resident.cu`, with one basis kernel
+instantiation per family and the dense contractions delegated to cuBLAS; the device
+query in `cuda_runtime.cpp`; the deprecated M1 layer API in `cuda.cu` is a kernel-free
+adapter over the resident executor. Initializers are in `src/init/initializers.cpp` with
+portable draws and moments in `src/init/`. Private headers are included relative to
+`src/` and are not installed; `include/kan/` is the public include tree. A new basis
+family adds its public configuration (`include/kan/basis.hpp`), a `BasisKind` entry
+(`basis_types.hpp`), its evaluator in the group that matches its execution properties (or
+a new group), a dispatch case (`basis_formulas.hpp`), the configuration-to-view mapping
+(`basis_view.hpp`) and validation (`basis.cpp`). Dependencies point one way: `core/` and
+`carriers/` hold no CPU loops, but the CPU Layer dispatches to `backends/cpu/edge_ops.hpp`
+and `evaluate_basis` uses the CPU's throwing guard (`backends/cpu/basis_host.hpp`);
+`backends/cuda/` uses `carriers/` and `core/` formulas only. No symbolic parser, Eigen, Torch, Python runtime or
+imported KAN implementation is required. Quantum carriers need separate
+physical/measurement contracts at M5; their planned location is `src/carriers/quantum/`
+(no placeholder directory is kept), with any simulator adapter as a backend under
+`src/backends/`.
 
 ## Mathematical sources
 

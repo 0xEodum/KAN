@@ -344,6 +344,26 @@ It distinguishes setup, resident execution, and transfer-inclusive execution.
 [The benchmark evidence](docs/evidence/M2-benchmark.md) records exact commands,
 sampling, profile results, hardware limits, and measured conclusions.
 
+## Source layout
+
+Public headers are in `include/kan/`. Sources in `src/` are grouped by the properties
+that matter for execution (backlog R4):
+
+| Directory | Contents |
+|---|---|
+| `src/core/` | Carrier-independent Layer protocol (including the SiLU residual branch), Network topology, input maps, shape/finiteness checks and the host/device portability layer |
+| `src/carriers/` | Basis family tag, flat views and family dispatch, basis validation |
+| `src/carriers/polynomial/` | Chebyshev, Legendre, Jacobi, Hermite: global support, three-term recurrences |
+| `src/carriers/trigonometric/` | Fourier: global, periodic |
+| `src/carriers/local/` | B-spline, Gaussian RBF, Mexican hat: local support or decaying tails; knot and RBF-parameter operations |
+| `src/carriers/rational/` | Rational edges: per-edge P/Q with denominator policies |
+| `src/backends/cpu/` | CPU carrier loops and the shared expansion + contraction engine |
+| `src/backends/cuda/` | Optional `kan::cuda` target: resident executor, device query, deprecated M1 adapter |
+| `src/init/` | Initializers, portable draws and reference moments |
+
+Each carrier group holds its single host/device formula source, shared by both
+backends. Quantum carriers (roadmap M5) are planned under `src/carriers/quantum/`.
+
 ## Development evidence
 
 Tests use a small dependency-free C++ harness registered with CTest. They include

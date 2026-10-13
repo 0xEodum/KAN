@@ -1,0 +1,13 @@
+impl,precision,protocol,mode,interval,case,window,steps,ms_per_step,checksum
+kan,f32,matched,step,1,64x64x32x16-b1024,0,200,0.1309,0
+kan,f32,matched,step,1,64x64x32x16-b1024,1,200,0.1309,0
+kan,f32,matched,step,1,64x64x32x16-b1024,2,200,0.1312,-1.226915979
+kan,f32,matched,step,1,16x24x8-b1024,0,200,0.0588,0
+kan,f32,matched,step,1,16x24x8-b1024,1,200,0.0609,0
+kan,f32,matched,step,1,16x24x8-b1024,2,200,0.0598,-0.244242648
+kan,f32,matched,step,1,256x256x256x10-b8192,0,50,5.3253,0
+kan,f32,matched,step,1,256x256x256x10-b8192,1,50,5.3135,0
+kan,f32,matched,step,1,256x256x256x10-b8192,2,50,5.2425,0.421591973
+kan,f32,matched,step,1,1024x1024x1024-b4096,0,20,23.4017,0
+kan,f32,matched,step,1,1024x1024x1024-b4096,1,20,23.5578,0
+kan,f32,matched,step,1,1024x1024x1024-b4096,2,20,23.6176,0.7699513575

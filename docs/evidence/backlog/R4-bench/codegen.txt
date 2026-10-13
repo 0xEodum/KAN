@@ -1,0 +1,17 @@
+## build-cpu/libkan.a
+differs: _ZN3kan23set_rational_parametersERNS_5LayerESt4spanIKdLm18446744073709551615EES4_S4_ (370 -> 417 instructions)
+115 / 115 functions compared
+## build-cuda/libkan.a
+differs: _ZN3kan23set_rational_parametersERNS_5LayerESt4spanIKdLm18446744073709551615EES4_S4_ (370 -> 417 instructions)
+115 / 115 functions compared
+## build-cuda/libkan_cuda.a
+370 / 370 functions compared
+## build-cuda resident.cu.o SASS
+126 kernels, 817457 SASS lines: identical
+## build-cuda-fma/libkan.a
+differs: _ZN3kan23set_rational_parametersERNS_5LayerESt4spanIKdLm18446744073709551615EES4_S4_ (370 -> 417 instructions)
+115 / 115 functions compared
+## build-cuda-fma/libkan_cuda.a
+370 / 370 functions compared
+## build-cuda-fma resident.cu.o SASS
+126 kernels, 797569 SASS lines: identical
