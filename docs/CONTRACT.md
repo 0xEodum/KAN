@@ -246,6 +246,54 @@ cancelled by the accumulator is not reported if the computed result is finite.
 `kan::cuda` therefore links `CUDA::cublas` and requires CUDA 12 or newer; the installed
 package finds it through `CUDAToolkit`.
 
+**Sparse B-spline path (backlog C5).** At any input only `degree+1` (P) of a clamped
+spline's terms can be nonzero. A resident `BasisEdges` layer with a `BSplineConfig` can
+therefore keep, per input and sample, the index `g` of the first such term (32-bit,
+`[inputs][capacity]`; 0 outside the domain) and those P values and input derivatives
+(`[inputs][P][capacity]`, samples fastest; zero outside the domain) instead of the dense
+`Phi` (and `Phi'`) rows, and contract only them: `y = bias + sum_i sum_j phi_j*C[o,i,g+j]`,
+`dC[o,i,k] = sum` over the samples with `g <= k < g+P` of `U[b,o]*phi`, plus `lambda*C`,
+`db = sum_b U`, `dx = sum_j phi'_j * sum_o U[b,o]*C[o,i,g+j]`. Kernels: a tiled basis
+kernel writes the sparse rows (and, with the residual branch, `S` and `silu'`); the forward
+and input-VJP kernels map lanes to samples and read C tiles staged in shared memory; the
+coefficient and bias VJPs walk each input's samples in the order of a segmented radix sort
+by `g` (CUB `DeviceSegmentedRadixSort`, CCCL 3.0.1 in CUDA 13.0, which shares the stable
+`DeviceRadixSort` implementation; determinism does not depend on stability), one thread per (output, input) with a register window of the P coefficients, and
+coefficient ranges split across blocks for layers with few outputs (the split does not change
+any sum). Every sum has a fixed order and no floating-point atomics are used: results are
+deterministic for one GPU, driver and CUDA version and independent of the split; a graph
+step stays bitwise the eager sequence. Precision: FP64 and FP32 kernels; under
+`TensorFloat32` the sparse kernels compute in plain FP32 (no TF32 rounding), so a sparse
+layer is at least as accurate there as the FP32 executor. Parity with the CPU is the
+existing tolerance (FP64 `1e-11*|e| + 1e-12*max|e|` in the C5 suite, FP32/TF32 the C1
+tolerances); results differ from the dense path by summation order only.
+
+*Selection* is per layer at construction, so the arena holds either layout and graphs,
+`upload_parameters` and rollback see a fixed one (knot insertion already requires a new
+executor). A B-spline layer takes the sparse path when all of: degree 0..3 (the instantiated
+kernel widths; higher degrees keep the dense rows); the kernels' shared memory fits the
+device's per-block opt-in limit (the input VJP stages 8, 4, 2 or 1 inputs per block as the
+rows grow; on a 99 KiB device this allows up to 1856 terms, the forward up to 1267 (FP32) /
+704 (FP64)) and `inputs*capacity` fits 32-bit sort indices; the dense
+forward contraction would run on cuBLAS at capacity (above the small-kernel threshold) and
+has at least `2^22` (FP32), `2^23` (TF32) or `2^21` (FP64) multiply-adds per SM at capacity;
+`terms/(degree+1)` reaches 2 (FP32), 4 (TF32) or 2 (FP64 on a device whose
+`cudaDevAttrSingleToDoublePrecisionPerfRatio` is at least 8; the FP32 values otherwise);
+and, when the layer's upstream (`capacity*outputs` values) exceeds half the L2 cache,
+6 (FP32), 16 (TF32) or 8 (FP64, extrapolated, not measured), because the coefficient VJP
+rereads the upstream once per input. The other constants come from a GB10 sweep of complete
+training steps ([C5 evidence](evidence/backlog/C5.md)) and have been validated on GB10 only; SM count, L2 size, FP64 rate and shared-memory
+limit are read from the device. Memory: a sparse layer reserves `2P` scalars and four 32-bit
+indices per input and sample, `2*inputs` segment offsets and the sort's temporary storage instead of
+`capacity*inputs*terms` values (`Phi`, plus `Phi'` in FP64), and needs no share of the
+`W = U*C` scratch or of the small parameter-VJP tiles; allocation count unchanged.
+*Status:* the sparse rows, outputs, coefficient, bias and input VJPs are checked like the
+dense ones. One difference: the dense path forms `W = U*C` for every term, so an overflowing
+`U*C` at a term whose basis derivative is zero becomes `inf*0 = NaN` in `dx` and is reported;
+the sparse path never forms that product, so such a step succeeds with the (finite) input
+VJP. A test-only hook (`src/backends/cuda/resident_testing.hpp`, not installed) reports each
+executor's layout and can force either path for every supported layer.
+
 **Precision policy (backlog C1).** `ResidentNetwork(network, capacity, precision)` takes a
 `kan::cuda::Precision`: `Float64` (default; unchanged FP64 storage and kernels, the parity
 reference), `Float32` (FP32 storage of parameters, gradients, activations and workspaces;
@@ -515,7 +563,10 @@ commits through `set_carrier`.
 
 Every Layer operation dispatches on the carrier once per call. The CPU loops of each
 carrier live in `src/backends/cpu/` (`linear_engine.hpp` holds the expansion and
-contraction shared by `BasisEdges` and `TrainableRbfEdges`); the resident executor
+contraction shared by `BasisEdges` and `TrainableRbfEdges`; since backlog C5 a B-spline
+`BasisEdges` layer uses its sparse form, which skips the exactly-zero terms and is bitwise
+the dense loops, signed zeros and nonfinite results included: a forward output whose bias is
+`-0` and an edge whose `|u|*max|c|` overflows take the dense loop); the resident executor
 holds one execution plan per carrier. A new carrier adds a `Carrier` and a
 `NonlinearGradients` alternative, its overloads in `src/backends/cpu/edge_ops.hpp` and a
 resident plan; Layer and Network do not change.
@@ -795,7 +846,8 @@ properties (backlog R4). The basis family tag and flat views are in
 `src/carriers/polynomial/polynomial_formulas.hpp` (Chebyshev, Legendre, Jacobi, Hermite:
 global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
 (Fourier) and `src/carriers/local/local_formulas.hpp` (B-spline, Gaussian RBF, Mexican
-hat: local support or decaying tails). Rational formulas are in
+hat: local support or decaying tails; `spline_span_terms` is the sparse form of the spline
+recurrence, and the dense `spline_terms` scatters its result, backlog C5). Rational formulas are in
 `src/carriers/rational/rational_formulas.hpp`; residual-branch formulas in
 `src/core/residual_formulas.hpp`. Public declarations and validation live in
 `include/kan/basis.hpp`/`src/carriers/basis.cpp` and

@@ -1,0 +1,6 @@
+PASS spline_sparse_engine_matches_dense_bitwise
+FAIL spline_sparse_engine_keeps_dense_signed_zeros: !std::signbit(y[0])
+PASS spline_sparse_engine_reports_overflow_at_zero_terms
+PASS spline_sparse_engine_matches_dense_bitwise
+PASS spline_sparse_engine_keeps_dense_signed_zeros
+FAIL spline_sparse_engine_reports_overflow_at_zero_terms: expected exception was not thrown

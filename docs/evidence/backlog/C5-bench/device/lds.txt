@@ -1,0 +1,5 @@
+LDS.32 mode 0: 1.84 T lane-loads/s = 16.0 lane-loads/clk/SM @2.4GHz
+LDS.128 mode 0: 6.45 T float-loads/s
+LDS.32 mode 1: 1.84 T lane-loads/s = 16.0 lane-loads/clk/SM @2.4GHz
+LDS.128 mode 1: 6.46 T float-loads/s
+clock attr 2418000 kHz

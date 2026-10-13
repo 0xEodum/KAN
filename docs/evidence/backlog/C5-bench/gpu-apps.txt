@@ -1,0 +1,4 @@
+pid, process_name, used_gpu_memory [MiB]
+2687, python3, 9401 MiB
+838763, python3, 2153 MiB
+2014948, /home/core_ai/lprsm/inference-env/bin/python, 3209 MiB

@@ -1,0 +1,3 @@
+precision,topology,batch,degree,terms,K/(p+1),dense_step_ms,auto_step_ms,step_speedup,dense_fwd_ms,auto_fwd_ms,fwd_speedup,dense_arena_mb,auto_arena_mb,checksum_rel_diff
+tf32,256x256x256x10,8192,1,12,6.00,11.199,9.868,1.13,6.614,3.932,1.68,503,471,9.0e-06
+tf32,64x64x32x16,1024,3,96,24.00,1.868,1.632,1.14,1.081,0.932,1.16,158,113,1.8e-04

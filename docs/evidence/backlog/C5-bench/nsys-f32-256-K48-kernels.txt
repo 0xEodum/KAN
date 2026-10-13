@@ -1,0 +1,16 @@
+
+ Time (%)  Total Time (ns)  Instances   Avg (ns)     Med (ns)    Min (ns)   Max (ns)   StdDev (ns)                                                  Name                                                
+ --------  ---------------  ---------  -----------  -----------  ---------  ---------  -----------  ----------------------------------------------------------------------------------------------------
+     37.3      211,097,984        168  1,256,535.6  1,252,960.0    469,920  2,278,336    620,833.0  void kan::cuda::<unnamed>::spline_forward_kernel<(unsigned int)4, float>(const unsigned int *, consâ
+     35.3      199,836,768         87  2,296,974.3  1,954,400.0  1,151,008  4,166,368  1,081,149.0  void kan::cuda::<unnamed>::spline_parameter_kernel<(unsigned int)4, float>(const unsigned int *, coâ
+     12.7       71,687,744        168    426,712.8    424,336.0    405,856    599,072     16,510.4  void kan::cuda::<unnamed>::spline_basis_kernel<(unsigned int)4, (bool)0, float>(const T3 *, kan::cuâ
+      9.3       52,565,504         58    906,301.8    926,256.0    228,608  1,936,000    664,273.1  void kan::cuda::<unnamed>::spline_input_kernel<(unsigned int)4, float>(const unsigned int *, const â
+      2.4       13,797,792         87    158,595.3    166,432.0    130,656    254,560     19,608.9  void cub::CUB_300001_SM_1210::detail::radix_sort::DeviceSegmentedRadixSortKernel<cub::CUB_300001_SMâ
+      1.5        8,640,672         29    297,954.2    297,120.0    294,336    330,944      6,507.6  void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1,â
+      0.7        4,065,824         58     70,100.4     71,488.0     66,464     78,720      3,029.7  void kan::cuda::<unnamed>::tanh_input_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1â
+      0.6        3,663,936        112     32,713.7     32,992.0     30,720     62,048      3,241.9  void kan::cuda::<unnamed>::tanh_forward_kernel<float>(const T1 *, T1 *, unsigned long, T1)          
+      0.0          109,344          3     36,448.0     36,896.0     31,936     40,512      4,305.5  kan::cuda::<unnamed>::spline_indices_kernel(unsigned int *, unsigned long, unsigned long)           
+      0.0           90,592         29      3,123.9      3,040.0      3,008      4,832        333.8  void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long, kan::cuda::<unnameâ
+      0.0           77,760         87        893.8        928.0        640      2,720        279.6  kan::cuda::<unnamed>::spline_segments_kernel(int *, unsigned long, unsigned long, unsigned long)    
+      0.0            2,688          1      2,688.0      2,688.0      2,688      2,688          0.0  void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long, T1)                              
+

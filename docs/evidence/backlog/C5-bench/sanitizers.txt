@@ -1,0 +1,67 @@
+== build-cuda memcheck
+========= COMPUTE-SANITIZER
+PASS selection_rule_picks_sparse_for_large_spline_layers
+PASS sparse_matches_cpu_and_dense_for_every_supported_degree
+PASS sparse_knot_contracts_batch_zero_and_dead_edges
+PASS sparse_layers_in_mixed_networks_with_residual_branch
+PASS sparse_training_steps_are_bitwise_eager_and_deterministic
+PASS sparse_status_reports_overflow_and_rolls_back
+PASS sparse_upload_parameters_and_knot_insertion_growth
+PASS sparse_long_rows_use_smaller_input_groups
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda-fma memcheck
+========= COMPUTE-SANITIZER
+PASS selection_rule_picks_sparse_for_large_spline_layers
+PASS sparse_matches_cpu_and_dense_for_every_supported_degree
+PASS sparse_knot_contracts_batch_zero_and_dead_edges
+PASS sparse_layers_in_mixed_networks_with_residual_branch
+PASS sparse_training_steps_are_bitwise_eager_and_deterministic
+PASS sparse_status_reports_overflow_and_rolls_back
+PASS sparse_upload_parameters_and_knot_insertion_growth
+PASS sparse_long_rows_use_smaller_input_groups
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda racecheck
+========= COMPUTE-SANITIZER
+PASS selection_rule_picks_sparse_for_large_spline_layers
+PASS sparse_matches_cpu_and_dense_for_every_supported_degree
+PASS sparse_knot_contracts_batch_zero_and_dead_edges
+PASS sparse_layers_in_mixed_networks_with_residual_branch
+PASS sparse_training_steps_are_bitwise_eager_and_deterministic
+PASS sparse_status_reports_overflow_and_rolls_back
+PASS sparse_upload_parameters_and_knot_insertion_growth
+PASS sparse_long_rows_use_smaller_input_groups
+8/8 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+exit 0
+== build-cuda synccheck
+========= COMPUTE-SANITIZER
+PASS selection_rule_picks_sparse_for_large_spline_layers
+PASS sparse_matches_cpu_and_dense_for_every_supported_degree
+PASS sparse_knot_contracts_batch_zero_and_dead_edges
+PASS sparse_layers_in_mixed_networks_with_residual_branch
+PASS sparse_training_steps_are_bitwise_eager_and_deterministic
+PASS sparse_status_reports_overflow_and_rolls_back
+PASS sparse_upload_parameters_and_knot_insertion_growth
+PASS sparse_long_rows_use_smaller_input_groups
+8/8 passed
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda initcheck
+========= COMPUTE-SANITIZER
+PASS selection_rule_picks_sparse_for_large_spline_layers
+PASS sparse_matches_cpu_and_dense_for_every_supported_degree
+PASS sparse_knot_contracts_batch_zero_and_dead_edges
+PASS sparse_layers_in_mixed_networks_with_residual_branch
+PASS sparse_training_steps_are_bitwise_eager_and_deterministic
+PASS sparse_status_reports_overflow_and_rolls_back
+PASS sparse_upload_parameters_and_knot_insertion_growth
+PASS sparse_long_rows_use_smaller_input_groups
+8/8 passed
+========= ERROR SUMMARY: 0 errors
+exit 0

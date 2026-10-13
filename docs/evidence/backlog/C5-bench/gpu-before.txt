@@ -1,0 +1,2 @@
+utilization.gpu [%], memory.used [MiB]
+1 %, [N/A]
