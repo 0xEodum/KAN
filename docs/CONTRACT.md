@@ -270,8 +270,11 @@ resolve `|Q|` below about `n*2^-24` of the guard bound, so FP32 reports poles th
 executor at `epsilon = 1e-8` accepts. FP32 results agree with the FP64 CPU reference evaluated
 at the executor's parameters per entry within `2e-4*|e| + 5e-5*max|e| + 1e-37`, TF32 within
 `1e-2*|e| + 1e-2*max|e|` (the suite's tolerances; measured deviations in the
-[C1 evidence](evidence/backlog/C1.md)); trajectories over several SGD steps diverge further
-because SGD amplifies rounding. The FP32 small-kernel thresholds are `2^24` forward
+[C1 evidence](evidence/backlog/C1.md)), where the TF32 bias VJP of every layer but the last
+adds `2^-11*sum_b |U|` (its upstream U is itself a TF32 contraction output; the rounding does
+not cancel with the batch sum; an empirical scale, needed on GB10 with cuBLAS 13.1,
+[aarch64 port](evidence/port-aarch64.md)); trajectories over
+several SGD steps diverge further because SGD amplifies rounding. The FP32 small-kernel thresholds are `2^24` forward
 multiply-adds and, for the parameter VJP, at most `2^15` coefficients plus outputs and at
 most `2^22` `batch*(coefficients+outputs)`. Python: `kan.Precision.FLOAT64/FLOAT32/TF32`
 (declared in every build) and `kan.ResidentNetwork(network, capacity, precision=...)`; arrays

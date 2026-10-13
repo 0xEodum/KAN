@@ -25,8 +25,15 @@ using kan::cuda::ResidentNetwork;
 constexpr double fp32_relative = 2e-4, fp32_floor = 5e-5, fp32_underflow = 1e-37;
 // TF32 tensor-op contractions round their operands to 10 mantissa bits.
 constexpr double tf32_relative = 1e-2, tf32_floor = 1e-2;
+// TF32 batch reductions: the bias VJP sums U over the batch, and below the last
+// layer U is itself the output of TF32 contractions (W = U*C of the next layer).
+// Under cancellation that rounding does not shrink with the result; the
+// allowance is the TF32 unit roundoff 2^-11 times sum_b |U|, an empirical scale
+// (8.2e-5 * sum_b |U| measured on GB10, docs/evidence/port-aarch64.md), as the
+// M3 weight VJP's 2e-3*sum_b |U||S|.
+constexpr double tf32_reduction = 0x1p-11;
 // Per-call tolerance of the precision under test (train_like_cpu sets it).
-double call_relative = fp32_relative, call_floor = fp32_floor;
+double call_relative = fp32_relative, call_floor = fp32_floor, call_reduction = 0;
 
 template<class... Parts> std::string precise(const Parts&... parts) {
     std::ostringstream out;
@@ -34,15 +41,17 @@ template<class... Parts> std::string precise(const Parts&... parts) {
     (out << ... << parts);
     return out.str();
 }
+// reduced: optional per-entry absolute term (the TF32 reduction allowance).
 void close(std::span<const double> actual, std::span<const double> expected,
-           double relative = -1, double floor = -1) {
+           double relative = -1, double floor = -1, std::span<const double> reduced = {}) {
     if (relative < 0) { relative = call_relative; floor = call_floor; }
     REQUIRE(actual.size() == expected.size());
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i) {
         REQUIRE(std::isfinite(actual[i]));
-        if (std::abs(actual[i]-expected[i]) > relative*std::abs(expected[i]) + floor*scale + fp32_underflow)
+        const double allowance = reduced.empty() ? 0.0 : reduced[i];
+        if (std::abs(actual[i]-expected[i]) > relative*std::abs(expected[i]) + floor*scale + fp32_underflow + allowance)
             throw std::runtime_error(precise("index ", i, " of ", actual.size(), " actual=", actual[i],
                                              " expected=", expected[i], " scale=", scale));
     }
@@ -84,6 +93,19 @@ constexpr test::Family families[] = {test::Family::Chebyshev, test::Family::Lege
                                      test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat};
 
 void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients& expected) {
+    // call_reduction * sum_b |U[b, o]| per output of layer j, U its upstream
+    // gradient; none for the last layer, whose U is the uploaded output gradient.
+    const auto bias_allowance = [&](std::size_t j) {
+        std::vector<double> sums;
+        if (call_reduction == 0 || j+1 == expected.layers.size()) return sums;
+        const auto u = std::holds_alternative<kan::InputMapGradients>(expected.layers[j+1])
+            ? std::span<const double>(test::map_grad(expected, j+1).input)
+            : std::span<const double>(test::grad(expected, j+1).input);
+        sums.assign(test::grad(expected, j).bias.size(), 0.0);
+        REQUIRE(!sums.empty() && u.size() % sums.size() == 0);
+        for (std::size_t i = 0; i < u.size(); ++i) sums[i % sums.size()] += call_reduction*std::abs(u[i]);
+        return sums;
+    };
     close(actual.input, expected.input);
     REQUIRE(actual.layers.size() == expected.layers.size());
     for (std::size_t j = 0; j < actual.layers.size(); ++j) {
@@ -95,7 +117,7 @@ void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients&
         }
         close(test::grad(actual, j).input, test::grad(expected, j).input);
         close(test::grad(actual, j).coefficients, test::grad(expected, j).coefficients);
-        close(test::grad(actual, j).bias, test::grad(expected, j).bias);
+        close(test::grad(actual, j).bias, test::grad(expected, j).bias, -1, -1, bias_allowance(j));
         close(test::centers(test::grad(actual, j)), test::centers(test::grad(expected, j)));
         close(test::log_widths(test::grad(actual, j)), test::log_widths(test::grad(expected, j)));
         close(test::denominators(test::grad(actual, j)), test::denominators(test::grad(expected, j)));
@@ -144,6 +166,7 @@ void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, d
     REQUIRE(gpu.precision() == precision);
     const bool tf32 = precision == Precision::TensorFloat32;
     call_relative = tf32 ? tf32_relative : fp32_relative; call_floor = tf32 ? tf32_floor : fp32_floor;
+    call_reduction = tf32 ? tf32_reduction : 0;
     const auto allocations = gpu.workspace_allocations();
     const auto x = wave(batch*cpu.inputs(), 0.9, 0.37), dy = wave(batch*cpu.outputs(), 0.2, 0.53, 1);
     gpu.upload_input(x, batch); gpu.upload_output_gradient(dy);
@@ -246,7 +269,7 @@ TEST(float32_contraction_paths_match_fp64_cpu) {
 // test within the TF32 tolerance, and their results differ from FP32 SGEMM
 // (so the math mode is in effect) while staying within that tolerance of it.
 TEST(tensor_float32_contractions_match_fp64_cpu) {
-    struct Reset { ~Reset() { call_relative = fp32_relative; call_floor = fp32_floor; } } reset;
+    struct Reset { ~Reset() { call_relative = fp32_relative; call_floor = fp32_floor; call_reduction = 0; } } reset;
     const auto net = [] {
         return kan::Network({layer(64, 80, kan::ChebyshevConfig{7}, 0.7), layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)});
     };
