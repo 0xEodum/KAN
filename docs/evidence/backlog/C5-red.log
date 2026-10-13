@@ -1,0 +1,8 @@
+FAIL selection_rule_picks_sparse_for_large_spline_layers: layout_of(large, 1024, p).sparse.at(0)
+FAIL sparse_matches_cpu_and_dense_for_every_supported_degree: layout.sparse.at(0)
+FAIL sparse_knot_contracts_batch_zero_and_dead_edges: layout.sparse.at(0)
+FAIL sparse_layers_in_mixed_networks_with_residual_branch: layout.sparse.at(1) && layout.sparse.at(4) && !layout.sparse.at(3)
+FAIL sparse_training_steps_are_bitwise_eager_and_deterministic: layout.sparse.at(0) && layout.sparse.at(1)
+PASS sparse_status_reports_overflow_and_rolls_back
+FAIL sparse_upload_parameters_and_knot_insertion_growth: layout.sparse.at(0)
+1/7 passed

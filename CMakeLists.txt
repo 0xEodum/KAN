@@ -180,6 +180,9 @@ if(BUILD_TESTING)
         kan_add_test(backends/cuda resident_fused_expansion "cuda;resident" 120 kan::cuda CUDA::cudart)
         # Carrier and network features on the resident executor (parity with the CPU).
         kan_add_test(backends/cuda local_resident "cuda;local" 120 kan::cuda)
+        # Backlog C5: sparse B-spline path; uses the private test hook (src/backends/cuda/resident_testing.hpp).
+        kan_add_test(backends/cuda local_sparse_resident "cuda;local" 300 kan::cuda)
+        target_include_directories(local_sparse_resident_test PRIVATE src)
         # Backlog M2 (rational_policy_resident); C6-C8: rational kernel layout,
         # forward VJP checks, launch bounds (rational_resident_execution).
         foreach(suite rational_resident rational_policy_resident)
