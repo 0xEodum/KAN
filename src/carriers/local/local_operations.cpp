@@ -1,8 +1,10 @@
-// Family-specific operations. Each one reads the carrier it requires, builds
-// the replacement carrier and commits it through Layer::set_carrier, which
-// revalidates the whole layer; a failure leaves the layer unchanged.
+// Operations specific to the local families (B-spline knot insertion and grid
+// adaptation, trainable RBF centers and widths). Each one reads the carrier it
+// requires, builds the replacement carrier and commits it through
+// Layer::set_carrier, which revalidates the whole layer; a failure leaves the
+// layer unchanged. Rational operations are in carriers/rational.
 #include "kan/families.hpp"
-#include "detail/checks.hpp"
+#include "core/checks.hpp"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -104,20 +106,6 @@ void set_rbf_parameters(Layer& layer, std::span<const double> centers, std::span
         throw std::invalid_argument("RBF parameter count must match the layer's basis size");
     layer.set_carrier(TrainableRbfEdges{{{centers.begin(), centers.end()}, {log_widths.begin(), log_widths.end()}},
                                         edges->coefficients});
-}
-
-void set_rational_parameters(Layer& layer, std::span<const double> numerator,
-                             std::span<const double> denominators, std::span<const double> bias) {
-    const auto* edges = std::get_if<RationalEdges>(&layer.carrier());
-    if (!edges || numerator.size() != edges->coefficients.size() ||
-        denominators.size() != edges->denominators.size() || bias.size() != layer.bias().size())
-        throw std::invalid_argument("rational parameter shape or layer type mismatch");
-    require_finite(numerator);
-    require_finite(denominators);
-    require_finite(bias);
-    layer.set_carrier(RationalEdges{edges->config, {numerator.begin(), numerator.end()},
-                                    {denominators.begin(), denominators.end()}},
-                      bias);
 }
 
 } // namespace kan

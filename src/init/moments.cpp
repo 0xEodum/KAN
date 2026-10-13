@@ -1,8 +1,8 @@
 // Reference measures and second moments of the basis families (backlog M4).
 // Closed forms where they exist; otherwise deterministic Gauss-Legendre
 // quadrature evaluated with portable arithmetic (see portable_math.hpp).
-#include "moments.hpp"
-#include "portable_math.hpp"
+#include "init/moments.hpp"
+#include "init/portable_math.hpp"
 #include <algorithm>
 #include <cmath>
 #include <numbers>

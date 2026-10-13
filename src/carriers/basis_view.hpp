@@ -3,7 +3,7 @@
 // Host-only bridge from the typed public configuration to the flat view used by
 // the shared formulas. The view borrows the configuration's vectors.
 
-#include "basis_formulas.hpp"
+#include "carriers/basis_formulas.hpp"
 #include "kan/basis.hpp"
 #include <type_traits>
 #include <variant>

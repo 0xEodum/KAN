@@ -2,9 +2,9 @@
 // branch, validation and the SGD/L2 protocol. Each numerical operation
 // dispatches on the carrier exactly once.
 #include "kan/layer.hpp"
-#include "carriers/edge_ops.hpp"
-#include "detail/checks.hpp"
-#include "detail/residual_formulas.hpp"
+#include "backends/cpu/edge_ops.hpp"
+#include "core/checks.hpp"
+#include "core/residual_formulas.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>

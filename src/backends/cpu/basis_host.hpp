@@ -3,7 +3,7 @@
 // CPU-only basis evaluation helpers. Not for nvcc translation units: the guard
 // throws, which device instantiations of the shared formulas cannot do.
 
-#include "basis_view.hpp"
+#include "carriers/basis_view.hpp"
 #include <cmath>
 #include <stdexcept>
 

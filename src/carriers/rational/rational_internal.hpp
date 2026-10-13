@@ -16,7 +16,7 @@ struct RationalTerms {
 };
 // Policy must equal config.denominator_policy; callers dispatch once per
 // operation (visit_denominator_policy) and loop over edges and samples.
-// Explicitly instantiated for every DenominatorPolicy in src/rational.cpp.
+// Explicitly instantiated for every DenominatorPolicy in src/carriers/rational/rational.cpp.
 template<DenominatorPolicy Policy>
 RationalTerms evaluate_rational_trusted(const RationalConfig& config,double x,
                                       std::span<const double> numerator,

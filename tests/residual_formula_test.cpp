@@ -1,7 +1,7 @@
-// Backlog M3: the shared host/device SiLU formulas (src/detail/residual_formulas.hpp),
+// Backlog M3: the shared host/device SiLU formulas (src/core/residual_formulas.hpp),
 // instantiated for double and float on the host, against an independent
 // reference, at ordinary and extreme arguments, with a guard that throws.
-#include "detail/residual_formulas.hpp"
+#include "core/residual_formulas.hpp"
 #include "support/test.hpp"
 #include <cfloat>
 #include <cmath>

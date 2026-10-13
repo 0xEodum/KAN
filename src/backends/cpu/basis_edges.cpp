@@ -1,8 +1,8 @@
 // Carriers on the expansion + contraction engine: BasisEdges (linear in all
 // its parameters) and TrainableRbfEdges (adds nonlinear shared centers and
 // log widths, whose VJPs ride along the contraction VJP).
-#include "edge_ops.hpp"
-#include "linear_engine.hpp"
+#include "backends/cpu/edge_ops.hpp"
+#include "backends/cpu/linear_engine.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <variant>

@@ -20,7 +20,7 @@
 // Guard: callable `Scalar(Scalar)` returning its argument, invoked on every
 // intermediate the contract requires to be finite (see basis_formulas.hpp).
 
-#include "host_device.hpp"
+#include "core/host_device.hpp"
 #include "kan/rational.hpp"
 #include <cstddef>
 #include <stdexcept>

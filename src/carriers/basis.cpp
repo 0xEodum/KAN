@@ -1,5 +1,5 @@
 #include "kan/basis.hpp"
-#include "detail/basis_host.hpp"
+#include "backends/cpu/basis_host.hpp"
 
 #include <cmath>
 #include <stdexcept>

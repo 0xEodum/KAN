@@ -1,6 +1,6 @@
 #include "kan/rational.hpp"
-#include "rational_internal.hpp"
-#include "detail/rational_formulas.hpp"
+#include "carriers/rational/rational_internal.hpp"
+#include "carriers/rational/rational_formulas.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>

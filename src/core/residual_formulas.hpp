@@ -15,7 +15,7 @@
 // float for the FP32 resident executor. Guard: callable `Scalar(Scalar)`
 // returning its argument (see basis_formulas.hpp).
 
-#include "host_device.hpp"
+#include "core/host_device.hpp"
 
 namespace kan::detail {
 

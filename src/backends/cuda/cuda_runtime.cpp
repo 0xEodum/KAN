@@ -1,5 +1,5 @@
 // CUDA device query (backlog R8), separate from the deprecated legacy adapter
-// in src/cuda.cu.
+// in src/backends/cuda/cuda.cu.
 #include "kan/cuda_runtime.hpp"
 #include <cuda_runtime.h>
 

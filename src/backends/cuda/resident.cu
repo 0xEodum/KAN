@@ -1,8 +1,8 @@
 #include "kan/resident.hpp"
-#include "detail/basis_view.hpp"
-#include "detail/rational_formulas.hpp"
-#include "detail/input_map_formulas.hpp"
-#include "detail/residual_formulas.hpp"
+#include "carriers/basis_view.hpp"
+#include "carriers/rational/rational_formulas.hpp"
+#include "core/input_map_formulas.hpp"
+#include "core/residual_formulas.hpp"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <algorithm>

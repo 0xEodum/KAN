@@ -2,8 +2,8 @@
 // InputMap dispatches on the kind once per call; the loops below are compiled
 // per kind and share their formulas with the resident kernels.
 #include "kan/input_map.hpp"
-#include "detail/checks.hpp"
-#include "detail/input_map_formulas.hpp"
+#include "core/checks.hpp"
+#include "core/input_map_formulas.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>

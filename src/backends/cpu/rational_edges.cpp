@@ -1,9 +1,9 @@
 // Rational edges: every edge evaluates P(z)/Q(z) with its own numerator and
 // denominator; the VJPs come from the shared rational formulas.
-#include "edge_ops.hpp"
-#include "../rational_internal.hpp"
-#include "../detail/checks.hpp"
-#include "../detail/rational_formulas.hpp"
+#include "backends/cpu/edge_ops.hpp"
+#include "carriers/rational/rational_internal.hpp"
+#include "core/checks.hpp"
+#include "carriers/rational/rational_formulas.hpp"
 #include <stdexcept>
 
 namespace kan::detail {

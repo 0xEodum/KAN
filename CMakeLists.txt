@@ -26,14 +26,23 @@ if(NOT MSVC)
                         $<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:-Xcompiler=-ffp-contract=off>)
 endif()
 
-add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp src/input_map.cpp
-            src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp src/initializers.cpp
-            src/init/moments.cpp)
+# Backlog R4: sources are grouped by execution properties. core/ holds the
+# carrier-independent Layer/Network/InputMap protocol, errors and shapes;
+# carriers/ the family math (polynomial, trigonometric, local, rational; shared
+# host/device formulas, validation, family operations); backends/cpu the CPU
+# carrier loops; backends/cuda the optional kan::cuda target; init/ the
+# initializers. Private headers are included relative to src/.
+add_library(kan STATIC src/core/layer.cpp src/core/network.cpp src/core/input_map.cpp
+            src/carriers/basis.cpp src/carriers/local/local_operations.cpp
+            src/carriers/rational/rational.cpp src/carriers/rational/rational_operations.cpp
+            src/backends/cpu/basis_edges.cpp src/backends/cpu/rational_edges.cpp
+            src/init/initializers.cpp src/init/moments.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
 set_target_properties(kan PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(kan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-                                     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+                                     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+                               PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(kan PRIVATE /W4 /permissive-)
 else()
@@ -68,8 +77,10 @@ if(KAN_ENABLE_CUDA)
     enable_language(CUDA)
     # The resident contraction engine uses the 64-bit cuBLAS API (CUDA 12+).
     find_package(CUDAToolkit 12 REQUIRED)
-    add_library(kan_cuda STATIC src/cuda_runtime.cpp src/cuda.cu src/resident.cu)
+    add_library(kan_cuda STATIC src/backends/cuda/cuda_runtime.cpp src/backends/cuda/cuda.cu
+                src/backends/cuda/resident.cu)
     add_library(kan::cuda ALIAS kan_cuda)
+    target_include_directories(kan_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     set_target_properties(kan_cuda PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON EXPORT_NAME cuda POSITION_INDEPENDENT_CODE ON)
     # Parity build (default): no FMA contraction in the kernels, preserving the
     # CPU's unfused intermediates and overflow checks (fusion can hide an
@@ -95,7 +106,7 @@ if(BUILD_TESTING)
     endforeach()
     # Backlog M4: the deep-network training demonstration runs 3000 full-batch epochs per case.
     set_tests_properties(initializer_training PROPERTIES TIMEOUT 900)
-    # Backlog M3: the residual formulas are internal (src/detail); the demonstration
+    # Backlog M3: the residual formulas are internal (src/core); the demonstration
     # trains ten five-layer networks for 3000 epochs.
     target_include_directories(residual_formula_test PRIVATE src)
     set_tests_properties(residual_training PROPERTIES TIMEOUT 900)

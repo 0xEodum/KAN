@@ -7,7 +7,7 @@
 // Templates over the scalar type (backlog C1): double on the CPU and the FP64
 // resident executor, float on the FP32 resident executor.
 
-#include "host_device.hpp"
+#include "core/host_device.hpp"
 
 namespace kan::detail {
 

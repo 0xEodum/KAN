@@ -11,8 +11,8 @@
 // order; the VJPs keep the M1 summation order. A GEMM backend (backlog C2)
 // replaces `contract`/`contract_vjp` over blocks of rows.
 
-#include "../detail/basis_host.hpp"
-#include "../detail/checks.hpp"
+#include "backends/cpu/basis_host.hpp"
+#include "core/checks.hpp"
 #include <cstddef>
 #include <vector>
 
