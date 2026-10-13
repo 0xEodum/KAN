@@ -1,0 +1,175 @@
+# before R5 (old labels)
+## C2-bench base c2
+Traceback (most recent call last):
+  File "/home/core_ai/PyProjects/KAN/docs/evidence/backlog/compare_bench.py", line 48, in <module>
+    main(*sys.argv[1:4])
+  File "/home/core_ai/PyProjects/KAN/docs/evidence/backlog/compare_bench.py", line 29, in main
+    base, base_sums = load(directory, before)
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/core_ai/PyProjects/KAN/docs/evidence/backlog/compare_bench.py", line 22, in load
+    key = (suite, row["case"], row["family"], row["topology"], row["batch"], row["backend"])
+                               ~~~^^^^^^^^^^
+KeyError: 'family'
+## M2-bench base m2
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,0.971,0.680,1.127
+m2,m1_host_full,4,0.981,0.967,1.008
+m2,m2_resident_full,24,1.000,0.935,1.054
+m2,m2_transfer_full,24,0.992,0.765,1.165
+m3,cpu_full,12,0.973,0.901,1.018
+m3,m3_resident_full,12,1.001,0.943,1.094
+m3,m3_transfer_full,12,1.012,0.960,1.064
+m4,cpu_full,12,0.954,0.862,1.053
+m4,m4_resident_full,12,0.857,0.469,1.326
+m4,m4_transfer_full,12,0.914,0.713,1.243
+checksum mismatches: 0
+## R3-bench base r3
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,0.961,0.793,1.161
+m2,m1_host_full,4,0.958,0.899,1.008
+m2,m2_resident_full,24,0.950,0.448,1.088
+m2,m2_transfer_full,24,0.882,0.322,1.975
+m3,cpu_full,12,0.871,0.647,0.995
+m3,m3_resident_full,12,0.996,0.873,1.084
+m3,m3_transfer_full,12,1.013,0.942,1.338
+m4,cpu_full,12,0.913,0.853,1.019
+m4,m4_resident_full,12,0.960,0.817,1.521
+m4,m4_transfer_full,12,0.931,0.846,1.060
+checksum mismatches: 0
+## R8-R9-bench base r8r9
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+m2,cpu_full,24,0.982,0.720,1.041
+m2,m1_host_full,4,1.009,0.986,1.048
+m2,m2_resident_full,24,1.061,0.918,2.009
+m2,m2_transfer_full,24,0.993,0.713,1.780
+m3,cpu_full,12,0.995,0.923,1.102
+m3,m3_resident_full,12,0.985,0.771,1.102
+m3,m3_transfer_full,12,1.022,0.879,1.462
+m4,cpu_full,12,0.992,0.958,1.007
+m4,m4_resident_full,12,0.983,0.915,1.061
+m4,m4_transfer_full,12,0.969,0.878,1.034
+checksum mismatches: 0
+
+# after R5
+## C2-bench base c2
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,0.998,0.767,1.072
+basis,legacy_full,4,1.013,0.902,1.136
+basis,resident_full,24,0.606,0.402,1.017
+basis,transfer_full,24,0.723,0.603,1.064
+local,cpu_full,12,0.963,0.747,1.034
+local,resident_full,12,0.650,0.422,0.866
+local,transfer_full,12,0.750,0.526,1.111
+rational,cpu_full,12,0.998,0.970,1.029
+rational,resident_full,12,0.994,0.915,1.054
+rational,transfer_full,12,1.005,0.932,1.049
+checksum mismatches: 66
+   ('basis', '0', 'chebyshev', '16x24x8', '32', 'resident_full')
+   ('basis', '0', 'chebyshev', '16x24x8', '32', 'transfer_full')
+   ('basis', '1', 'chebyshev', '16x24x8', '1024', 'resident_full')
+   ('basis', '1', 'chebyshev', '16x24x8', '1024', 'transfer_full')
+   ('basis', '10', 'jacobi', '64x64x32x16', '32', 'resident_full')
+   ('basis', '10', 'jacobi', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '11', 'jacobi', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '11', 'jacobi', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '12', 'hermite', '16x24x8', '32', 'resident_full')
+   ('basis', '12', 'hermite', '16x24x8', '32', 'transfer_full')
+   ('basis', '13', 'hermite', '16x24x8', '1024', 'resident_full')
+   ('basis', '13', 'hermite', '16x24x8', '1024', 'transfer_full')
+   ('basis', '14', 'hermite', '64x64x32x16', '32', 'resident_full')
+   ('basis', '14', 'hermite', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '15', 'hermite', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '15', 'hermite', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '16', 'fourier', '16x24x8', '32', 'resident_full')
+   ('basis', '16', 'fourier', '16x24x8', '32', 'transfer_full')
+   ('basis', '17', 'fourier', '16x24x8', '1024', 'resident_full')
+   ('basis', '17', 'fourier', '16x24x8', '1024', 'transfer_full')
+   ('basis', '18', 'fourier', '64x64x32x16', '32', 'resident_full')
+   ('basis', '18', 'fourier', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '19', 'fourier', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '19', 'fourier', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '2', 'chebyshev', '64x64x32x16', '32', 'resident_full')
+   ('basis', '2', 'chebyshev', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '21', 'gaussian_rbf', '16x24x8', '1024', 'resident_full')
+   ('basis', '21', 'gaussian_rbf', '16x24x8', '1024', 'transfer_full')
+   ('basis', '22', 'gaussian_rbf', '64x64x32x16', '32', 'resident_full')
+   ('basis', '22', 'gaussian_rbf', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '23', 'gaussian_rbf', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '23', 'gaussian_rbf', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '3', 'chebyshev', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '3', 'chebyshev', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '4', 'legendre', '16x24x8', '32', 'resident_full')
+   ('basis', '4', 'legendre', '16x24x8', '32', 'transfer_full')
+   ('basis', '5', 'legendre', '16x24x8', '1024', 'resident_full')
+   ('basis', '5', 'legendre', '16x24x8', '1024', 'transfer_full')
+   ('basis', '6', 'legendre', '64x64x32x16', '32', 'resident_full')
+   ('basis', '6', 'legendre', '64x64x32x16', '32', 'transfer_full')
+   ('basis', '7', 'legendre', '64x64x32x16', '1024', 'resident_full')
+   ('basis', '7', 'legendre', '64x64x32x16', '1024', 'transfer_full')
+   ('basis', '8', 'jacobi', '16x24x8', '32', 'resident_full')
+   ('basis', '8', 'jacobi', '16x24x8', '32', 'transfer_full')
+   ('basis', '9', 'jacobi', '16x24x8', '1024', 'resident_full')
+   ('basis', '9', 'jacobi', '16x24x8', '1024', 'transfer_full')
+   ('local', '0', 'bspline', '16x24x8', '32', 'resident_full')
+   ('local', '0', 'bspline', '16x24x8', '32', 'transfer_full')
+   ('local', '1', 'bspline', '16x24x8', '1024', 'resident_full')
+   ('local', '1', 'bspline', '16x24x8', '1024', 'transfer_full')
+   ('local', '10', 'trainable_rbf', '64x64x32x16', '32', 'resident_full')
+   ('local', '10', 'trainable_rbf', '64x64x32x16', '32', 'transfer_full')
+   ('local', '2', 'bspline', '64x64x32x16', '32', 'resident_full')
+   ('local', '2', 'bspline', '64x64x32x16', '32', 'transfer_full')
+   ('local', '3', 'bspline', '64x64x32x16', '1024', 'resident_full')
+   ('local', '3', 'bspline', '64x64x32x16', '1024', 'transfer_full')
+   ('local', '4', 'mexican_hat', '16x24x8', '32', 'resident_full')
+   ('local', '4', 'mexican_hat', '16x24x8', '32', 'transfer_full')
+   ('local', '5', 'mexican_hat', '16x24x8', '1024', 'resident_full')
+   ('local', '5', 'mexican_hat', '16x24x8', '1024', 'transfer_full')
+   ('local', '6', 'mexican_hat', '64x64x32x16', '32', 'resident_full')
+   ('local', '6', 'mexican_hat', '64x64x32x16', '32', 'transfer_full')
+   ('local', '7', 'mexican_hat', '64x64x32x16', '1024', 'resident_full')
+   ('local', '7', 'mexican_hat', '64x64x32x16', '1024', 'transfer_full')
+   ('local', '9', 'trainable_rbf', '16x24x8', '1024', 'resident_full')
+   ('local', '9', 'trainable_rbf', '16x24x8', '1024', 'transfer_full')
+exit 0
+## M2-bench base m2
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,0.971,0.680,1.127
+basis,legacy_full,4,0.981,0.967,1.008
+basis,resident_full,24,1.000,0.935,1.054
+basis,transfer_full,24,0.992,0.765,1.165
+local,cpu_full,12,0.973,0.901,1.018
+local,resident_full,12,1.001,0.943,1.094
+local,transfer_full,12,1.012,0.960,1.064
+rational,cpu_full,12,0.954,0.862,1.053
+rational,resident_full,12,0.857,0.469,1.326
+rational,transfer_full,12,0.914,0.713,1.243
+checksum mismatches: 0
+exit 0
+## R3-bench base r3
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,0.961,0.793,1.161
+basis,legacy_full,4,0.958,0.899,1.008
+basis,resident_full,24,0.950,0.448,1.088
+basis,transfer_full,24,0.882,0.322,1.975
+local,cpu_full,12,0.871,0.647,0.995
+local,resident_full,12,0.996,0.873,1.084
+local,transfer_full,12,1.013,0.942,1.338
+rational,cpu_full,12,0.913,0.853,1.019
+rational,resident_full,12,0.960,0.817,1.521
+rational,transfer_full,12,0.931,0.846,1.060
+checksum mismatches: 0
+exit 0
+## R8-R9-bench base r8r9
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,0.982,0.720,1.041
+basis,legacy_full,4,1.009,0.986,1.048
+basis,resident_full,24,1.061,0.918,2.009
+basis,transfer_full,24,0.993,0.713,1.780
+local,cpu_full,12,0.995,0.923,1.102
+local,resident_full,12,0.985,0.771,1.102
+local,transfer_full,12,1.022,0.879,1.462
+rational,cpu_full,12,0.992,0.958,1.007
+rational,resident_full,12,0.983,0.915,1.061
+rational,transfer_full,12,0.969,0.878,1.034
+checksum mismatches: 0
+exit 0

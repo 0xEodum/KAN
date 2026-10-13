@@ -1,0 +1,791 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+UpdateCTestConfiguration  from :/home/core_ai/PyProjects/KAN/build-cuda-fma/DartConfiguration.tcl
+Parse Config file:/home/core_ai/PyProjects/KAN/build-cuda-fma/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/core_ai/PyProjects/KAN/build-cuda-fma/DartConfiguration.tcl
+Parse Config file:/home/core_ai/PyProjects/KAN/build-cuda-fma/DartConfiguration.tcl
+Test project /home/core_ai/PyProjects/KAN/build-cuda-fma
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+      Start  1: layer
+
+1: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/layer_test
+1: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+1: Test timeout computed to be: 60
+1: PASS zero_initialization
+1: PASS known_forward_layout_and_batch
+1: PASS all_basis_layer_gradients_match_finite_differences
+1: PASS backward_sums_without_averaging_or_mutation
+1: PASS empty_batch_is_well_defined
+1: PASS invalid_dimensions_and_shape_overflow
+1: PASS invalid_shapes_and_nonfinite_data
+1: PASS parameter_set_is_validated_before_mutation
+1: PASS sgd_updates_with_explicit_rate
+1: PASS sgd_invalid_update_is_atomic
+1: PASS nonfinite_contractions_raise_overflow
+1: PASS moved_from_layer_rejects_numerical_and_update_operations
+1: 12/12 passed
+ 1/47 Test  #1: layer ............................   Passed    0.00 sec
+test 2
+      Start  2: network
+
+2: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/network_test
+2: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+2: Test timeout computed to be: 60
+2: PASS topology_must_be_nonempty_and_compatible
+2: PASS forward_is_layer_composition
+2: PASS network_gradients_match_finite_differences
+2: PASS empty_and_invalid_network_batches
+2: PASS network_sgd_is_atomic_across_layers
+2: PASS single_layer_network_matches_layer
+2: PASS sgd_training_fits_polynomial
+2: PASS moved_from_network_and_layers_are_rejected
+2: 8/8 passed
+ 2/47 Test  #2: network ..........................   Passed    0.00 sec
+test 3
+      Start  3: input_map
+
+3: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/input_map_test
+3: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+3: Test timeout computed to be: 60
+3: PASS affine_map_values_and_vjp
+3: PASS tanh_map_values_and_vjp
+3: PASS layer_norm_normalizes_each_sample
+3: PASS layer_norm_vjps_match_finite_differences
+3: PASS map_validation_and_moved_from
+3: PASS map_sgd_updates_trainable_parameters_atomically
+3: PASS affine_helpers_map_samples_onto_a_domain
+3: PASS network_mixes_maps_and_layers
+3: PASS network_gradients_with_maps_match_finite_differences
+3: PASS network_sgd_with_maps_is_atomic
+3: PASS far_inputs_train_with_map_and_fail_without
+3: 11/11 passed
+ 3/47 Test  #3: input_map ........................   Passed    0.01 sec
+test 4
+      Start  4: residual
+
+4: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/residual_test
+4: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+4: Test timeout computed to be: 60
+4: PASS constructors_have_no_branch_and_gradients_leave_it_empty
+4: PASS forward_adds_the_branch_after_the_carrier_in_ascending_input_order
+4: PASS all_vjps_of_each_carrier_with_the_branch
+4: PASS all_vjps_of_mixed_networks_with_and_without_the_branch
+4: PASS branch_is_the_only_gradient_path_outside_localized_supports
+4: PASS branch_restores_first_layer_gradients_behind_a_saturated_localized_layer
+4: PASS set_residual_validates_shape_and_finiteness_atomically
+4: PASS branch_survives_every_carrier_replacement_and_copies
+4: PASS sgd_updates_the_branch_and_validates_its_gradient
+4: PASS l2_penalizes_coefficients_and_branch_weights
+4: PASS network_backward_sgd_and_regularization_carry_the_branch
+4: PASS nonfinite_branch_results_raise_overflow
+4: PASS initializers_leave_layers_without_the_branch_unchanged_in_kind
+4: PASS noise_init_draws_pykan_scale_base
+4: PASS noise_init_validates_branch_fields_before_any_change
+4: PASS variance_scaling_sets_branch_weights_to_zero
+4: PASS network_initialization_keeps_branch_presence_per_layer
+4: pinned 1ef218a170c967fd
+4: pinned 3b6cb65c8b613b2f
+4: pinned af64dc9297fd02da
+4: PASS branch_draws_are_pinned_across_platforms
+4: 18/18 passed
+ 4/47 Test  #4: residual .........................   Passed    0.00 sec
+test 5
+      Start  5: residual_formula
+
+5: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/residual_formula_test
+5: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+5: Test timeout computed to be: 60
+5: PASS silu_matches_reference_at_ordinary_arguments_double
+5: PASS silu_matches_reference_at_ordinary_arguments_float
+5: PASS silu_is_finite_at_extreme_double_arguments
+5: PASS silu_is_finite_at_extreme_float_arguments
+5: 4/4 passed
+ 5/47 Test  #5: residual_formula .................   Passed    0.00 sec
+test 6
+      Start  6: residual_training
+
+6: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/residual_training_test
+6: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+6: Test timeout computed to be: 900
+6: curve chebyshev noise+residual           0:1.218e-01 100:1.197e-01 300:4.965e-02 1000:4.349e-03 3000:7.017e-04
+6: curve chebyshev variance+residual        0:3.496e-01 100:4.570e-04 300:1.419e-05 1000:9.271e-10 3000:1.511e-21
+6: PASS deep_chebyshev_with_residual_trains_from_noise
+6: curve bspline noise+residual             0:1.210e-01 100:1.204e-01 300:1.201e-01 1000:2.112e-02 3000:1.305e-03
+6: curve bspline variance+residual          0:8.572e-01 100:4.290e-03 300:1.123e-04 1000:1.485e-07 3000:7.629e-13
+6: PASS deep_bspline_with_residual_trains_from_noise
+6: curve rational guarded noise+residual    0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.204e-01 3000:1.201e-01 5000:2.427e-02 10000:8.725e-04
+6: curve rational guarded variance+residual 0:2.045e-01 100:8.302e-02 300:1.161e-02 1000:4.524e-03 3000:1.076e-03
+6: PASS deep_rational_guarded_with_residual_trains_from_noise
+6: curve rational absolute noise+residual   0:1.208e-01 100:1.205e-01 300:1.205e-01 1000:1.204e-01 3000:1.201e-01 5000:9.753e-02 10000:3.885e-03
+6: curve rational absolute variance+residual 0:1.896e-01 100:9.650e-02 300:2.423e-02 1000:6.369e-03 3000:2.097e-03
+6: PASS deep_rational_absolute_with_residual_trains_from_noise
+6: curve rational smooth noise+residual     0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.202e-01 5000:9.673e-02 10000:4.210e-03
+6: curve rational smooth variance+residual  0:1.937e-01 100:9.770e-02 300:1.806e-02 1000:7.428e-03 3000:1.314e-03
+6: PASS deep_rational_smooth_with_residual_trains_from_noise
+6: 5/5 passed
+ 6/47 Test  #6: residual_training ................   Passed   33.29 sec
+test 7
+      Start  7: basis
+
+7: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/basis_test
+7: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+7: Test timeout computed to be: 60
+7: PASS polynomial_closed_forms
+7: PASS polynomial_endpoint_identities
+7: PASS jacobi_independent_sum_and_derivative_identity
+7: PASS jacobi_large_parameters_avoid_spurious_coefficient_overflow
+7: PASS jacobi_asymmetric_large_parameter_endpoint_identities
+7: PASS jacobi_endpoint_extreme_derivative_finiteness_and_overflow
+7: PASS jacobi_parameters_adjacent_to_minus_one_match_independent_sum
+7: PASS fourier_order_and_angular_frequency
+7: PASS gaussian_values_centers_and_derivatives
+7: PASS gaussian_extreme_finite_parameters_and_underflow_tails
+7: PASS gaussian_underflow_value_can_have_representable_derivative
+7: PASS analytic_derivatives_match_central_differences
+7: PASS one_term_bases
+7: PASS invalid_sizes
+7: PASS invalid_family_parameters
+7: PASS nonfinite_input_is_rejected_for_every_family
+7: PASS numeric_overflow_is_explicit
+7: 17/17 passed
+ 7/47 Test  #7: basis ............................   Passed    0.00 sec
+test 8
+      Start  8: basis_config
+
+8: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/basis_config_test
+8: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+8: Test timeout computed to be: 60
+8: PASS basis_size_is_explicit_for_global_and_derived_for_local_families
+8: PASS default_configurations_of_global_families_are_valid
+8: PASS localized_families_reject_empty_and_mismatched_vectors
+8: PASS spline_with_too_few_knots_has_no_size_and_is_rejected
+8: PASS only_trainable_rbf_returns_nonlinear_derivatives
+8: PASS layer_exposes_its_typed_configuration
+8: 6/6 passed
+ 8/47 Test  #8: basis_config .....................   Passed    0.00 sec
+test 9
+      Start  9: carrier
+
+9: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/carrier_test
+9: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+9: Test timeout computed to be: 60
+9: PASS construction_selects_the_carrier_type
+9: PASS gradients_mirror_the_carrier
+9: PASS set_parameters_is_generic_over_carriers
+9: PASS set_carrier_validates_and_is_atomic
+9: PASS family_operations_are_free_functions
+9: PASS sgd_rejects_gradients_of_another_carrier
+9: PASS invalid_and_moved_from_carriers_are_rejected
+9: 7/7 passed
+ 9/47 Test  #9: carrier ..........................   Passed    0.00 sec
+test 10
+      Start 10: local_basis
+
+10: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/local_basis_test
+10: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+10: Test timeout computed to be: 60
+10: PASS clamped_cubic_matches_bernstein_closed_form
+10: PASS spline_right_knots_upper_inward_and_zero_extension
+10: PASS spline_partition_nonuniform_repeated_and_derivatives
+10: PASS spline_contract_validation
+10: PASS spline_extreme_domains_preserve_partition_and_slopes
+10: PASS wavelet_closed_forms_and_translation_scale_convention
+10: PASS wavelet_unit_energy_and_zero_mean
+10: PASS trainable_rbf_input_and_parameter_derivatives
+10: PASS localized_parameter_and_input_validation
+10: PASS localized_extreme_tails_and_explicit_overflow
+10: 10/10 passed
+10/47 Test #10: local_basis ......................   Passed    0.00 sec
+test 11
+      Start 11: local_layer
+
+11: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/local_layer_test
+11: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+11: Test timeout computed to be: 60
+11: PASS trainable_shared_rbf_vjp_and_sgd
+11: PASS rbf_invalid_updates_are_atomic_across_network
+11: PASS exact_knot_insertion_preserves_values_and_derivatives
+11: PASS data_adaptation_and_indexed_network_refinement
+11: PASS l2_objective_vjp_and_zero_defaults
+11: 5/5 passed
+11/47 Test #11: local_layer ......................   Passed    0.00 sec
+test 12
+      Start 12: rational
+
+12: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_test
+12: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+12: Test timeout computed to be: 60
+12: PASS independent_pade_and_scaled_quotient_identities
+12: PASS all_orders_input_and_nonlinear_parameter_derivatives
+12: PASS relative_guard_boundary_poles_and_conditioning
+12: PASS large_finite_denominator_preserves_small_nonlinear_vjp
+12: PASS representable_vjp_survives_underflowing_power_and_quotient
+12: PASS invalid_configuration_shapes_data_and_intermediates
+12: 6/6 passed
+12/47 Test #12: rational .........................   Passed    0.00 sec
+test 13
+      Start 13: rational_layer
+
+13: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_layer_test
+13: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+13: Test timeout computed to be: 60
+13: PASS rational_identity_shape_layout_and_empty_batch
+13: PASS layer_and_mixed_network_all_vjps
+13: PASS invalid_setters_sgd_and_network_atomicity
+13: PASS pole_guards_even_zero_upstream_and_explicit_update
+13: PASS rational_dimensions_shapes_nonfinite_and_moved_state
+13: rational training initial=0.204799 final=7.65998e-10 holdout=1.20136e-09
+13: PASS deterministic_rational_learning_with_independent_holdout
+13: 6/6 passed
+13/47 Test #13: rational_layer ...................   Passed    0.03 sec
+test 14
+      Start 14: rational_allocation
+
+14: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_allocation_test
+14: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+14: Test timeout computed to be: 60
+14: width=1 batch=1 full_call_allocations=8
+14: width=1 batch=64 full_call_allocations=8
+14: width=8 batch=1 full_call_allocations=8
+14: width=8 batch=64 full_call_allocations=8
+14: width=32 batch=1 full_call_allocations=8
+14: width=32 batch=64 full_call_allocations=8
+14: PASS complete_rational_layer_call_has_no_per_edge_heap_allocations
+14: 1/1 passed
+14/47 Test #14: rational_allocation ..............   Passed    0.01 sec
+test 15
+      Start 15: rational_policy
+
+15: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_policy_test
+15: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+15: Test timeout computed to be: 60
+15: PASS default_policy_is_guarded_and_invalid_policy_is_rejected
+15: PASS independent_closed_forms_per_policy
+15: PASS finite_difference_vjps_all_policies_and_orders
+15: PASS safe_policies_never_report_a_pole
+15: PASS absolute_subgradient_is_zero_where_the_sum_vanishes
+15: PASS safe_policies_keep_overflow_checks
+15: PASS representable_vjps_survive_underflowing_slopes
+15: PASS log_space_paths_with_negative_signs
+15: PASS set_carrier_rejects_an_unknown_policy
+15: PASS default_policy_is_bit_identical_to_pre_m2_formulas
+15: PASS sgd_into_a_pole_stops_guarded_but_continues_under_safe_policies
+15: PASS layer_and_network_vjps_under_safe_policies
+15: 12/12 passed
+15/47 Test #15: rational_policy ..................   Passed    0.00 sec
+test 16
+      Start 16: initializer
+
+16: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/initializer_test
+16: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+16: Test timeout computed to be: 60
+16: PASS constructors_keep_zero_initialization
+16: PASS polynomial_reference_moments_are_closed_forms
+16: PASS localized_reference_moments_match_numerical_integration
+16: PASS uniform_draws_follow_the_specified_transform
+16: PASS normal_draws_have_the_stated_moments
+16: PASS variance_scaling_preserves_the_reference_second_moment
+16: depth chebyshev   zero     0 0 0 0 0 0 0 0
+16: depth chebyshev   variance 0.952 0.671 0.708 1.05 1.53 0.716 0.746 0.605
+16: depth chebyshev   noise    0.00187 0.00164 0.00107 0.00154 0.00187 0.00217 0.00194 0.000912
+16: depth legendre    zero     0 0 0 0 0 0 0 0
+16: depth legendre    variance 0.856 0.515 0.578 0.826 1.31 0.605 0.629 0.384
+16: depth legendre    noise    0.0018 0.00129 0.000611 0.00113 0.00164 0.00113 0.0012 0.000781
+16: depth jacobi      zero     0 0 0 0 0 0 0 0
+16: depth jacobi      variance 0.951 0.515 0.539 0.715 1.17 0.603 0.591 0.312
+16: depth jacobi      noise    0.00329 0.00193 0.000979 0.00175 0.00247 0.00194 0.00194 0.00108
+16: depth bspline     zero     0 0 0 0 0 0 0 0
+16: depth bspline     variance 0.831 1.26 1.06 0.605 0.51 0.629 0.874 1
+16: depth bspline     noise    0.000368 0.000643 0.000506 0.000309 0.000461 0.000281 0.000424 0.000451
+16: depth hermite     zero     0 0 0 0 0 0 0 0
+16: depth hermite     variance 0.623 0.46 0.385 0.696 0.3 0.337 0.309 0.49
+16: depth hermite     noise    0.0237 0.00497 0.00367 0.00658 0.00694 0.00464 0.00328 0.00509
+16: depth fourier     zero     0 0 0 0 0 0 0 0
+16: depth fourier     variance 0.924 1.09 1.05 0.919 1.02 0.879 0.902 1.03
+16: depth fourier     noise    0.000255 0.000243 0.000318 0.000261 0.000235 0.000152 0.000141 0.000397
+16: depth rbf         zero     0 0 0 0 0 0 0 0
+16: depth rbf         variance 1.28 0.887 0.998 0.979 1.09 0.815 0.693 0.959
+16: depth rbf         noise    0.000855 0.000844 0.000922 0.0011 0.00102 0.0009 0.000387 0.000957
+16: depth mexican_hat zero     0 0 0 0 0 0 0 0
+16: depth mexican_hat variance 0.942 1.03 0.934 0.975 0.95 0.901 0.931 0.922
+16: depth mexican_hat noise    0.00139 0.00303 0.00194 0.00108 0.0015 0.00164 0.00324 0.00139
+16: PASS variance_stays_bounded_through_eight_layers
+16: PASS rational_denominators_are_bounded_nonzero_and_pole_free
+16: PASS rational_numerators_preserve_variance_on_the_domain
+16: PASS guarded_bound_must_respect_the_pole_guard
+16: PASS invalid_initializers_are_rejected_atomically
+16: PASS network_initialization_uses_layer_seeds_and_resets_layer_norm
+16: pinned 0cc0adf3c0731725
+16: pinned bd57711a756b9442
+16: pinned 7c38d487449c767e
+16: pinned 09b57ceb64cf560d
+16: pinned 4eaa871a69b30de0
+16: pinned 39e6d8394275d625
+16: pinned e46b5fb6a1201363
+16: pinned 309cb5b5cbe3b6d4
+16: pinned 44389dcaba3ba426
+16: PASS seeds_are_deterministic_and_pinned_across_platforms
+16: 13/13 passed
+16/47 Test #16: initializer ......................   Passed    0.59 sec
+test 17
+      Start 17: initializer_training
+
+17: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/initializer_training_test
+17: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+17: Test timeout computed to be: 900
+17: curve chebyshev zero               0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: curve chebyshev variance           0:3.496e-01 100:4.311e-04 300:1.099e-05 1000:4.519e-10 3000:2.027e-22
+17: curve chebyshev noise              0:1.216e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: PASS deep_chebyshev_trains_only_from_explicit_initialization
+17: curve bspline zero                 0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: curve bspline variance             0:8.572e-01 100:5.058e-03 300:1.353e-04 1000:4.273e-08 3000:7.267e-15
+17: curve bspline noise                0:1.209e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: PASS deep_bspline_trains_only_from_explicit_initialization
+17: curve rational guarded zero        0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: curve rational guarded variance    0:2.045e-01 100:8.951e-02 300:1.367e-02 1000:5.312e-03 3000:9.417e-04
+17: curve rational guarded noise       0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: PASS deep_rational_guarded_trains_only_from_explicit_initialization
+17: curve rational absolute zero       0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: curve rational absolute variance   0:1.896e-01 100:9.979e-02 300:2.952e-02 1000:7.234e-03 3000:2.102e-03
+17: curve rational absolute noise      0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: PASS deep_rational_absolute_trains_only_from_explicit_initialization
+17: curve rational smooth zero         0:1.205e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: curve rational smooth variance     0:1.937e-01 100:1.011e-01 300:2.244e-02 1000:8.930e-03 3000:1.844e-03
+17: curve rational smooth noise        0:1.207e-01 100:1.205e-01 300:1.205e-01 1000:1.205e-01 3000:1.205e-01
+17: PASS deep_rational_smooth_trains_only_from_explicit_initialization
+17: 5/5 passed
+17/47 Test #17: initializer_training .............   Passed   22.56 sec
+test 18
+      Start 18: package_custom_include
+
+18: Test command: /usr/bin/cmake "-DKAN_SOURCE_DIR=/home/core_ai/PyProjects/KAN" "-DKAN_BUILD_DIR=/home/core_ai/PyProjects/KAN/build-cuda-fma" "-DKAN_CONFIG=Release" "-DKAN_COMPILER=/usr/bin/c++" "-DKAN_GENERATOR=Unix Makefiles" "-DKAN_MAKE_PROGRAM=/usr/bin/gmake" "-P" "/home/core_ai/PyProjects/KAN/tests/package_test.cmake"
+18: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+18: Test timeout computed to be: 120
+18: -- Custom include directory installed-package consumer passed
+18/47 Test #18: package_custom_include ...........   Passed    0.69 sec
+test 19
+      Start 19: package_default_configuration
+
+19: Test command: /usr/bin/cmake "-DKAN_SOURCE_DIR=/home/core_ai/PyProjects/KAN" "-DKAN_BUILD_DIR=/home/core_ai/PyProjects/KAN/build-cuda-fma/default-config-regression" "-DKAN_CONFIG=" "-DKAN_COMPILER=/usr/bin/c++" "-DKAN_GENERATOR=Unix Makefiles" "-DKAN_MAKE_PROGRAM=/usr/bin/gmake" "-P" "/home/core_ai/PyProjects/KAN/tests/package_test.cmake"
+19: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+19: Test timeout computed to be: 120
+19: -- Custom include directory installed-package consumer passed
+19/47 Test #19: package_default_configuration ....   Passed    0.73 sec
+test 20
+      Start 20: cuda
+
+20: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/cuda_test
+20: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+20: Test timeout computed to be: 120
+20: CUDA device available: yes
+20: PASS cuda_forward_and_backward_match_cpu_across_shapes
+20: PASS cuda_endpoint_derivatives_and_unclipped_values
+20: PASS cuda_empty_batch_has_zero_parameter_gradients
+20: PASS cuda_rejects_invalid_shapes_and_nonfinite_data
+20: PASS cuda_checks_dimension_multiplication_before_allocation
+20: PASS cuda_legacy_api_supports_every_resident_carrier
+20: PASS cuda_legacy_empty_batch_shapes_every_carrier
+20: PASS cuda_legacy_reports_unsafe_rational_denominator
+20: PASS cuda_reports_nonfinite_computed_results
+20: PASS cuda_repeated_and_concurrent_calls_have_independent_storage
+20: PASS cuda_legacy_calls_release_device_storage
+20: 11/11 passed
+20/47 Test #20: cuda .............................   Passed    1.09 sec
+test 21
+      Start 21: cuda_deprecation_available
+
+21: Test command: /usr/bin/cmake "--build" "/home/core_ai/PyProjects/KAN/build-cuda-fma" "--config" "Release" "--target" "cuda_deprecation_available"
+21: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+21: Test timeout computed to be: 300
+21: [ 66%] Built target kan
+21: [ 88%] Built target kan_cuda
+21: [ 94%] Building CXX object CMakeFiles/cuda_deprecation_available.dir/tests/backends/cuda/cuda_deprecation_probe.cpp.o
+21: [100%] Linking CXX executable cuda_deprecation_available
+21: [100%] Built target cuda_deprecation_available
+21/47 Test #21: cuda_deprecation_available .......   Passed    0.49 sec
+test 22
+      Start 22: cuda_deprecation_resident_only
+
+22: Test command: /usr/bin/cmake "--build" "/home/core_ai/PyProjects/KAN/build-cuda-fma" "--config" "Release" "--target" "cuda_deprecation_resident_only"
+22: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+22: Test timeout computed to be: 300
+22: [ 66%] Built target kan
+22: [ 88%] Built target kan_cuda
+22: [ 94%] Building CXX object CMakeFiles/cuda_deprecation_resident_only.dir/tests/backends/cuda/cuda_deprecation_probe.cpp.o
+22: [100%] Linking CXX executable cuda_deprecation_resident_only
+22: [100%] Built target cuda_deprecation_resident_only
+22/47 Test #22: cuda_deprecation_resident_only ...   Passed    0.53 sec
+test 23
+      Start 23: cuda_deprecation_legacy
+
+23: Test command: /usr/bin/cmake "--build" "/home/core_ai/PyProjects/KAN/build-cuda-fma" "--config" "Release" "--target" "cuda_deprecation_legacy"
+23: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+23: Test timeout computed to be: 300
+23: [ 66%] Built target kan
+23: [ 88%] Built target kan_cuda
+23: [ 94%] Building CXX object CMakeFiles/cuda_deprecation_legacy.dir/tests/backends/cuda/cuda_deprecation_probe.cpp.o
+23: /home/core_ai/PyProjects/KAN/tests/backends/cuda/cuda_deprecation_probe.cpp: In function ‘int main()’:
+23: /home/core_ai/PyProjects/KAN/tests/backends/cuda/cuda_deprecation_probe.cpp:18:29: error: ‘std::vector<double> kan::cuda::forward(const kan::Layer&, std::span<const double>, std::size_t)’ is deprecated: kan::cuda::forward/backward are deprecated: build a kan::cuda::ResidentNetwork (kan/resident.hpp) once and reuse it [-Werror=deprecated-declarations]
+23:    18 |     (void)kan::cuda::forward(layer, std::vector<double>{0.0}, 1);
+23:       |           ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+23: In file included from /home/core_ai/PyProjects/KAN/tests/backends/cuda/cuda_deprecation_probe.cpp:9:
+23: /home/core_ai/PyProjects/KAN/include/kan/cuda.hpp:15:21: note: declared here
+23:    15 | std::vector<double> forward(const Layer& layer, std::span<const double> input, std::size_t batch);
+23:       |                     ^~~~~~~
+23: /home/core_ai/PyProjects/KAN/tests/backends/cuda/cuda_deprecation_probe.cpp:19:30: error: ‘kan::LayerGradients kan::cuda::backward(const kan::Layer&, std::span<const double>, std::size_t, std::span<const double>)’ is deprecated: kan::cuda::forward/backward are deprecated: build a kan::cuda::ResidentNetwork (kan/resident.hpp) once and reuse it [-Werror=deprecated-declarations]
+23:    19 |     (void)kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0});
+23:       |           ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+23: /home/core_ai/PyProjects/KAN/include/kan/cuda.hpp:18:16: note: declared here
+23:    18 | LayerGradients backward(const Layer& layer, std::span<const double> input, std::size_t batch,
+23:       |                ^~~~~~~~
+23: cc1plus: some warnings being treated as errors
+23: gmake[3]: *** [CMakeFiles/cuda_deprecation_legacy.dir/build.make:76: CMakeFiles/cuda_deprecation_legacy.dir/tests/backends/cuda/cuda_deprecation_probe.cpp.o] Error 1
+23: gmake[2]: *** [CMakeFiles/Makefile2:1496: CMakeFiles/cuda_deprecation_legacy.dir/all] Error 2
+23: gmake[1]: *** [CMakeFiles/Makefile2:1503: CMakeFiles/cuda_deprecation_legacy.dir/rule] Error 2
+23: gmake: *** [Makefile:829: cuda_deprecation_legacy] Error 2
+23/47 Test #23: cuda_deprecation_legacy ..........   Passed    0.46 sec
+test 24
+      Start 24: resident
+
+24: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_test
+24: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+24: Test timeout computed to be: 120
+24: PASS resident_all_families_mixed_topology_and_repeated_gpu_sgd
+24: PASS resident_states_upload_validation_and_move
+24: PASS resident_zero_batch_and_independent_instances
+24: PASS resident_numerical_overflow_and_atomic_network_sgd
+24: PASS resident_jacobi_endpoints_and_gaussian_extreme_tail
+24: 5/5 passed
+24/47 Test #24: resident .........................   Passed    0.55 sec
+test 25
+      Start 25: resident_review
+
+25: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_review_test
+25: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+25: Test timeout computed to be: 120
+25: PASS resident_input_and_parameter_gradients_match_independent_finite_differences
+25: PASS resident_failed_uploads_preserve_current_results_and_gradients
+25: PASS resident_gaussian_underflow_tail_has_relative_accuracy
+25: PASS resident_move_assignment_and_moved_cpu_rejection
+25: 4/4 passed
+25/47 Test #25: resident_review ..................   Passed    0.57 sec
+test 26
+      Start 26: resident_contraction
+
+26: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_contraction_test
+26: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+26: Test timeout computed to be: 120
+26: PASS contraction_wide_mixed_network_trains_like_cpu
+26: PASS contraction_engine_paths_agree_with_cpu
+26: PASS contraction_repeated_backward_after_one_forward
+26: PASS contraction_single_sample_and_single_edge
+26: PASS contraction_empty_batch_gives_penalty_only
+26: PASS contraction_nonfinite_results_are_reported
+26: 6/6 passed
+26/47 Test #26: resident_contraction .............   Passed    0.60 sec
+test 27
+      Start 27: resident_precision
+
+27: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_precision_test
+27: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+27: Test timeout computed to be: 120
+27: PASS default_precision_is_float64
+27: PASS float32_every_family_and_input_map_trains_like_fp64_cpu
+27: PASS float32_high_degree_recurrences_match_fp64_cpu
+27: PASS float32_rational_policies_match_fp64_cpu
+27: PASS float32_contraction_paths_match_fp64_cpu
+27: PASS tensor_float32_contractions_match_fp64_cpu
+27: PASS float32_reports_overflow_beyond_float_range
+27: PASS float32_rejects_unrepresentable_data_and_configuration
+27: PASS float32_log_space_tails_keep_representable_derivatives
+27: PASS float32_guarded_pole_threshold_follows_float_resolution
+27: PASS float32_zero_batch_and_parameter_rounding
+27: 11/11 passed
+27/47 Test #27: resident_precision ...............   Passed    1.41 sec
+test 28
+      Start 28: resident_upload
+
+28: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_upload_test
+28: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+28: Test timeout computed to be: 120
+28: PASS upload_after_cpu_training_matches_cpu
+28: PASS upload_matches_cpu_for_every_family_and_policy
+28: PASS upload_round_trips_with_download
+28: PASS upload_rejects_every_structure_mismatch_and_keeps_the_executor_unchanged
+28: PASS upload_rejects_fixed_basis_configuration_changes
+28: PASS float32_upload_rejects_unrepresentable_parameters_without_partial_upload
+28: PASS upload_invalidates_forward_state_and_keeps_input_and_upstream
+28: PASS upload_of_parameter_regions_above_one_mebibyte
+28: PASS upload_needs_no_allocation_and_handles_parameter_free_networks
+28: 9/9 passed
+28/47 Test #28: resident_upload ..................   Passed    0.94 sec
+test 29
+      Start 29: resident_training
+
+29: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_training_test
+29: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+29: Test timeout computed to be: 180
+29: PASS train_step_is_bitwise_the_eager_step
+29: PASS train_step_lifecycle_and_arguments
+29: PASS device_mse_matches_host_mse_bitwise_and_cpu
+29: PASS staged_batches_match_resident_steps
+29: PASS staged_batch_validation_changes_nothing
+29: PASS deferred_overflow_is_attributed_to_its_step
+29: PASS first_failure_of_an_interval_wins
+29: PASS synchronous_calls_report_pending_failures
+29: PASS status_interval_arguments
+29: PASS graph_replay_sees_uploaded_parameters_and_changes
+29: PASS training_allocates_no_device_storage
+29: PASS trainable_rbf_width_failure_is_deferred
+29: PASS moved_from_training_calls_fail
+29: 13/13 passed
+29/47 Test #29: resident_training ................   Passed    1.22 sec
+test 30
+      Start 30: resident_fused_expansion
+
+30: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/resident_fused_expansion_test
+30: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+30: Test timeout computed to be: 120
+30: PASS float32_fixed_basis_layer_reserves_no_derivative_rows
+30: 1/1 passed
+30/47 Test #30: resident_fused_expansion .........   Passed    0.47 sec
+test 31
+      Start 31: local_resident
+
+31: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/local_resident_test
+31: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+31: Test timeout computed to be: 120
+31: PASS local_resident_spline_independent_hat_values
+31: PASS local_resident_mixed_families_and_learned_parameter_snapshots
+31: PASS local_resident_localized_extreme_tails_and_spline_contracts
+31: PASS local_resident_nonzero_batch_l2_combines_with_data_vjp
+31: PASS local_resident_zero_batch_regularization_and_validation
+31: PASS local_resident_width_candidate_validation_is_atomic
+31: PASS local_resident_explicit_refinement_reconstruction
+31: 7/7 passed
+31/47 Test #31: local_resident ...................   Passed    0.55 sec
+test 32
+      Start 32: rational_resident
+
+32: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_resident_test
+32: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+32: Test timeout computed to be: 120
+32: PASS rational_resident_independent_pade_identity_and_vjp
+32: PASS rational_resident_mixed_network_all_vjps_and_trajectory
+32: PASS rational_resident_guard_invalidation_recovery_and_overflow
+32: PASS rational_resident_relative_conditioning_and_failed_backward_recovery
+32: PASS rational_resident_zero_batch_l2_and_atomic_sgd
+32: PASS rational_resident_representable_extreme_denominator_derivatives
+32: PASS rational_resident_capped_warp_launch_preserves_large_parameter_tail
+32: 7/7 passed
+32/47 Test #32: rational_resident ................   Passed    0.57 sec
+test 33
+      Start 33: rational_policy_resident
+
+33: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_policy_resident_test
+33: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+33: Test timeout computed to be: 120
+33: PASS policy_mixed_network_all_vjps_and_trajectory_match_cpu
+33: PASS resident_sgd_into_a_pole_stops_guarded_but_continues_under_safe_policies
+33: PASS resident_safe_policies_report_overflow_not_poles
+33: 3/3 passed
+33/47 Test #33: rational_policy_resident .........   Passed    0.57 sec
+test 34
+      Start 34: rational_resident_execution
+
+34: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/rational_resident_execution_test
+34: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+34: Test timeout computed to be: 180
+34: PASS forward_reports_overflowing_powers_with_a_finite_output
+34: PASS forward_reports_denominator_vjp_overflow_exactly_at_the_boundary
+34: PASS forward_reports_smooth_denominator_vjp_overflow
+34: PASS training_step_attributes_parameter_vjp_overflow_to_its_step
+34: PASS large_rational_launches_match_the_cpu
+34: 5/5 passed
+34/47 Test #34: rational_resident_execution ......   Passed    4.38 sec
+test 35
+      Start 35: input_map_resident
+
+35: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/input_map_resident_test
+35: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+35: Test timeout computed to be: 120
+35: PASS resident_maps_match_cpu_in_front_of_every_carrier
+35: PASS resident_layer_norm_wide_rows_and_many_tiles
+35: PASS resident_map_only_network_and_batch_zero
+35: PASS resident_fixed_map_network_without_parameters
+35: PASS resident_map_overflow_is_reported
+35: 5/5 passed
+35/47 Test #35: input_map_resident ...............   Passed    0.56 sec
+test 36
+      Start 36: residual_resident
+
+36: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/residual_resident_test
+36: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+36: Test timeout computed to be: 600
+36: PASS eager_forward_backward_sgd_match_the_cpu
+36: PASS empty_batch_gives_the_l2_gradients
+36: PASS train_steps_are_bitwise_the_eager_steps
+36: PASS failing_steps_roll_back_the_residual_weights
+36: PASS upload_and_download_parameters_carry_the_branch
+36: PASS extreme_inputs_are_finite
+36: cpu loss: 1.217597e-01 1.202868e-01 1.196728e-01 1.178583e-01 9.980602e-02 4.353082e-03
+36: f64 loss: 1.217597e-01 1.202868e-01 1.196728e-01 1.178583e-01 9.980602e-02 4.089798e-03
+36: f32 loss: 1.217597e-01 1.202868e-01 1.196728e-01 1.178583e-01 9.980597e-02 4.769056e-03
+36: tf32 loss: 1.217597e-01 1.202868e-01 1.196728e-01 1.178583e-01 9.980610e-02 4.605036e-03
+36: PASS noise_initialized_training_tracks_the_cpu
+36: 7/7 passed
+36/47 Test #36: residual_resident ................   Passed   15.61 sec
+test 37
+      Start 37: initializer_resident
+
+37: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/initializer_resident_test
+37: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+37: Test timeout computed to be: 120
+37: resident chebyshev: loss 2.329e-01 -> 1.870e-04
+37: PASS resident_chebyshev_from_variance_scaling
+37: resident bspline: loss 1.978e-01 -> 2.458e-03
+37: PASS resident_bspline_from_variance_scaling
+37: resident rational: loss 2.520e-01 -> 8.058e-02
+37: resident rational: loss 2.241e-01 -> 9.159e-02
+37: resident rational: loss 2.325e-01 -> 8.049e-02
+37: PASS resident_rational_policies_from_variance_scaling
+37: 3/3 passed
+37/47 Test #37: initializer_resident .............   Passed    1.90 sec
+test 38
+      Start 38: fit_polynomial
+
+38: Test command: /home/core_ai/PyProjects/KAN/build-cuda-fma/fit_polynomial
+38: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+38: Test timeout computed to be: 60
+38: Chebyshev KAN holdout MSE: 2.94787770627e-26
+38/47 Test #38: fit_polynomial ...................   Passed    0.00 sec
+test 39
+      Start 39: python
+
+39: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/python_test.py" "--cuda"
+39: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+39: Test timeout computed to be: 120
+39: .......
+39: ----------------------------------------------------------------------
+39: Ran 7 tests in 0.422s
+39: 
+39: OK
+39/47 Test #39: python ...........................   Passed    0.68 sec
+test 40
+      Start 40: local_python
+
+40: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/local_python_test.py" "--cuda"
+40: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+40: Test timeout computed to be: 120
+40: ....
+40: ----------------------------------------------------------------------
+40: Ran 4 tests in 0.375s
+40: 
+40: OK
+40/47 Test #40: local_python .....................   Passed    0.62 sec
+test 41
+      Start 41: rational_python
+
+41: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/rational_python_test.py" "--cuda"
+41: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+41: Test timeout computed to be: 120
+41: ........
+41: ----------------------------------------------------------------------
+41: Ran 8 tests in 0.233s
+41: 
+41: OK
+41/47 Test #41: rational_python ..................   Passed    0.45 sec
+test 42
+      Start 42: input_map_python
+
+42: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/input_map_python_test.py" "--cuda"
+42: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+42: Test timeout computed to be: 120
+42: ......
+42: ----------------------------------------------------------------------
+42: Ran 6 tests in 0.371s
+42: 
+42: OK
+42/47 Test #42: input_map_python .................   Passed    0.64 sec
+test 43
+      Start 43: residual_python
+
+43: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/residual_python_test.py" "--cuda"
+43: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+43: Test timeout computed to be: 120
+43: ......
+43: ----------------------------------------------------------------------
+43: Ran 6 tests in 0.497s
+43: 
+43: OK
+43/47 Test #43: residual_python ..................   Passed    0.80 sec
+test 44
+      Start 44: initializer_python
+
+44: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/initializer_python_test.py" "--cuda"
+44: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+44: Test timeout computed to be: 120
+44: ......
+44: ----------------------------------------------------------------------
+44: Ran 6 tests in 0.335s
+44: 
+44: OK
+44/47 Test #44: initializer_python ...............   Passed    0.59 sec
+test 45
+      Start 45: precision_python
+
+45: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/precision_python_test.py" "--cuda"
+45: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+45: Test timeout computed to be: 120
+45: ....
+45: ----------------------------------------------------------------------
+45: Ran 4 tests in 0.384s
+45: 
+45: OK
+45/47 Test #45: precision_python .................   Passed    0.65 sec
+test 46
+      Start 46: resident_upload_python
+
+46: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/resident_upload_python_test.py" "--cuda"
+46: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+46: Test timeout computed to be: 120
+46: .....
+46: ----------------------------------------------------------------------
+46: Ran 5 tests in 0.517s
+46: 
+46: OK
+46/47 Test #46: resident_upload_python ...........   Passed    0.78 sec
+test 47
+      Start 47: training_python
+
+47: Test command: /usr/bin/cmake "-E" "env" "PYTHONPATH=/home/core_ai/PyProjects/KAN/build-cuda-fma/python" "/home/core_ai/PyProjects/KAN/.venv/bin/python" "/home/core_ai/PyProjects/KAN/tests/python/training_python_test.py" "--cuda"
+47: Working Directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+47: Test timeout computed to be: 120
+47: .....
+47: ----------------------------------------------------------------------
+47: Ran 5 tests in 0.512s
+47: 
+47: OK
+47/47 Test #47: training_python ..................   Passed    0.82 sec
+
+100% tests passed, 0 tests failed out of 47
+
+Label Time Summary:
+build          =   1.47 sec*proc (3 tests)
+carriers       =   0.01 sec*proc (3 tests)
+core           =  50.93 sec*proc (10 tests)
+cpu            =  57.94 sec*proc (20 tests)
+cuda           =  32.47 sec*proc (18 tests)
+init           =  25.63 sec*proc (4 tests)
+integration    =   7.44 sec*proc (12 tests)
+local          =   1.18 sec*proc (4 tests)
+python         =   6.02 sec*proc (9 tests)
+rational       =   6.03 sec*proc (8 tests)
+resident       =   8.00 sec*proc (10 tests)
+
+Total Test time (real) =  96.45 sec

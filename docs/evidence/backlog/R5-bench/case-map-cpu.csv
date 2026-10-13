@@ -1,0 +1,31 @@
+old,new,before,after,same
+basis,basis,Passed 17/17,Passed 17/17,yes
+basis_config,basis_config,Passed 6/6,Passed 6/6,yes
+carrier,carrier,Passed 7/7,Passed 7/7,yes
+fit_polynomial,fit_polynomial,Passed -,Passed -,yes
+initializer,initializer,Passed 13/13,Passed 13/13,yes
+initializer_python,initializer_python,Passed ran 6 (skipped=1),Passed ran 6 (skipped=1),yes
+initializer_training,initializer_training,Passed 5/5,Passed 5/5,yes
+input_map,input_map,Passed 11/11,Passed 11/11,yes
+input_map_python,input_map_python,Passed ran 6 (skipped=1),Passed ran 6 (skipped=1),yes
+layer,layer,Passed 12/12,Passed 12/12,yes
+m3_basis,local_basis,Passed 10/10,Passed 10/10,yes
+m3_layer,local_layer,Passed 5/5,Passed 5/5,yes
+m3_python,local_python,Passed ran 4 (skipped=1),Passed ran 4 (skipped=1),yes
+m4_allocation,rational_allocation,Passed 1/1,Passed 1/1,yes
+m4_layer,rational_layer,Passed 6/6,Passed 6/6,yes
+m4_python,rational_python,Passed ran 8 (skipped=2),Passed ran 8 (skipped=2),yes
+m4_rational,rational,Passed 6/6,Passed 6/6,yes
+network,network,Passed 8/8,Passed 8/8,yes
+package_custom_include,package_custom_include,Passed -,Passed -,yes
+package_default_configuration,package_default_configuration,Passed -,Passed -,yes
+precision_python,precision_python,Passed ran 4 (skipped=3),Passed ran 4 (skipped=3),yes
+python,python,Passed ran 7 (skipped=1),Passed ran 7 (skipped=1),yes
+rational_policy,rational_policy,Passed 12/12,Passed 12/12,yes
+resident_upload_python,resident_upload_python,Passed ran 5 (skipped=5),Passed ran 5 (skipped=5),yes
+residual,residual,Passed 18/18,Passed 18/18,yes
+residual_formula,residual_formula,Passed 4/4,Passed 4/4,yes
+residual_python,residual_python,Passed ran 6 (skipped=1),Passed ran 6 (skipped=1),yes
+residual_training,residual_training,Passed 5/5,Passed 5/5,yes
+training_python,training_python,Passed ran 5 (skipped=5),Passed ran 5 (skipped=5),yes
+tests before 29, after 29, differences 0

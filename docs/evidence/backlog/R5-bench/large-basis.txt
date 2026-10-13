@@ -1,0 +1,6 @@
+== build-cuda
+PASS large RBF gradient tail, terms=8388481, allocations=2
+exit 0
+== build-cuda-fma
+PASS large RBF gradient tail, terms=8388481, allocations=2
+exit 0

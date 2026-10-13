@@ -1,0 +1,47 @@
+basis,Passed,17/17
+basis_config,Passed,6/6
+carrier,Passed,7/7
+cuda,Passed,11/11
+cuda_deprecation_available,Passed,-
+cuda_deprecation_legacy,Passed,-
+cuda_deprecation_resident_only,Passed,-
+fit_polynomial,Passed,-
+initializer,Passed,13/13
+initializer_python,Passed,ran 6
+initializer_resident,Passed,3/3
+initializer_training,Passed,5/5
+input_map,Passed,11/11
+input_map_python,Passed,ran 6
+input_map_resident,Passed,5/5
+layer,Passed,12/12
+m3_basis,Passed,10/10
+m3_layer,Passed,5/5
+m3_python,Passed,ran 4
+m3_resident,Passed,7/7
+m4_allocation,Passed,1/1
+m4_layer,Passed,6/6
+m4_python,Passed,ran 8
+m4_rational,Passed,6/6
+m4_resident,Passed,7/7
+network,Passed,8/8
+package_custom_include,Passed,-
+package_default_configuration,Passed,-
+precision_python,Passed,ran 4
+python,Passed,ran 7
+rational_policy,Passed,12/12
+rational_policy_resident,Passed,3/3
+rational_resident_execution,Passed,5/5
+resident,Passed,5/5
+resident_contraction,Passed,6/6
+resident_fused_expansion,Passed,1/1
+resident_precision,Passed,11/11
+resident_review,Passed,4/4
+resident_training,Passed,13/13
+resident_upload,Passed,9/9
+resident_upload_python,Passed,ran 5
+residual,Passed,18/18
+residual_formula,Passed,4/4
+residual_python,Passed,ran 6
+residual_resident,Passed,7/7
+residual_training,Passed,5/5
+training_python,Passed,ran 5
