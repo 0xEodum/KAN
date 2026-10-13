@@ -1,10 +1,12 @@
 #include "kan/resident.hpp"
+#include "backends/cuda/resident_testing.hpp"
 #include "carriers/basis_view.hpp"
 #include "carriers/rational/rational_formulas.hpp"
 #include "core/input_map_formulas.hpp"
 #include "core/residual_formulas.hpp"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <cub/device/device_segmented_radix_sort.cuh>
 #include <algorithm>
 #include <cfloat>
 #include <cstddef>
@@ -25,6 +27,18 @@
 // data and the public API stay double.
 
 namespace kan::cuda {
+namespace testing {
+namespace {
+// Active ResidentTestScope of this thread (backlog C5 test hooks).
+struct TestScopeState {
+    SplinePath path = SplinePath::Automatic;
+    ResidentLayout* layout = nullptr;
+};
+thread_local TestScopeState test_scope;
+} // namespace
+ResidentTestScope::ResidentTestScope(SplinePath path, ResidentLayout* layout) { test_scope = {path, layout}; }
+ResidentTestScope::~ResidentTestScope() { test_scope = {}; }
+} // namespace testing
 namespace {
 void check(cudaError_t error, const char* operation) {
     if (error != cudaSuccess) throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(error));
@@ -339,6 +353,355 @@ __global__ void fill_kernel(T* values, std::size_t count, T value) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
         values[index] = value;
+}
+// Sparse B-spline path (backlog C5). At any input only degree+1 = P of a
+// spline's terms can be nonzero, so a sparse layer keeps per input and sample
+// the index g of the first of them (`first`, unsigned [inputs][capacity]) and
+// their P values and input derivatives ([inputs][P][capacity]; samples
+// fastest; g = 0 and zero values outside the domain) instead of the dense
+// rows, and contracts only those terms:
+//   y[b,o]    = bias[o] + sum_i sum_j phi[b,i,j]*C[o,i,g+j]
+//   dC[o,i,k] = sum over the samples with g <= k < g+P of U[b,o]*phi[b,i,k-g], + lambda*C
+//   dx[b,i]   = sum_j phi'[b,i,j] * sum_o U[b,o]*C[o,i,g+j]
+// The forward and input-VJP kernels map lanes to samples (each thread owns its
+// outputs: fixed order, no atomics) and read C tiles staged in shared memory
+// with outputs fastest as 16-byte vectors: GB10 issues 32-bit shared loads at
+// half a warp instruction per clock (1.8 T loads/s), 16-byte loads deliver
+// 6.5 T values/s (C5 evidence). The coefficient VJP walks every input's
+// samples ordered by g (a stable segmented radix sort, CUB): one thread per
+// (output, input) keeps the P coefficients g..g+P-1 in a register window and
+// writes a coefficient when the window passes it, so every sum has a fixed
+// order. P (1..4) is a template parameter: phi and the accumulators live in
+// registers.
+template<class T> struct Vector16;
+template<> struct Vector16<float> { using type = float4; static constexpr unsigned size = 4; };
+template<> struct Vector16<double> { using type = double2; static constexpr unsigned size = 2; };
+template<class T> constexpr unsigned vector16 = Vector16<T>::size;
+template<class T> __device__ __forceinline__ void load16(const T* p, T (&out)[vector16<T>]) {
+    const auto v = *reinterpret_cast<const typename Vector16<T>::type*>(p);
+    if constexpr (vector16<T> == 4) { out[0] = v.x; out[1] = v.y; out[2] = v.z; out[3] = v.w; }
+    else { out[0] = v.x; out[1] = v.y; }
+}
+constexpr unsigned max_sparse_spline_width = 4; // degree + 1 of the instantiated sparse kernels
+template<class T> struct SparseRows {
+    unsigned* first;
+    T* values;
+    T* derivatives;
+    std::size_t capacity;
+};
+
+// Sparse rows of `batch` samples from X (batch, inputs). A block takes 32
+// inputs x spline_tile_samples samples: it reads X inputs fastest
+// (coalesced), evaluates the spline into shared memory and writes the rows
+// samples fastest (coalesced). With the residual branch the same pass writes
+// the layer's S and silu' rows (backlog M3).
+template<class T> constexpr unsigned spline_tile_samples = std::is_same_v<T, double> ? 16 : 32;
+template<unsigned P, bool Residual, class T>
+__global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
+                                    const T* knots, std::size_t terms, SiluRows<T> silu, int* status) {
+    constexpr unsigned TS = spline_tile_samples<T>;
+    __shared__ unsigned first[32][TS+1];
+    __shared__ T values[P][32][TS+1], derivatives[P][32][TS+1];
+    const StatusGuard guard{status};
+    const auto i0 = static_cast<std::size_t>(blockIdx.x)*32;
+    for (auto b0 = static_cast<std::size_t>(blockIdx.y)*TS; b0 < batch; b0 += static_cast<std::size_t>(gridDim.y)*TS) {
+        for (unsigned e = threadIdx.x; e < 32*TS; e += blockDim.x) {
+            const unsigned ii = e%32, bb = e/32;
+            const auto i = i0+ii, b = b0+bb;
+            if (i >= inputs || b >= batch) continue;
+            const T x = input[b*inputs+i];
+            T v[P], d[P];
+            auto g = detail::spline_span_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
+            if (g == terms) {
+                g = 0;
+                for (unsigned j = 0; j < P; ++j) { v[j] = 0; d[j] = 0; }
+            }
+            first[ii][bb] = static_cast<unsigned>(g);
+            for (unsigned j = 0; j < P; ++j) { values[j][ii][bb] = v[j]; derivatives[j][ii][bb] = d[j]; }
+            if constexpr (Residual) write_silu(silu, b*inputs+i, x, guard);
+        }
+        __syncthreads();
+        for (unsigned e = threadIdx.x; e < 32*TS; e += blockDim.x) {
+            const unsigned bb = e%TS, ii = e/TS;
+            const auto i = i0+ii, b = b0+bb;
+            if (i >= inputs || b >= batch) continue;
+            rows.first[i*rows.capacity+b] = first[ii][bb];
+            for (unsigned j = 0; j < P; ++j) {
+                rows.values[(i*P+j)*rows.capacity+b] = values[j][ii][bb];
+                rows.derivatives[(i*P+j)*rows.capacity+b] = derivatives[j][ii][bb];
+            }
+        }
+        __syncthreads();
+    }
+}
+
+// Forward: a block of stage_threads samples (lane = sample) and
+// spline_outputs outputs; C[o0..o0+15, i, :] for `chunk` inputs at a time is
+// staged as rows (i, k) of the 16 outputs (padded by one vector), so a sample
+// reads its P rows g..g+P-1 as 16-byte vectors. Each thread sums its outputs
+// over i, then j in ascending order and adds the bias (when given; the
+// residual branch adds S*W^T first and bias_kernel then adds the bias).
+constexpr unsigned spline_outputs = 16;
+template<class T> constexpr unsigned spline_forward_stride = spline_outputs+vector16<T>;
+template<unsigned P, class T>
+__global__ void __launch_bounds__(stage_threads) spline_forward_kernel(const unsigned* first, const T* values, std::size_t capacity,
+        const T* c, const T* bias, T* y, std::size_t batch, std::size_t inputs, std::size_t outputs, std::size_t terms,
+        unsigned chunk, int* status) {
+    constexpr unsigned TO = spline_outputs, V = vector16<T>, RS = spline_forward_stride<T>;
+    T* cs = stage_memory<T>();
+    const auto b = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+    const auto o0 = static_cast<std::size_t>(blockIdx.y)*TO;
+    const auto sample = b < batch ? b : batch-1;
+    const unsigned warp = threadIdx.x/32, lane = threadIdx.x%32, warps = blockDim.x/32;
+    T acc[TO];
+#pragma unroll
+    for (unsigned t = 0; t < TO; ++t) acc[t] = 0;
+    for (std::size_t i0 = 0; i0 < inputs; i0 += chunk) {
+        const auto count = inputs-i0 < chunk ? inputs-i0 : static_cast<std::size_t>(chunk);
+        const auto row = count*terms;
+        __syncthreads();
+        for (unsigned oo = warp; oo < TO; oo += warps) {
+            const auto o = o0+oo;
+            const T* source = c+(o*inputs+i0)*terms;
+            for (auto r = static_cast<std::size_t>(lane); r < row; r += 32) cs[r*RS+oo] = o < outputs ? source[r] : T(0);
+        }
+        __syncthreads();
+        // The next input's rows are loaded while the current one is reduced.
+        unsigned g = first[i0*capacity+sample];
+        T phi[P];
+#pragma unroll
+        for (unsigned j = 0; j < P; ++j) phi[j] = values[(i0*P+j)*capacity+sample];
+        for (std::size_t ii = 0; ii < count; ++ii) {
+            unsigned next_g = 0;
+            T next_phi[P];
+            if (ii+1 < count) {
+                const auto i = i0+ii+1;
+                next_g = first[i*capacity+sample];
+#pragma unroll
+                for (unsigned j = 0; j < P; ++j) next_phi[j] = values[(i*P+j)*capacity+sample];
+            }
+            const T* base = cs+(ii*terms+g)*RS;
+#pragma unroll
+            for (unsigned j = 0; j < P; ++j)
+#pragma unroll
+                for (unsigned q = 0; q < TO; q += V) {
+                    T cv[V];
+                    load16(base+j*RS+q, cv);
+#pragma unroll
+                    for (unsigned e = 0; e < V; ++e) acc[q+e] += phi[j]*cv[e];
+                }
+            g = next_g;
+#pragma unroll
+            for (unsigned j = 0; j < P; ++j) phi[j] = next_phi[j];
+        }
+    }
+    if (b >= batch) return;
+#pragma unroll
+    for (unsigned t = 0; t < TO; ++t) {
+        const auto o = o0+t;
+        if (o >= outputs) break;
+        T sum = acc[t];
+        if (bias) { sum += bias[o]; report(sum, status); }
+        y[b*outputs+o] = sum;
+    }
+}
+
+// Input VJP: a block of stage_threads samples (lane = sample) and `group`
+// (<= spline_dx_inputs, fewer for long rows that would not fit the shared
+// memory) inputs; output chunks of two vectors at a time: U[b, chunk]
+// rows (padded by one vector) and C[chunk, i, :] staged as rows (i, k) of the
+// chunk's outputs. Each thread accumulates w_j = sum_o U[b,o]*C[o,i,g+j] in
+// ascending o, then dx = sum_j phi'_j*w_j.
+constexpr unsigned spline_dx_inputs = 8;
+template<class T> constexpr unsigned spline_dx_outputs = 2*vector16<T>;
+template<class T> constexpr unsigned spline_dx_stride = spline_dx_outputs<T>+vector16<T>;
+template<unsigned P, class T>
+__global__ void __launch_bounds__(stage_threads) spline_input_kernel(const unsigned* first, const T* derivatives, std::size_t capacity,
+        const T* c, const T* u, T* dx, std::size_t batch, std::size_t inputs, std::size_t outputs, std::size_t terms, unsigned group,
+        int* status) {
+    constexpr unsigned TI = spline_dx_inputs, V = vector16<T>, OC = spline_dx_outputs<T>, RS = spline_dx_stride<T>;
+    T* us = stage_memory<T>();
+    T* cs = us+blockDim.x*RS;
+    const auto b0 = static_cast<std::size_t>(blockIdx.x)*blockDim.x, b = b0+threadIdx.x;
+    const auto i0 = static_cast<std::size_t>(blockIdx.y)*group;
+    const auto sample = b < batch ? b : batch-1;
+    const unsigned count = inputs-i0 < group ? static_cast<unsigned>(inputs-i0) : group;
+    const unsigned warp = threadIdx.x/32, lane = threadIdx.x%32, warps = blockDim.x/32;
+    unsigned g[TI];
+    T acc[TI][P];
+#pragma unroll
+    for (unsigned t = 0; t < TI; ++t) {
+        g[t] = t < count ? first[(i0+t)*capacity+sample] : 0;
+#pragma unroll
+        for (unsigned j = 0; j < P; ++j) acc[t][j] = 0;
+    }
+    const auto row = static_cast<std::size_t>(count)*terms;
+    for (std::size_t oc0 = 0; oc0 < outputs; oc0 += OC) {
+        const auto width = outputs-oc0 < OC ? outputs-oc0 : static_cast<std::size_t>(OC);
+        __syncthreads();
+        for (auto e = static_cast<std::size_t>(threadIdx.x); e < static_cast<std::size_t>(blockDim.x)*OC; e += blockDim.x) {
+            const auto r = e/OC, o = e%OC;
+            us[r*RS+o] = b0+r < batch && o < width ? u[(b0+r)*outputs+oc0+o] : T(0);
+        }
+        for (unsigned o = warp; o < OC; o += warps) {
+            const T* source = c+((oc0+o)*inputs+i0)*terms;
+            for (auto r = static_cast<std::size_t>(lane); r < group*terms; r += 32) cs[r*RS+o] = o < width && r < row ? source[r] : T(0);
+        }
+        __syncthreads();
+        const T* own = us+threadIdx.x*RS;
+#pragma unroll
+        for (unsigned o = 0; o < OC; o += V) {
+            T uv[V];
+            load16(own+o, uv);
+#pragma unroll
+            for (unsigned t = 0; t < TI; ++t) {
+                if (t >= group) break;
+                const T* base = cs+(t*terms+g[t])*RS+o;
+#pragma unroll
+                for (unsigned j = 0; j < P; ++j) {
+                    T cv[V];
+                    load16(base+j*RS, cv);
+#pragma unroll
+                    for (unsigned e = 0; e < V; ++e) acc[t][j] += uv[e]*cv[e];
+                }
+            }
+        }
+    }
+    if (b >= batch) return;
+#pragma unroll
+    for (unsigned t = 0; t < TI; ++t) {
+        if (t >= count) break;
+        T sum = 0;
+#pragma unroll
+        for (unsigned j = 0; j < P; ++j) sum += derivatives[((i0+t)*P+j)*capacity+b]*acc[t][j];
+        dx[b*inputs+i0+t] = sum; report(sum, status);
+    }
+}
+
+// Coefficient and bias VJPs. Block (blockIdx.x, i): spline_parameter_warps
+// warps of 32 lanes, lane = output o (and o + 32, ...), over input i's
+// samples in sorted order (g ascending, then sample index), staged
+// spline_parameter_chunk at a time. Lane accumulators acc[j] belong to
+// coefficient `current` + j; when the samples move past `current`, its sum
+// (+ lambda*C) is written and the window shifts. The input-0 blocks also sum
+// U over all samples (in the same order) into the bias VJP. Blocks along z
+// split the coefficients of an input into `ranges` contiguous ranges [k0, k1)
+// (layers with few outputs: enough blocks for the GPU); a block walks only the
+// sorted samples with k0-P < g < k1 (found by binary search) and writes only
+// its coefficients, whose sums keep the same order for any split.
+constexpr unsigned spline_parameter_outputs = 2, spline_parameter_warps = 4, spline_parameter_chunk = 256, spline_parameter_lookahead = 8;
+template<unsigned P, class T>
+__global__ void spline_parameter_kernel(const unsigned* sorted_first, const unsigned* order, const T* values, std::size_t capacity,
+        const T* u, const T* c, T* dc, T* db, T lambda, std::size_t batch, std::size_t inputs, std::size_t outputs,
+        std::size_t terms, unsigned ranges, int* status) {
+    constexpr unsigned TO = spline_parameter_outputs, R = spline_parameter_chunk;
+    __shared__ unsigned sample_of[R], first_of[R];
+    __shared__ T phi_of[R][P];
+    const unsigned lane = threadIdx.x%32, warp = threadIdx.x/32;
+    const auto obase = (static_cast<std::size_t>(blockIdx.x)*(blockDim.x/32)+warp)*32*TO+lane;
+    const auto k0 = terms*blockIdx.z/ranges, k1 = terms*(blockIdx.z+1)/ranges;
+    const bool bias_range = blockIdx.z == 0;
+    for (auto i = static_cast<std::size_t>(blockIdx.y); i < inputs; i += gridDim.y) {
+        T acc[TO][P], bias_sum[TO];
+#pragma unroll
+        for (unsigned t = 0; t < TO; ++t) {
+            bias_sum[t] = 0;
+#pragma unroll
+            for (unsigned j = 0; j < P; ++j) acc[t][j] = 0;
+        }
+        // Sorted positions [begin, end) of the samples with first+P > k0 and first < k1
+        // (all samples for the bias range of input 0).
+        const unsigned* keys = sorted_first+i*capacity;
+        const auto lower = [&](std::size_t key) {
+            std::size_t lo = 0, hi = batch;
+            while (lo < hi) { const auto mid = (lo+hi)/2; if (keys[mid] < key) lo = mid+1; else hi = mid; }
+            return lo;
+        };
+        const bool all = i == 0 && bias_range;
+        const std::size_t begin = all || k0 < P ? 0 : lower(k0-P+1), end = all || k1 >= terms ? batch : lower(k1);
+        std::size_t current = k0 < P ? 0 : k0-P+1;
+        const auto emit = [&] {
+#pragma unroll
+            for (unsigned t = 0; t < TO; ++t) {
+                const auto o = obase+32*t;
+                if (o < outputs && current >= k0 && current < k1) {
+                    const auto q = (o*inputs+i)*terms+current;
+                    // Without L2 the coefficients are not read (acc + 0*c == acc:
+                    // acc starts at +0 and is never -0). Streaming stores: dC
+                    // passes once, the U rows are reread from L2.
+                    const T sum = lambda != 0 ? acc[t][0]+lambda*c[q] : acc[t][0];
+                    __stcs(dc+q, sum); report(sum, status);
+                }
+#pragma unroll
+                for (unsigned j = 0; j+1 < P; ++j) acc[t][j] = acc[t][j+1];
+                acc[t][P-1] = 0;
+            }
+            ++current;
+        };
+        for (std::size_t r0 = begin; r0 < end; r0 += R) {
+            const auto n = end-r0 < R ? static_cast<unsigned>(end-r0) : R;
+            __syncthreads();
+            for (unsigned r = threadIdx.x; r < n; r += blockDim.x) {
+                const auto b = order[i*capacity+r0+r];
+                sample_of[r] = b; first_of[r] = sorted_first[i*capacity+r0+r];
+#pragma unroll
+                for (unsigned j = 0; j < P; ++j) phi_of[r][j] = values[(i*P+j)*capacity+b];
+            }
+            __syncthreads();
+            // U rows of D samples are loaded before they are accumulated: the
+            // loop is bound by the latency of these L2 loads otherwise (C5
+            // profiling: 1.3-1.9x for D = 8).
+            constexpr unsigned D = spline_parameter_lookahead;
+            for (unsigned r = 0; r < n; r += D) {
+                T uv[D][TO];
+#pragma unroll
+                for (unsigned q = 0; q < D; ++q) {
+                    const bool valid = r+q < n;
+                    const auto row = valid ? static_cast<std::size_t>(sample_of[r+q])*outputs : 0;
+#pragma unroll
+                    for (unsigned t = 0; t < TO; ++t) {
+                        const auto o = obase+32*t;
+                        uv[q][t] = valid && o < outputs ? u[row+o] : T(0);
+                    }
+                }
+#pragma unroll
+                for (unsigned q = 0; q < D; ++q) {
+                    if (r+q >= n) break;
+                    const unsigned g = first_of[r+q];
+                    while (current < g && current < k1) emit();
+#pragma unroll
+                    for (unsigned t = 0; t < TO; ++t) {
+#pragma unroll
+                        for (unsigned j = 0; j < P; ++j) acc[t][j] += uv[q][t]*phi_of[r+q][j];
+                        if (all) bias_sum[t] += uv[q][t];
+                    }
+                }
+            }
+        }
+        while (current < k1) emit();
+        if (all) {
+#pragma unroll
+            for (unsigned t = 0; t < TO; ++t) {
+                const auto o = obase+32*t;
+                if (o < outputs) { db[o] = bias_sum[t]; report(bias_sum[t], status); }
+            }
+        }
+        __syncthreads();
+    }
+}
+// Segment bounds of the per-input sort: [i*capacity, i*capacity + batch).
+__global__ void spline_segments_kernel(int* offsets, std::size_t inputs, std::size_t capacity, std::size_t batch) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < inputs; i += stride) {
+        offsets[i] = static_cast<int>(i*capacity);
+        offsets[inputs+i] = static_cast<int>(i*capacity+batch);
+    }
+}
+// Sample indices b at [i*capacity + b], the values of the per-input sort.
+__global__ void spline_indices_kernel(unsigned* indices, std::size_t inputs, std::size_t capacity) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto e = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; e < inputs*capacity; e += stride)
+        indices[e] = static_cast<unsigned>(e%capacity);
 }
 constexpr unsigned nonlinear_tiles=64;
 // Center/log-width VJPs: sum over rows r of W[r,k]*(-dPhi/dx) and W[r,k]*dPhi/dlog-width.
@@ -1112,10 +1475,27 @@ struct ExpansionPlan {
     bool stored_derivatives = true;
 };
 
+// Sparse B-spline path (backlog C5, kernels above): arena offsets in elements
+// of T (the index regions are unsigned/int, rounded up to whole elements).
+// Inactive: the layer keeps the dense rows of ExpansionPlan.
+struct SparseSplinePlan {
+    bool active = false;
+    unsigned width = 0;   // degree + 1
+    unsigned chunk = 1;   // inputs per staged C tile of spline_forward_kernel
+    int key_bits = 1;     // significant bits of the largest first index
+    unsigned ranges = 1;  // coefficient ranges per input of spline_parameter_kernel (grid z)
+    unsigned threads = 0; // samples per block of spline_forward_kernel
+    unsigned group = 0;   // inputs per block of spline_input_kernel
+    std::size_t first = 0, values = 0, derivatives = 0;              // sparse rows
+    std::size_t sorted_first = 0, order = 0, indices = 0, offsets = 0; // per-input sort
+    std::size_t sort_storage = 0, sort_bytes = 0;                      // CUB temporary storage
+};
+
 template<class T>
 struct BasisPlan {
     using edges_type = BasisEdges;
     ExpansionPlan<T> expansion;
+    SparseSplinePlan sparse;
 };
 
 // Adds trainable shared centers/log widths (nonlinear block: centers, then
@@ -1297,8 +1677,23 @@ template<class T> void reserve_rows(ExpansionPlan<T>& p, std::size_t capacity, R
 template<class T> bool recompute_derivatives(const ExpansionPlan<T>& p) {
     return !p.view.trainable && stage_rows<T>(p.block.terms, stage_planes<RecomputedDerivatives<detail::BasisKind::Chebyshev, T>>) > 0;
 }
+// Elements of T holding `count` 32-bit indices.
+template<class T> std::size_t index_elements(std::size_t count) { return (product(count, sizeof(unsigned))+sizeof(T)-1)/sizeof(T); }
+template<class T> void reserve_sparse(SparseSplinePlan& p, const ParameterBlock& b, std::size_t capacity, Reservation<T>& reserve) {
+    const auto samples = product(capacity, b.inputs), rows = product(samples, p.width);
+    p.first = reserve(index_elements<T>(samples));
+    p.values = reserve(rows); p.derivatives = reserve(rows);
+    p.sorted_first = reserve(index_elements<T>(samples)); p.order = reserve(index_elements<T>(samples));
+    p.indices = reserve(index_elements<T>(samples)); p.offsets = reserve(index_elements<T>(product(b.inputs, 2)));
+    p.sort_storage = reserve((p.sort_bytes+sizeof(T)-1)/sizeof(T));
+}
 template<class T> void reserve_workspace(BasisPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
+    if (plan.sparse.active) {
+        reserve_sparse(plan.sparse, p.block, capacity, reserve);
+        p.knots = reserve(p.block.terms+p.view.degree+1);
+        return;
+    }
     p.stored_derivatives = !recompute_derivatives(p);
     reserve_rows(p, capacity, reserve);
     if (p.view.kind == detail::BasisKind::GaussianRbf || p.view.kind == detail::BasisKind::MexicanHat)
@@ -1339,6 +1734,10 @@ template<class T, class P> void reserve_residual(P& plan, std::size_t capacity, 
 }
 
 template<class P> constexpr bool is_expansion = requires(const P& p) { p.expansion; };
+// A B-spline layer on the sparse path (no dense rows, W scratch or partial tiles).
+template<class P> bool sparse_layer(const P& p) {
+    if constexpr (requires { p.sparse; }) return p.sparse.active; else return false;
+}
 template<class P> constexpr bool is_kan_layer = requires { typename P::edges_type; };
 
 // Elements of the shared W = U*C scratch an expansion layer needs, and the
@@ -1348,7 +1747,7 @@ template<class T> std::size_t scratch_extent(const Plan<T>& plan, std::size_t ca
         using P = std::decay_t<decltype(p)>;
         std::size_t extent = 0;
         if constexpr (is_expansion<P>)
-            extent = product(product(capacity, p.expansion.block.inputs), p.expansion.block.terms);
+            if (!sparse_layer(p)) extent = product(product(capacity, p.expansion.block.inputs), p.expansion.block.terms);
         if constexpr (is_kan_layer<P>)
             if (block_of(p).residual_count) extent = std::max(extent, product(capacity, block_of(p).inputs));
         return extent;
@@ -1369,7 +1768,7 @@ template<class T> std::size_t partial_extent(const Plan<T>& plan, std::size_t ca
         std::size_t extent = 0;
         if constexpr (is_expansion<P>) {
             const auto checked = p.expansion.block.coefficients+p.expansion.block.outputs;
-            extent = checked <= small_parameter_vjp<T> ? checked*parameter_tile_count(capacity) : 0;
+            extent = checked <= small_parameter_vjp<T> && !sparse_layer(p) ? checked*parameter_tile_count(capacity) : 0;
         }
         if constexpr (is_kan_layer<P>) {
             const auto& b = block_of(p);
@@ -1379,6 +1778,120 @@ template<class T> std::size_t partial_extent(const Plan<T>& plan, std::size_t ca
         }
         return extent;
     }, plan);
+}
+
+// Selection of the sparse B-spline path (backlog C5), per layer at
+// construction, so that the arena holds either the dense rows or the sparse
+// ones and graphs, uploads and rollback see a fixed layout.
+struct SplineDevice {
+    int fp64_ratio = 0;           // cudaDevAttrSingleToDoublePrecisionPerfRatio
+    unsigned multiprocessors = 1; // cudaDevAttrMultiProcessorCount
+    std::size_t l2_bytes = 0;     // cudaDevAttrL2CacheSize
+    std::size_t shared_optin = 0; // cudaDevAttrMaxSharedMemoryPerBlockOptin
+};
+SplineDevice spline_device() {
+    SplineDevice d;
+    int device = 0, value = 0;
+    if (cudaGetDevice(&device) != cudaSuccess) return d;
+    if (cudaDeviceGetAttribute(&value, cudaDevAttrSingleToDoublePrecisionPerfRatio, device) == cudaSuccess) d.fp64_ratio = value;
+    if (cudaDeviceGetAttribute(&value, cudaDevAttrMultiProcessorCount, device) == cudaSuccess && value > 0)
+        d.multiprocessors = static_cast<unsigned>(value);
+    if (cudaDeviceGetAttribute(&value, cudaDevAttrL2CacheSize, device) == cudaSuccess && value > 0)
+        d.l2_bytes = static_cast<std::size_t>(value);
+    if (cudaDeviceGetAttribute(&value, cudaDevAttrMaxSharedMemoryPerBlockOptin, device) == cudaSuccess)
+        d.shared_optin = static_cast<std::size_t>(value);
+    return d;
+}
+// Automatic selection (C5 evidence: GB10 sweep of complete training steps,
+// forced dense against forced sparse, 64-, 256- and 1024-wide networks, K/(p+1)
+// 1.5 to 24). A layer takes the sparse path when
+// - terms/(degree+1) reaches the precision's ratio: FP64 on a device with a
+//   reduced FP64 rate (fp64_ratio >= 8) 2, where both paths are FP64-ALU bound
+//   at about the same rate per multiply-add; FP32 2 against SGEMM plus the
+//   dense rows' memory traffic; TF32 4 against tensor-op GEMMs;
+// - and, when the layer's upstream U (capacity*outputs values) exceeds half the
+//   L2 cache, a higher ratio: FP32 6, TF32 16, FP64 8 (FP64 not measured:
+//   extrapolated as four times its in-L2 ratio, like the first FP32 rule): the coefficient VJP rereads U once per input, from L2 while it
+//   fits and from DRAM otherwise (1024-wide steps: 4096*1024 FP32 = 16 MiB);
+// - and its dense forward contraction has at least 2^22 (FP32), 2^23 (TF32) or
+//   2^21 (FP64) multiply-adds per SM at capacity (2.0e8 / 4.0e8 / 1.0e8 on GB10's
+//   48 SMs): below, the sparse step's extra launches and serial per-warp sample
+//   walks cost more than the saved multiply-adds (64x64x32x16 at batch 1024).
+// The ratios and floors are the smallest values at which no configuration of
+// the sweep ran slower with the automatic choice than with the dense rows.
+// Without a reduced FP64 rate FP64 uses the FP32 values.
+double sparse_spline_ratio(bool fp64, bool tensor_ops, bool upstream_in_l2, const SplineDevice& d) {
+    const bool slow_fp64 = fp64 && d.fp64_ratio >= 8;
+    const double ratio = slow_fp64 ? 2.0 : tensor_ops ? 4.0 : 2.0;
+    if (upstream_in_l2) return ratio;
+    return slow_fp64 ? 8.0 : tensor_ops ? 16.0 : 6.0;
+}
+std::size_t sparse_spline_work(bool fp64, bool tensor_ops, const SplineDevice& d) {
+    const unsigned bits = fp64 && d.fp64_ratio >= 8 ? 21 : tensor_ops && !fp64 ? 23 : 22;
+    return (std::size_t{1} << bits)*d.multiprocessors;
+}
+// Bytes of shared memory the sparse kernels need for a layer (forward with one
+// input per tile; input VJP).
+template<class T> std::size_t spline_forward_row_bytes(std::size_t terms) {
+    return product(product(spline_forward_stride<T>, terms), sizeof(T));
+}
+template<class T> std::size_t spline_input_bytes(std::size_t terms, unsigned group = spline_dx_inputs) {
+    return product(product(stage_threads+product(group, terms), spline_dx_stride<T>), sizeof(T));
+}
+// Shared-memory budget of a forward tile (C5 sweep: 24 KiB keeps four blocks
+// per SM on GB10's 100 KiB; more inputs per tile did not help).
+constexpr std::size_t spline_stage_bytes = std::size_t{24} << 10;
+template<class T>
+void select_sparse(BasisPlan<T>& plan, std::size_t capacity, bool tensor_ops, const SplineDevice& device, testing::SplinePath path) {
+    const auto& b = plan.expansion.block;
+    const auto degree = plan.expansion.view.degree;
+    if (plan.expansion.view.kind != detail::BasisKind::BSpline || path == testing::SplinePath::Dense) return;
+    // Kernel limits: instantiated widths, shared memory, 32-bit sort indices, grid dimensions.
+    const auto width = degree+1;
+    const auto row_bytes = spline_forward_row_bytes<T>(b.terms);
+    // Inputs per input-VJP block: spline_dx_inputs, halved until the staged rows fit.
+    unsigned group = spline_dx_inputs;
+    while (group > 1 && spline_input_bytes<T>(b.terms, group) > device.shared_optin) group /= 2;
+    if (width > max_sparse_spline_width || row_bytes > device.shared_optin || spline_input_bytes<T>(b.terms, group) > device.shared_optin ||
+        product(capacity, b.inputs) > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+        (b.outputs-1)/spline_outputs+1 > 65535 || (b.inputs-1)/group+1 > 65535 || (b.inputs-1)/32+1 > 65535)
+        return;
+    if (path == testing::SplinePath::Automatic) {
+        // Only layers whose dense forward contraction runs on cuBLAS at
+        // capacity (the latency-bound small kernels are kept) and whose work
+        // and term ratio pass the rule above.
+        constexpr bool fp64 = std::is_same_v<T, double>;
+        const auto per_sample = product(product(b.inputs, b.terms), b.outputs);
+        const bool large = capacity > small_forward_contraction<T>/per_sample &&
+                           capacity >= (sparse_spline_work(fp64, tensor_ops, device)+per_sample-1)/per_sample;
+        const bool upstream_in_l2 = product(product(capacity, b.outputs), sizeof(T)) <= device.l2_bytes/2;
+        const auto ratio = sparse_spline_ratio(fp64, tensor_ops, upstream_in_l2, device);
+        if (!large || static_cast<double>(b.terms) < ratio*static_cast<double>(width)) return;
+    }
+    auto& p = plan.sparse;
+    p.active = true;
+    p.width = static_cast<unsigned>(width);
+    p.group = group;
+    p.chunk = static_cast<unsigned>(std::clamp<std::size_t>(spline_stage_bytes/row_bytes, 1, b.inputs));
+    // Layers with few outputs give few blocks: split their coefficient ranges
+    // (and shrink the forward blocks) until about four blocks per SM, keeping
+    // at least 2*width coefficients per range (the ranges overlap by width-1).
+    // The coefficient VJP counts warps that own outputs (a warp walks its
+    // samples serially, latency bound): about 16 per SM.
+    const auto target = std::size_t{4}*device.multiprocessors;
+    constexpr auto per_warp = std::size_t{32}*spline_parameter_outputs;
+    const auto parameter_warps = ((b.outputs-1)/per_warp+1)*std::min<std::size_t>(b.inputs, 65535);
+    const auto max_ranges = std::max<std::size_t>(1, b.terms/(2*width));
+    p.ranges = static_cast<unsigned>(std::clamp<std::size_t>((4*target+parameter_warps-1)/parameter_warps, 1, std::min<std::size_t>(max_ranges, 64)));
+    const auto output_blocks = (b.outputs-1)/spline_outputs+1, sample_blocks = capacity ? (capacity-1)/stage_threads+1 : 1;
+    p.threads = stage_threads;
+    while (p.threads > 64 && sample_blocks*(stage_threads/p.threads)*output_blocks < target) p.threads /= 2;
+    p.key_bits = 1;
+    while (p.key_bits < 32 && (std::size_t{1} << p.key_bits) <= b.terms-width) ++p.key_bits;
+    const auto items = static_cast<int>(capacity*b.inputs), segments = static_cast<int>(b.inputs);
+    check(cub::DeviceSegmentedRadixSort::SortPairs(nullptr, p.sort_bytes, static_cast<const unsigned*>(nullptr), static_cast<unsigned*>(nullptr),
+              static_cast<const unsigned*>(nullptr), static_cast<unsigned*>(nullptr), items, segments,
+              static_cast<const int*>(nullptr), static_cast<const int*>(nullptr), 0, p.key_bits), "resident sparse sort storage");
 }
 
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
@@ -1516,7 +2029,90 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
         s.batch*b.outputs, b.outputs, s.status);
     check(cudaGetLastError(), "resident forward bias launch");
 }
+// Sparse B-spline path (backlog C5).
+template<class T> SparseRows<T> sparse_rows(Context<T>& s, const SparseSplinePlan& p) {
+    return {reinterpret_cast<unsigned*>(s.ptr(p.first)), s.ptr(p.values), s.ptr(p.derivatives), s.capacity};
+}
+template<class F> void with_spline_width(unsigned width, F&& f) {
+    switch (width) {
+    case 1: f(std::integral_constant<unsigned, 1>{}); return;
+    case 2: f(std::integral_constant<unsigned, 2>{}); return;
+    case 3: f(std::integral_constant<unsigned, 3>{}); return;
+    case 4: f(std::integral_constant<unsigned, 4>{}); return;
+    }
+    throw std::logic_error("unsupported sparse spline width");
+}
+// Sparse rows (with S and silu' for the residual branch), then the gather
+// contraction; with the residual branch Y += S*W^T before bias_kernel adds
+// the bias and checks, as on the dense cuBLAS path.
+template<class T> void sparse_forward(Context<T>& s, const BasisPlan<T>& plan, std::size_t j) {
+    if (!s.batch) return;
+    const auto& p = plan.sparse;
+    const auto& b = plan.expansion.block;
+    const auto rows = sparse_rows(s, p);
+    const bool residual = b.residual_count != 0;
+    const auto silu = residual ? silu_rows(s, b) : SiluRows<T>{nullptr, nullptr};
+    with_spline_width(p.width, [&](auto width) {
+        constexpr unsigned P = decltype(width)::value;
+        const dim3 tiles(static_cast<unsigned>((b.inputs-1)/32+1),
+                         static_cast<unsigned>(std::min<std::size_t>((s.batch-1)/spline_tile_samples<T>+1, 65535)));
+        const auto launch = [&](auto with_residual) {
+            spline_basis_kernel<P, decltype(with_residual)::value><<<tiles, stage_threads, 0, s.stream>>>(
+                s.ptr(s.activation[j]), rows, s.batch, b.inputs, s.ptr(plan.expansion.knots), b.terms, silu, s.status);
+        };
+        if (residual) launch(std::true_type{}); else launch(std::false_type{});
+        check(cudaGetLastError(), "resident sparse basis launch");
+        const auto shared = product(spline_forward_row_bytes<T>(b.terms), p.chunk);
+        const dim3 grid(static_cast<unsigned>((s.batch-1)/p.threads+1), static_cast<unsigned>((b.outputs-1)/spline_outputs+1));
+        spline_forward_kernel<P><<<grid, p.threads, shared, s.stream>>>(rows.first, rows.values, s.capacity,
+            s.ptr(s.parameters+b.offset), residual ? nullptr : s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]),
+            s.batch, b.inputs, b.outputs, b.terms, p.chunk, s.status);
+        check(cudaGetLastError(), "resident sparse forward launch");
+    });
+    if (residual) {
+        residual_contract(s, b, j);
+        bias_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(s.ptr(s.activation[j+1]), s.ptr(s.parameters+b.bias()),
+            s.batch*b.outputs, b.outputs, s.status);
+        check(cudaGetLastError(), "resident forward bias launch");
+    }
+}
+// Per-input sort of the samples by first term, then the coefficient and bias
+// VJPs (+ lambda*C) and, when needed, the input VJP.
+template<class T> void sparse_backward(Context<T>& s, const BasisPlan<T>& plan, std::size_t j, T lambda, bool with_dx) {
+    const auto& p = plan.sparse;
+    const auto& b = plan.expansion.block;
+    const auto rows = sparse_rows(s, p);
+    auto* sorted_first = reinterpret_cast<unsigned*>(s.ptr(p.sorted_first));
+    auto* order = reinterpret_cast<unsigned*>(s.ptr(p.order));
+    auto* offsets = reinterpret_cast<int*>(s.ptr(p.offsets));
+    const T* c = s.ptr(s.parameters+b.offset);
+    const T* u = s.ptr(s.upstream[j+1]);
+    if (s.batch) {
+        spline_segments_kernel<<<blocks(b.inputs), 256, 0, s.stream>>>(offsets, b.inputs, s.capacity, s.batch);
+        check(cudaGetLastError(), "resident sparse segment launch");
+        auto bytes = p.sort_bytes;
+        check(cub::DeviceSegmentedRadixSort::SortPairs(s.ptr(p.sort_storage), bytes, rows.first, sorted_first,
+                  reinterpret_cast<const unsigned*>(s.ptr(p.indices)), order, static_cast<int>(b.inputs*s.capacity),
+                  static_cast<int>(b.inputs), offsets, offsets+b.inputs, 0, p.key_bits, s.stream), "resident sparse sort");
+    }
+    with_spline_width(p.width, [&](auto width) {
+        constexpr unsigned P = decltype(width)::value;
+        // Only warps that own outputs (layers with few outputs).
+        constexpr auto per_warp = std::size_t{32}*spline_parameter_outputs;
+        const auto warps = static_cast<unsigned>(std::min<std::size_t>(spline_parameter_warps, (b.outputs-1)/per_warp+1));
+        const dim3 grid(static_cast<unsigned>((b.outputs-1)/(per_warp*warps)+1), static_cast<unsigned>(std::min<std::size_t>(b.inputs, 65535)), p.ranges);
+        spline_parameter_kernel<P><<<grid, 32*warps, 0, s.stream>>>(sorted_first, order, rows.values, s.capacity,
+            u, c, s.ptr(s.gradients+b.offset), s.ptr(s.gradients+b.bias()), lambda, s.batch, b.inputs, b.outputs, b.terms, p.ranges, s.status);
+        check(cudaGetLastError(), "resident sparse parameter launch");
+        if (!with_dx || !s.batch) return;
+        const dim3 inputs(static_cast<unsigned>((s.batch-1)/stage_threads+1), static_cast<unsigned>((b.inputs-1)/p.group+1));
+        spline_input_kernel<P><<<inputs, stage_threads, spline_input_bytes<T>(b.terms, p.group), s.stream>>>(rows.first, rows.derivatives,
+            s.capacity, c, u, s.ptr(s.upstream[j]), s.batch, b.inputs, b.outputs, b.terms, p.group, s.status);
+        check(cudaGetLastError(), "resident sparse input gradient launch");
+    });
+}
 template<class T> void run_forward(Context<T>& s, const BasisPlan<T>& plan, std::size_t j) {
+    if (plan.sparse.active) { sparse_forward(s, plan, j); return; }
     const auto& p = plan.expansion;
     expansion_forward<T>(s, p, j, nullptr, s.ptr(p.centers), nullptr);
 }
@@ -1631,6 +2227,7 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
 
 template<class T> void run_backward(Context<T>& s, const BasisPlan<T>& plan, std::size_t j, T lambda) {
     const bool dx = s.input_gradient(j);
+    if (plan.sparse.active) { sparse_backward(s, plan, j, lambda, dx); return; }
     expansion_backward(s, plan.expansion, j, lambda, dx, dx);
 }
 template<class T> void run_backward(Context<T>& s, const TrainableRbfPlan<T>& plan, std::size_t j, T lambda) {
@@ -2114,6 +2711,17 @@ struct Engine final : ResidentExecutor, Context<T> {
             plans.push_back(std::visit([&](const auto& s) { return make_plan<T>(s, parameter_count); }, stage));
             parameter_count += extent(plans.back()).size;
         }
+        // Backlog C5: path of every B-spline layer, which fixes the arena layout.
+        SplineDevice device;
+        const bool splines = std::any_of(plans.begin(), plans.end(), [](const Plan<T>& p) {
+            const auto* basis = std::get_if<BasisPlan<T>>(&p);
+            return basis && basis->expansion.view.kind == detail::BasisKind::BSpline;
+        });
+        if (splines && available()) {
+            device = spline_device();
+            for (auto& plan : plans)
+                if (auto* basis = std::get_if<BasisPlan<T>>(&plan)) select_sparse(*basis, capacity, tensor_ops, device, testing::test_scope.path);
+        }
         Reservation<T> reserve;
         parameters = reserve(parameter_count); gradients = reserve(parameter_count); candidates = reserve(parameter_count);
         activation.push_back(reserve(product(capacity, extent(plans.front()).inputs)));
@@ -2150,6 +2758,11 @@ struct Engine final : ResidentExecutor, Context<T> {
         if (this->has_residual_workspace) this->residual_workspace = reserve(residual_workspace_bytes/sizeof(T));
         graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
+        if (auto* layout = testing::test_scope.layout) {
+            layout->sparse.clear();
+            for (const auto& plan : plans) layout->sparse.push_back(std::visit([](const auto& p) { return sparse_layer(p); }, plan));
+            layout->arena_bytes = bytes;
+        }
         try {
             if (!available()) throw std::runtime_error("no CUDA device available");
             check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "resident stream create");
@@ -2170,6 +2783,25 @@ struct Engine final : ResidentExecutor, Context<T> {
             if (capacity) {
                 fill_kernel<<<blocks(capacity), 256, 0, stream>>>(ptr(ones), capacity, T(1));
                 check(cudaGetLastError(), "resident ones launch");
+            }
+            for (const auto& plan : plans) {
+                const auto* basis = std::get_if<BasisPlan<T>>(&plan);
+                if (!basis || !basis->sparse.active) continue;
+                const auto& b = basis->expansion.block;
+                if (capacity) {
+                    spline_indices_kernel<<<blocks(capacity*b.inputs), 256, 0, stream>>>(
+                        reinterpret_cast<unsigned*>(ptr(basis->sparse.indices)), b.inputs, capacity);
+                    check(cudaGetLastError(), "resident sparse index launch");
+                }
+                // Dynamic shared memory beyond the default 48 KiB (large term counts).
+                with_spline_width(basis->sparse.width, [&](auto width) {
+                    constexpr unsigned P = decltype(width)::value;
+                    const auto limit = static_cast<int>(device.shared_optin);
+                    if (product(spline_forward_row_bytes<T>(b.terms), basis->sparse.chunk) > (std::size_t{48} << 10))
+                        check(cudaFuncSetAttribute(spline_forward_kernel<P, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
+                    if (spline_input_bytes<T>(b.terms, basis->sparse.group) > (std::size_t{48} << 10))
+                        check(cudaFuncSetAttribute(spline_input_kernel<P, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
+                });
             }
             for (std::size_t j = 0; j < plans.size(); ++j)
                 with_stage(plans[j], model.layers()[j], [&](const auto& p, const auto& stage, const auto& kind) {
