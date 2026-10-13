@@ -2143,7 +2143,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             std::visit([&](const auto& p) {
                 if constexpr (is_kan_layer<std::decay_t<decltype(p)>>) {
                     const auto& b = block_of(p);
-                    if (b.residual_count && (!small_residual<T>(b, capacity) || !small_residual_vjp<T>(b, capacity)))
+                    if (b.residual_count && (!small_residual<T>(b, this->capacity) || !small_residual_vjp<T>(b, this->capacity)))
                         this->has_residual_workspace = true;
                 }
             }, plan);
