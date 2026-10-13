@@ -61,7 +61,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 Portable CUDA build adds `-DKAN_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86`.
-Choose the architecture for your GPU. GPU tests require actual hardware and fail
+Choose the architecture for your GPU; without `CMAKE_CUDA_ARCHITECTURES` (or the
+`CUDAARCHS` environment variable) the build targets the GPU visible at configure time
+(`native`). GPU tests require actual hardware and fail
 explicitly when unavailable. `-DBUILD_TESTING=OFF` disables tests, and
 `-DKAN_BUILD_EXAMPLES=OFF` disables the example.
 

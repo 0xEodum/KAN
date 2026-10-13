@@ -14,6 +14,18 @@ option(KAN_BENCH_RESIDENT "Include M2 resident backend in benchmarks" ON)
 # the C2 behaviour); ON is the performance build (nvcc contracts a*b+c into FMA).
 option(KAN_CUDA_FMA "Allow fused multiply-add contraction in the CUDA kernels (performance build)" OFF)
 
+# No contraction into FMA in any in-tree host code (library, tests, examples,
+# benchmarks, bindings, nvcc host compilation): CPU results must match the
+# --fmad=false CUDA build and the guarded intermediates of the shared formulas,
+# and tests compare against unfused host arithmetic. GCC defaults to
+# -ffp-contract=fast in the GNU dialects and contracts wherever the target ISA
+# has FMA (aarch64 always; x86-64 only with -march). Directory scope, so the
+# flag is not exported to consumers of the installed targets.
+if(NOT MSVC)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=off>
+                        $<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:-Xcompiler=-ffp-contract=off>)
+endif()
+
 add_library(kan STATIC src/basis.cpp src/rational.cpp src/layer.cpp src/network.cpp src/families.cpp src/input_map.cpp
             src/carriers/basis_edges.cpp src/carriers/rational_edges.cpp src/initializers.cpp
             src/init/moments.cpp)
@@ -25,9 +37,7 @@ target_include_directories(kan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_D
 if(MSVC)
     target_compile_options(kan PRIVATE /W4 /permissive-)
 else()
-    # No contraction into FMA: CPU results must match the --fmad=false CUDA
-    # build and the guarded intermediates of the shared formulas.
-    target_compile_options(kan PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off)
+    target_compile_options(kan PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 if(KAN_ENABLE_COVERAGE)
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR KAN_ENABLE_CUDA)
@@ -49,6 +59,11 @@ if(KAN_ENABLE_CUDA)
     if(KAN_ALLOW_UNSUPPORTED_CUDA_COMPILER)
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
         message(WARNING "nvcc host compiler guard explicitly overridden; validate this toolchain carefully")
+    endif()
+    # Default to the visible GPU (needs one at configure time); an explicit
+    # -DCMAKE_CUDA_ARCHITECTURES or CUDAARCHS selects other targets.
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND "$ENV{CUDAARCHS}" STREQUAL "")
+        set(CMAKE_CUDA_ARCHITECTURES native)
     endif()
     enable_language(CUDA)
     # The resident contraction engine uses the 64-bit cuBLAS API (CUDA 12+).
