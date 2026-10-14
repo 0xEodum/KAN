@@ -1,0 +1,8 @@
+== parity
+before 178 kernels, after 180, common 178, differing 0
+only after: 2 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident21nonlinear_tile_kernelIdEEvPKT_S5_S5_PS3_mmjjPi', '_ZN3kan4cuda44_GLOBAL__N__resident21nonlinear_tile_kernelIfEEvPKT_S5_S5_PS3_mmjjPi']
+only before: []
+== fma
+before 178 kernels, after 180, common 178, differing 0
+only after: 2 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident21nonlinear_tile_kernelIdEEvPKT_S5_S5_PS3_mmjjPi', '_ZN3kan4cuda44_GLOBAL__N__resident21nonlinear_tile_kernelIfEEvPKT_S5_S5_PS3_mmjjPi']
+only before: []

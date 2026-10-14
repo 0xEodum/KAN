@@ -1,0 +1,18 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Name
+21.6,167176096,32,5224253.0,void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_nt_align1>(T1::Params)
+21.2,163722144,32,5116317.0,void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_nn_align1>(T1::Params)
+21.0,162569120,32,5080285.0,void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)
+16.8,130159456,48,2711655.3,"void kan::cuda::<unnamed>::nonlinear_partial_kernel<double>(const T1 *, const T1 *, const T1 *, T1 *, unsigned long, unsigned long, unsigned int, int *)"
+12.7,98421568,48,2050449.3,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)5, (bool)0, double>(const T3 *, T3 *, T3 *, T3 *, unsigned long, kan::detail::BasisViewOf<T3>, u"
+2.6,20283008,48,422562.7,"void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::StoredDerivatives<double>, double>(T1, const T2 *, T2 *, unsigned long, unsigned long, T"
+2.0,15155456,16,947216.0,void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x64_16x4_tn_align1>(T1::Params)
+0.9,6803967,16,425247.9,void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)
+0.9,6679936,16,417496.0,"void kan::cuda::<unnamed>::parameter_partial_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long, unsigned long, unsigned long, unsigned long)"
+0.1,1157696,16,72356.0,"void kan::cuda::<unnamed>::candidate_kernel<double>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+0.0,256576,48,5345.3,"void kan::cuda::<unnamed>::nonlinear_finish_kernel<double>(const T1 *, T1 *, unsigned long, unsigned int, int *)"
+0.0,221696,48,4618.7,"void kan::cuda::<unnamed>::bias_kernel<double>(T1 *, const T1 *, unsigned long, unsigned long, int *)"
+0.0,220576,32,6893.0,"void gemvNSP_kernel<double, double, double, double, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const do"
+0.0,60896,48,1268.7,"void kan::cuda::<unnamed>::validate_width_kernel<double>(const T1 *, unsigned long, int *)"
+0.0,57728,32,1804.0,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, double, double, double, double, (bool)0, double, double, double, (bool)1, (bool)0, (bool)0, (bool)0>(c"
+0.0,45248,16,2828.0,"void kan::cuda::<unnamed>::commit_kernel<double>(const T1 *, T1 *, unsigned long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,5952,2,2976.0,"void kan::cuda::<unnamed>::fill_kernel<double>(T1 *, unsigned long, T1)"

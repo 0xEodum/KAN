@@ -1,0 +1,46 @@
+== build-cuda memcheck local_rbf_reduction_resident exit=0 2s
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda racecheck local_rbf_reduction_resident exit=0 48s
+3/3 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-cuda synccheck local_rbf_reduction_resident exit=0 1s
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda initcheck local_rbf_reduction_resident exit=0 2s
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma memcheck local_rbf_reduction_resident exit=0 2s
+3/3 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma racecheck local_rbf_reduction_resident exit=0 49s
+3/3 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+== build-cuda-fma synccheck local_rbf_reduction_resident exit=0 2s
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda-fma initcheck local_rbf_reduction_resident exit=0 2s
+3/3 passed
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck local_resident_test exit=0 1s
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_training_test exit=0 7s
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck input_map_resident_test exit=0 1s
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck cuda_test exit=0 4s
+11/11 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+== build-cuda memcheck resident_precision_test exit=0 3s
+13/13 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors

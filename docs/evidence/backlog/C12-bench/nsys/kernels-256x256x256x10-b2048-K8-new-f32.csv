@@ -1,0 +1,18 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Name
+24.6,104518848,426,245349.4,"void kan::cuda::<unnamed>::nonlinear_staged_kernel<float>(const T1 *, const T1 *, const T1 *, T1 *, unsigned long, unsigned long, unsigned int, unsigned int, in"
+21.8,92807808,426,217858.7,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)5, (bool)0, float>(const T3 *, T3 *, T3 *, T3 *, unsigned long, kan::detail::BasisViewOf<T3>, un"
+14.0,59631968,284,209971.7,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+11.8,50195072,426,117828.8,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nn_align1>(T1::Params)
+10.2,43376704,426,101823.2,"void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::StoredDerivatives<float>, float>(T1, const T2 *, T2 *, unsigned long, unsigned long, T2 "
+9.1,38628576,284,136016.1,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+4.7,20073728,142,141364.3,void cutlass::Kernel2<cutlass_80_simt_sgemm_64x64_8x5_tn_align1>(T1::Params)
+1.2,4950176,142,34860.4,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+1.0,4150848,142,29231.3,void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nt_align1>(T1::Params)
+0.4,1493312,426,3505.4,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long, unsigned long, int *)"
+0.3,1296640,142,9131.3,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>"
+0.3,1146432,568,2018.4,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, float, (bool)1, (bool)0, (bool)0, (bool)0>(cublasLt"
+0.3,1069312,284,3765.2,"std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1, (bool)0, (bool)0, (int)9, (bool)0, cublasGemvPar"
+0.2,934272,426,2193.1,"void kan::cuda::<unnamed>::nonlinear_finish_kernel<float>(const T1 *, T1 *, unsigned long, unsigned int, int *)"
+0.1,396864,142,2794.8,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long, kan::cuda::<unnamed>::DeviceControl *)"
+0.1,357344,426,838.8,"void kan::cuda::<unnamed>::validate_width_kernel<float>(const T1 *, unsigned long, int *)"
+0.0,5152,2,2576.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long, T1)"

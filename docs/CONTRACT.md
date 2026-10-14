@@ -279,6 +279,19 @@ cancelled by the accumulator is not reported if the computed result is finite.
 `kan::cuda` therefore links `CUDA::cublas` and requires CUDA 12 or newer; the installed
 package finds it through `CUDAToolkit`.
 
+**Trainable-RBF center/log-width reduction (backlog C12).** The sums over the rows
+`r = (sample, input)` of `W[r,k]*(-dPhi/dx)` and `W[r,k]*dPhi/dlog-width` have a fixed order:
+the rows are split into at most 64 tiles of interleaved 256-row chunks, each of a tile's 256
+lanes sums its rows in order, a fixed tree sums the lanes and the tiles are summed in order.
+Two kernels compute exactly this order, one block per (term, tile) reading columns or one
+block per (tile, group of terms) reading whole row chunks into shared-memory accumulators,
+so their results are bitwise equal in both builds; the executor takes the second when its
+grid has at least one block per SM, or 64 blocks on larger devices (a per-launch choice that
+never changes results). FP32/TF32 layers with at most 85 terms keep the C1 staged kernel and
+its own order (unchanged). No arena memory is added; a term group needs
+`2*256*group*sizeof(T)` bytes of shared memory (groups of whole cache lines when all terms
+exceed the per-block limit).
+
 **Sparse B-spline path (backlog C5).** At any input only `degree+1` (P) of a clamped
 spline's terms can be nonzero. A resident `BasisEdges` layer with a `BSplineConfig` can
 therefore keep, per input and sample, the index `g` of the first such term (32-bit,

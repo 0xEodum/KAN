@@ -1,0 +1,1 @@
+SMs 48, column<double> 6 blocks/SM (288 resident), column<float> 6 blocks/SM (288 resident)

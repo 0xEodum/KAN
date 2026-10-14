@@ -1,0 +1,10 @@
+# mutation 1: tile kernel ignores the term-group offset k0
+FAIL column_and_tile_reductions_are_bitwise_equal: precision 0 terms 70 batch 151: layer 0 gradients differ
+PASS tile_reduction_matches_cpu
+PASS nonfinite_reduction_is_reported_by_both_paths
+2/3 passed
+# mutation 2: tile kernel reads one row past the last partial chunk
+FAIL column_and_tile_reductions_are_bitwise_equal: precision 0 terms 3 batch 37 partial: layer 0 gradients differ
+PASS tile_reduction_matches_cpu
+PASS nonfinite_reduction_is_reported_by_both_paths
+2/3 passed

@@ -1,0 +1,50 @@
+# Backlog C12 RED: the new suite compiled against HEAD 11a159d (before the fix): g++ -std=c++20 -fsyntax-only -Iinclude -Isrc -Itests tests/backends/cuda/local_rbf_reduction_resident_test.cpp
+# Performance RED (measured baseline and profile): C12.md "Baseline and profile", C12-bench/nsys/ (base-*), C12-bench/microbench.csv (column kernel)
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:28:27: error: ‘NonlinearReduction’ has not been declared in ‘kan::cuda::testing’
+   28 | using kan::cuda::testing::NonlinearReduction;
+      |                           ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:53:80: error: ‘NonlinearReduction’ has not been declared
+   53 | ResidentNetwork make(const kan::Network& n, std::size_t capacity, Precision p, NonlinearReduction reduction) {
+      |                                                                                ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp: In function ‘kan::cuda::ResidentNetwork {anonymous}::make(const kan::Network&, std::size_t, kan::cuda::Precision, int)’:
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:54:38: error: no matching function for call to ‘kan::cuda::testing::ResidentTestScope::ResidentTestScope(int&)’
+   54 |     ResidentTestScope scope(reduction);
+      |                                      ^
+In file included from tests/backends/cuda/local_rbf_reduction_resident_test.cpp:15:
+src/backends/cuda/resident_testing.hpp:31:14: note: candidate: ‘kan::cuda::testing::ResidentTestScope::ResidentTestScope(kan::cuda::testing::SplinePath, kan::cuda::testing::ResidentLayout*)’
+   31 |     explicit ResidentTestScope(SplinePath path, ResidentLayout* layout = nullptr);
+      |              ^~~~~~~~~~~~~~~~~
+src/backends/cuda/resident_testing.hpp:31:43: note:   no known conversion for argument 1 from ‘int’ to ‘kan::cuda::testing::SplinePath’
+   31 |     explicit ResidentTestScope(SplinePath path, ResidentLayout* layout = nullptr);
+      |                                ~~~~~~~~~~~^~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp: In function ‘void column_and_tile_reductions_are_bitwise_equal()’:
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:117:50: error: ‘NonlinearReduction’ has not been declared
+  117 |             auto column = make(n, s.capacity, p, NonlinearReduction::Column);
+      |                                                  ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:118:48: error: ‘NonlinearReduction’ has not been declared
+  118 |             auto tile = make(n, s.capacity, p, NonlinearReduction::Tile);
+      |                                                ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:125:57: error: ‘NonlinearReduction’ has not been declared
+  125 |                 auto automatic = make(n, s.capacity, p, NonlinearReduction::Automatic);
+      |                                                         ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:126:57: error: ‘NonlinearReduction’ has not been declared
+  126 |                 auto reference = make(n, s.capacity, p, NonlinearReduction::Column);
+      |                                                         ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp: In function ‘void tile_reduction_matches_cpu()’:
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:136:49: error: ‘NonlinearReduction’ has not been declared
+  136 |     auto gpu = make(n, 800, Precision::Float64, NonlinearReduction::Tile);
+      |                                                 ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:149:59: error: unable to deduce ‘std::initializer_list<auto>&&’ from ‘{<expression error>, <expression error>}’
+  149 |         for (const auto* pair : {&a.centers, &a.log_widths}) {
+      |                                                           ^
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp: In function ‘void nonfinite_reduction_is_reported_by_both_paths()’:
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:162:28: error: ‘NonlinearReduction’ has not been declared
+  162 |     for (auto reduction : {NonlinearReduction::Column, NonlinearReduction::Tile})
+      |                            ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:162:56: error: ‘NonlinearReduction’ has not been declared
+  162 |     for (auto reduction : {NonlinearReduction::Column, NonlinearReduction::Tile})
+      |                                                        ^~~~~~~~~~~~~~~~~~
+tests/backends/cuda/local_rbf_reduction_resident_test.cpp:162:80: error: unable to deduce ‘std::initializer_list<auto>&&’ from ‘{<expression error>, <expression error>}’
+  162 |     for (auto reduction : {NonlinearReduction::Column, NonlinearReduction::Tile})
+      |                                                                                ^
+exit 1
