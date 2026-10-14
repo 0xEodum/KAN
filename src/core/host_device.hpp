@@ -72,6 +72,11 @@ KAN_HOST_DEVICE inline double cosh(double v) { return KAN_MATH_NAMESPACE::cosh(v
 KAN_HOST_DEVICE inline double copysign(double magnitude, double sign) {
     return KAN_MATH_NAMESPACE::copysign(magnitude, sign);
 }
+// Exact operations (backlog M5): ldexp scales by a power of two (rounding only
+// into the subnormal range), fma rounds once, nearbyint rounds to nearest even.
+KAN_HOST_DEVICE inline double ldexp(double v, int exponent) { return KAN_MATH_NAMESPACE::ldexp(v, exponent); }
+KAN_HOST_DEVICE inline double fma(double a, double b, double c) { return KAN_MATH_NAMESPACE::fma(a, b, c); }
+KAN_HOST_DEVICE inline double nearbyint(double v) { return KAN_MATH_NAMESPACE::nearbyint(v); }
 
 // Single-precision overloads: device code calls the CUDA f-suffixed
 // functions explicitly, so no float argument is promoted to double.
@@ -95,6 +100,9 @@ KAN_HOST_DEVICE inline float cosh(float v) { return KAN_FLOAT_MATH(cosh)(v); }
 KAN_HOST_DEVICE inline float copysign(float magnitude, float sign) {
     return KAN_FLOAT_MATH(copysign)(magnitude, sign);
 }
+KAN_HOST_DEVICE inline float ldexp(float v, int exponent) { return KAN_FLOAT_MATH(ldexp)(v, exponent); }
+KAN_HOST_DEVICE inline float fma(float a, float b, float c) { return KAN_FLOAT_MATH(fma)(a, b, c); }
+KAN_HOST_DEVICE inline float nearbyint(float v) { return KAN_FLOAT_MATH(nearbyint)(v); }
 #undef KAN_FLOAT_MATH
 
 } // namespace kan::detail::math

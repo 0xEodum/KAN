@@ -43,6 +43,8 @@ KAN_HOST_DEVICE void basis_terms_for(const BasisViewOf<Scalar>& basis, Scalar x,
         gaussian_terms(basis, x, row, guard);
     else if constexpr (Kind == BasisKind::Fourier)
         fourier_terms(basis.frequency, basis.terms, x, row.values, row.derivatives, guard);
+    else if constexpr (Kind == BasisKind::HermiteFunction)
+        hermite_function_terms(basis.terms, x, row.values, row.derivatives, guard);
     else {
         static_assert(Kind == BasisKind::Chebyshev || Kind == BasisKind::Legendre ||
                       Kind == BasisKind::Jacobi || Kind == BasisKind::Hermite,
@@ -70,6 +72,7 @@ void visit_basis_family(BasisKind kind, Visitor&& visit) {
     case BasisKind::GaussianRbf: visit(BasisFamilyTag<BasisKind::GaussianRbf>{}); return;
     case BasisKind::BSpline: visit(BasisFamilyTag<BasisKind::BSpline>{}); return;
     case BasisKind::MexicanHat: visit(BasisFamilyTag<BasisKind::MexicanHat>{}); return;
+    case BasisKind::HermiteFunction: visit(BasisFamilyTag<BasisKind::HermiteFunction>{}); return;
     }
     // Validation rejects unknown kinds before any dispatch.
     throw std::logic_error("unvalidated basis kind");

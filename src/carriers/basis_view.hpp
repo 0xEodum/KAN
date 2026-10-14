@@ -20,7 +20,8 @@ BasisView basis_view(const Config& c) {
     } else if constexpr (std::is_same_v<T, LegendreConfig>) {
         view.kind = BasisKind::Legendre;
     } else if constexpr (std::is_same_v<T, HermiteConfig>) {
-        view.kind = BasisKind::Hermite;
+        view.kind = c.normalization == HermiteNormalization::Function ? BasisKind::HermiteFunction
+                                                                      : BasisKind::Hermite;
     } else if constexpr (std::is_same_v<T, JacobiConfig>) {
         view.kind = BasisKind::Jacobi;
         view.alpha = c.alpha;

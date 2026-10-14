@@ -9,8 +9,11 @@
 namespace kan::detail {
 
 // Family tag for kernel dispatch. The public API selects a family by its
-// configuration type; trainable RBFs are GaussianRbf with BasisView::trainable.
-enum class BasisKind { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, BSpline, MexicanHat };
+// configuration type; trainable RBFs are GaussianRbf with BasisView::trainable,
+// and HermiteFunction is HermiteConfig with the Function normalization (backlog
+// M5; appended so the existing tags and kernel instantiations keep their values).
+enum class BasisKind { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, BSpline, MexicanHat,
+                       HermiteFunction };
 
 // Non-owning view of one validated basis. Pointer fields are read only for the
 // families that use them; `log_widths` is read only when `trainable` is set.

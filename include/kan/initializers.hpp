@@ -71,7 +71,8 @@ using Initializer = std::variant<VarianceScaling, NoiseInit>;
 // Reference measure of a basis family for VarianceScaling: the variance of
 // the measure and E[phi_k(x)^2] per term. Polynomials use their
 // orthogonality measure (Chebyshev arcsine on [-1,1], Legendre uniform,
-// Jacobi the normalized weight (1-x)^alpha (1+x)^beta, Hermite N(0, 1/2));
+// Jacobi the normalized weight (1-x)^alpha (1+x)^beta, Hermite N(0, 1/2); the
+// normalized Hermite functions keep N(0, 1/2), the same input measure, backlog M5);
 // Fourier is uniform on one period [-pi/w, pi/w]; B-splines are uniform on
 // the domain [t_p, t_K]; Gaussian RBFs and Mexican hats are uniform on
 // [min center, max center], or [c - h, c + h] for coincident centers with h

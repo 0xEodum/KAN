@@ -45,8 +45,18 @@ BasisMoments moments(const JacobiConfig& c) {
     }
     return m;
 }
-BasisMoments moments(const HermiteConfig& c) { // x ~ N(0, 1/2): E[H_n^2] = 2^n n!
+// x ~ N(0, 1/2) for both normalizations, so switching the normalization keeps
+// the assumed input distribution. Physicists: E[H_n^2] = 2^n n!. Functions
+// (backlog M5): E[psi_n^2] = integral H_n^2 exp(-2x^2) / (2^n n! pi)
+// = Gamma(n+1/2) / (sqrt(2) pi n!), so m_0 = 1/sqrt(2 pi), m_n = m_(n-1) (2n-1)/(2n).
+BasisMoments moments(const HermiteConfig& c) {
     BasisMoments m{0.5, std::vector<double>(c.size)};
+    if (c.normalization == HermiteNormalization::Function) {
+        m.second_moments[0] = 1 / std::sqrt(2 * std::numbers::pi);
+        for (std::size_t k = 1; k < c.size; ++k)
+            m.second_moments[k] = m.second_moments[k - 1] * (double(2 * k - 1) / double(2 * k));
+        return m;
+    }
     m.second_moments[0] = 1;
     for (std::size_t k = 1; k < c.size; ++k) m.second_moments[k] = 2 * double(k) * m.second_moments[k - 1];
     return m;

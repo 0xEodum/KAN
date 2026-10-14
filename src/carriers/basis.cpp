@@ -24,7 +24,11 @@ void require_finite(const std::vector<double>& values, const char* message) {
 
 void validate(const ChebyshevConfig& c) { require_terms(c.size); }
 void validate(const LegendreConfig& c) { require_terms(c.size); }
-void validate(const HermiteConfig& c) { require_terms(c.size); }
+void validate(const HermiteConfig& c) {
+    require_terms(c.size);
+    if (c.normalization != HermiteNormalization::Physicists && c.normalization != HermiteNormalization::Function)
+        throw std::invalid_argument("unknown Hermite normalization");
+}
 
 void validate(const JacobiConfig& c) {
     require_terms(c.size);
