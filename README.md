@@ -8,7 +8,7 @@ backward and training; optional Python bindings expose the same implementation.
 
 | Category | Available | Planned |
 |---|---|---|
-| Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite | Normalization and additional families |
+| Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite or normalized Hermite functions (`HermiteConfig::normalization`) | Additional families |
 | Harmonic / wave | Fourier, normalized Mexican-hat wavelets | Additional wavelets |
 | Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
 | Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
@@ -354,7 +354,7 @@ that matter for execution (backlog R4):
 |---|---|
 | `src/core/` | Carrier-independent Layer protocol (including the SiLU residual branch), Network topology, input maps, shape/finiteness checks and the host/device portability layer |
 | `src/carriers/` | Basis family tag, flat views and family dispatch, basis validation |
-| `src/carriers/polynomial/` | Chebyshev, Legendre, Jacobi, Hermite: global support, three-term recurrences |
+| `src/carriers/polynomial/` | Chebyshev, Legendre, Jacobi, Hermite (polynomials and normalized functions): global support, three-term recurrences |
 | `src/carriers/trigonometric/` | Fourier: global, periodic |
 | `src/carriers/local/` | B-spline, Gaussian RBF, Mexican hat: local support or decaying tails; knot and RBF-parameter operations |
 | `src/carriers/rational/` | Rational edges: per-edge P/Q with denominator policies |

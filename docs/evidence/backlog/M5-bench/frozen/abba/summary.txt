@@ -1,0 +1,7 @@
+basis_benchmark, base (HEAD bd12b0f worktree) vs M5, same session, order base m5 m5 base base m5, 3 runs each; median of per-run medians
+backend,cases,geomean_ratio,min_ratio,max_ratio
+cpu_full,24,1.001,0.996,1.012
+legacy_full,4,1.001,0.998,1.003
+resident_full,24,1.006,0.968,1.063
+transfer_full,24,0.993,0.962,1.014
+checksum mismatches: 0

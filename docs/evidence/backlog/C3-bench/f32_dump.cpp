@@ -5,6 +5,8 @@
 // contractions) and a wide one (cuBLAS contractions), plus a long-row layer
 // (terms too long for the staged tile, which keeps stored derivative rows).
 // Two builds whose dumps are byte-identical compute the same FP32 results.
+// Backlog M5: a Hermite-function family is appended to the family list
+// (earlier lines unchanged); -DKAN_GOLDEN_NO_HERMITE_FUNCTION omits it.
 // Usage: f32_dump > dump.txt
 #include "kan/resident.hpp"
 #include <cmath>
@@ -44,6 +46,9 @@ std::vector<Family> families() {
         {"trainable_rbf8", TrainableRbfConfig{grid(8, -1.2, 1.2), std::vector<double>(8, std::log(0.4))}},
         {"bspline3", BSplineConfig{3, knots(3, 5)}},
         {"mexican_hat6", MexicanHatConfig{grid(6, -1.0, 1.0), std::vector<double>(6, 0.5)}},
+#ifndef KAN_GOLDEN_NO_HERMITE_FUNCTION
+        {"hermite_function24", HermiteConfig{24, HermiteNormalization::Function}},
+#endif
     };
 }
 Layer seeded(Layer l, double phase) {

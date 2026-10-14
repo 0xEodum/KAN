@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3 and M4)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4 and M5)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -17,7 +17,8 @@ holds only its family's parameters, and a value-initialized `BasisConfig` is
 degree: explicit `size` for polynomial and Fourier families, derived for localized
 families (one term per center; `knots.size()-degree-1` for splines). Chebyshev
 uses T_n, Legendre uses P_n, Jacobi uses P_n^(alpha,beta), Hermite uses physicists'
-H_n. Polynomials are evaluated by recurrence, including endpoints and outside [-1,1].
+H_n by default or the normalized Hermite functions psi_n (`HermiteConfig::normalization`,
+backlog M5, below). Polynomials are evaluated by recurrence, including endpoints and outside [-1,1].
 There is no implicit clipping, normalization, tanh, or extrapolation policy; inputs are
 brought into a basis domain only by an explicit input map layer (see "Input maps").
 Fourier is `[1, cos(w*x), sin(w*x), cos(2*w*x), sin(2*w*x), ...]` and size is odd.
@@ -26,6 +27,38 @@ Jacobi alpha and beta are finite and greater than -1; angular frequency is finit
 Irrelevant parameters cannot be expressed: each configuration type has only its own.
 Localized configurations need at least one term and equal-length parameter vectors.
 Each evaluator returns values and derivatives with respect to x.
+
+**Hermite normalization (backlog M5).** `HermiteConfig{size, normalization}` with
+`kan::HermiteNormalization::Physicists` (default; every existing configuration, result and
+golden dump is unchanged) or `Function`: `psi_n(x) = H_n(x) exp(-x²/2) / sqrt(2^n n! sqrt(pi))`,
+n = 0..size-1, orthonormal in L²(R) (Lebesgue measure) and bounded by `pi^(-1/4)` for every n
+and x (physicists' terms grow like `sqrt(2^n n!)`). The normalization is fixed configuration:
+part of `operator==`, so `ResidentNetwork::upload_parameters` rejects a change; an unknown
+enumerator value is rejected by validation (`std::invalid_argument`). It selects a separate
+family tag (`BasisKind::HermiteFunction`): the resident executor instantiates its own basis and
+FP32 Φ'-recompute kernels, no kernel branches on the normalization, and the existing
+instantiations are SASS-identical. Evaluation (`hermite_function_terms`,
+`src/carriers/polynomial/polynomial_formulas.hpp`) uses the stable recurrence
+`psi_(n+1) = (sqrt(2) x psi_n - sqrt(n) psi_(n-1)) * (1/sqrt(n+1))` and
+`psi_n' = sqrt(2n) psi_(n-1) - x psi_n` on scaled values: the recurrence starts at `2^-B`
+(B = 512 in FP64, 64 in FP32), rescales by `2^-B` whenever a value exceeds 1, and multiplies
+every term by `pi^(-1/4) exp(-x²/2) 2^(B+E)`, computed without intermediate underflow (Cody–Waite
+reduction of x²/2 with `fma` for the high part and the exact low part of x·x, `ldexp` for the power of two) and recomputed
+only when a rescale changes E. Inputs where the plain weight `exp(-x²/2)` underflows (FP64
+|x| > 38.6, FP32 |x| > 14.4) therefore still give the O(0.1) values of high-degree terms near
+their turning points sqrt(2n+1); no intermediate overflows and no `inf·0` arises. For
+`x² >= max(8·size, T)` (T = 3072 in FP64, 448 in FP32) every |psi_n| and |psi_n'| is provably
+below half the smallest subnormal (`|psi_n| <= exp(-x²/4)` there) and the row is exactly zero.
+Accuracy against an independent 700-digit reference
+([M5 evidence](evidence/backlog/M5.md#accuracy)): FP64 with size 1024 on |x| <= 60, max
+absolute error 7.6e-14 (values) and 1.9e-14·sqrt(2n+1) (derivatives), relative error <= 3e-13
+in the monotone tail; FP32 resident with size 128 on |x| <= 26, 5.2e-6 and 1.9e-6·sqrt(2n+1),
+1.0e-5 in the tail. Those sizes and ranges are the tested limits; `size` itself is not capped.
+psi_n is concentrated on |x| <= sqrt(2n+1): on inputs that cover that range the design matrix
+is perfectly conditioned (cond(ΦᵀΦ) = 1.000 for size 8–48 on an equispaced grid), while inputs
+concentrated near 0 (for example N(0, 1/2)) leave high-degree terms nearly dependent; scale
+inputs with an input map when using large sizes.
+Python: `kan.HermiteNormalization.PHYSICISTS/FUNCTION`, `kan.HermiteConfig(size, normalization)`.
 
 Layer backward is a vector-Jacobian product, summing parameter gradients over the batch.
 It does not average or mutate parameters. Caller supplies any loss scaling.
@@ -671,12 +704,16 @@ family's reference measure and `m_k = E[phi_k(x)^2]` under it:
 | Legendre | uniform on [-1,1] | 1/(2k+1) | 1/3 |
 | Jacobi | normalized weight (1-x)^α(1+x)^β | h_k/h-mass, by its ratio recurrence | 4(α+1)(β+1)/((α+β+2)²(α+β+3)) |
 | Hermite (physicists') | N(0, 1/2) (weight e^{-x²}) | 2^k k! | 1/2 |
+| Hermite functions (backlog M5) | N(0, 1/2), the same input measure | Γ(k+1/2)/(√2 π k!): 1/√(2π), then ·(2k-1)/(2k) | 1/2 |
 | Fourier | uniform on one period [-π/ω, π/ω] | 1, then 1/2 | (π/ω)²/3 |
 | B-spline | uniform on the domain [t_p, t_K] | (p+1)-point Gauss-Legendre per span (exact) | L²/12 |
 | Gaussian RBF (fixed, trainable) | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 9w | L²/12 |
 | Mexican hat | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 12s | L²/12 |
 
-Coincident centers use [c-h, c+h], h the largest width or scale. With independent zero-mean
+The Hermite functions are orthonormal under the Lebesgue measure, which is not a probability
+measure; they keep the physicists' N(0, 1/2), so switching the normalization does not change the
+input distribution the initializer assumes (orthogonality under the measure is not needed, see
+below). Coincident centers use [c-h, c+h], h the largest width or scale. With independent zero-mean
 coefficients `Var_c E_x[y²] = sum_i sum_k sigma_k² m_k` without cross terms, so
 `sigma_k² = gain²·variance / (inputs·terms·m_k)` (`m_k = 0` gives 0) gives every term the same
 share and `E[y²] = gain²·variance` for inputs drawn from the measure (variance-preserving).
@@ -843,8 +880,8 @@ finiteness guard (CPU throws, device records status). Sources are grouped by exe
 properties (backlog R4). The basis family tag and flat views are in
 `src/carriers/basis_types.hpp`, the compile-time and runtime family dispatch in
 `src/carriers/basis_formulas.hpp`, and the evaluators with their family group:
-`src/carriers/polynomial/polynomial_formulas.hpp` (Chebyshev, Legendre, Jacobi, Hermite:
-global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
+`src/carriers/polynomial/polynomial_formulas.hpp` (Chebyshev, Legendre, Jacobi, Hermite
+and the normalized Hermite functions: global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
 (Fourier) and `src/carriers/local/local_formulas.hpp` (B-spline, Gaussian RBF, Mexican
 hat: local support or decaying tails; `spline_span_terms` is the sparse form of the spline
 recurrence, and the dense `spline_terms` scatters its result, backlog C5). Rational formulas are in

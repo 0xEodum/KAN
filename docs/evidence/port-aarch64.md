@@ -216,6 +216,11 @@ Dumps were generated with `scripts/golden_dumps.sh` (harnesses linked with `-O2
 -ffp-contract=off`), each run twice with identical output (deterministic on this GPU/driver/
 cuBLAS).
 
+Update 2026-10-14 (backlog M5): the golden and FP32 harnesses append Hermite-function fixtures.
+The current local reference is [backlog/M5-bench/golden/](backlog/M5-bench/golden/sha256-linux.txt).
+The files and hashes below remain the pre-M5 reference, which the harnesses reproduce byte for
+byte with `-DKAN_GOLDEN_NO_HERMITE_FUNCTION` ([M5 evidence](backlog/M5.md#validation)).
+
 The x86 references are recorded as SHA-256 hashes and byte counts only (M3 phase 2
 `golden.txt`, C6–C8, C3); no x86 dump file is in the repository, so the comparison with x86 is
 match/mismatch, not a quantified deviation.

@@ -1,0 +1,57 @@
+== build-cuda memcheck --leak-check full resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda memcheck --leak-check full resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda memcheck --leak-check full resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda memcheck --leak-check full resident_precision_test
+12/12 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda-fma memcheck --leak-check full resident_test
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda-fma memcheck --leak-check full resident_review_test
+4/4 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda-fma memcheck --leak-check full resident_upload_test
+9/9 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda-fma memcheck --leak-check full resident_precision_test
+12/12 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 3 s)
+== build-cuda racecheck resident_precision_test
+12/12 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 15 s)
+== build-cuda synccheck resident_precision_test
+12/12 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda initcheck resident_precision_test
+12/12 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== asan basis: 17/17 passed
+== asan initializer: 13/13 passed
+== asan hermite_function: 7/7 passed
+== asan layer: 12/12 passed
+== after review fix (fma Cody-Waite, new resident_hermite_functions_hold_where_the_weight_underflows case): memcheck --leak-check full resident_precision_test, build-cuda and build-cuda-fma: 13/13 passed, 0 bytes leaked, 0 errors

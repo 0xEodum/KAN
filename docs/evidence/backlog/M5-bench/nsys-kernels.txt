@@ -1,0 +1,48 @@
+physicists f32 K=8 (256x256x256x10, batch 2048; top kernels by total time)
+   26.4% n=  406 avg=   194.9us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+   19.5% n=  406 avg=   143.5us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+   15.1% n=  609 avg=    74.4us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)3, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+   14.7% n=  406 avg=   108.2us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nn_align1>(T1::Params)
+   10.2% n=  609 avg=    50.3us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+function f32 K=8 (256x256x256x10, batch 2048; top kernels by total time)
+   26.3% n=  406 avg=   191.9us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+   19.6% n=  406 avg=   142.8us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+   15.2% n=  406 avg=   111.1us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nn_align1>(T1::Params)
+   15.2% n=  609 avg=    73.9us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)8, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+    9.6% n=  609 avg=    46.8us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+physicists f32 K=32 (256x256x256x10, batch 2048; top kernels by total time)
+   29.6% n=  135 avg=   896.2us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)3, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+   21.5% n=  135 avg=   653.2us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+   15.9% n=   90 avg=   724.9us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+   10.5% n=   90 avg=   477.6us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+    7.1% n=   45 avg=   648.1us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x128_8x4_nn_align1>(T1::Params)
+function f32 K=32 (256x256x256x10, batch 2048; top kernels by total time)
+   21.2% n=  122 avg=   739.8us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+   19.5% n=  183 avg=   454.5us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+   15.6% n=  183 avg=   364.4us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)8, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+   14.5% n=  122 avg=   506.0us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+    9.3% n=   61 avg=   647.5us void cutlass::Kernel2<cutlass_80_simt_sgemm_128x128_8x4_nn_align1>(T1::Params)
+physicists tf32 K=32 (256x256x256x10, batch 2048; top kernels by total time)
+   33.8% n=  156 avg=   899.0us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)3, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+   24.7% n=  156 avg=   656.4us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+   11.3% n=  104 avg=   450.6us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x4_tn_align4>(T1::Params)
+   10.9% n=  104 avg=   433.2us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x64_16x4_nt_align4>(T1::Params)
+    5.3% n=   52 avg=   419.5us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nn_align4>(T1::Params)
+function tf32 K=32 (256x256x256x10, batch 2048; top kernels by total time)
+   23.6% n=  204 avg=   454.1us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::Ba
+   18.8% n=  204 avg=   362.1us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)8, (bool)0, float>(const T3 *, T3 *, T3 *, T3 
+   15.7% n=  136 avg=   453.9us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_128x128_16x4_tn_align4>(T1::Params)
+   14.9% n=  136 avg=   430.0us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x64_16x4_nt_align4>(T1::Params)
+    7.3% n=   68 avg=   422.5us void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nn_align4>(T1::Params)
+physicists f64 K=16 (256x256x256x10, batch 2048; top kernels by total time)
+   29.2% n=   16 avg= 10768.3us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x128_16x3_nt_align1>(T1::Params)
+   28.9% n=   16 avg= 10675.3us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)
+   17.6% n=   24 avg=  4323.2us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)3, (bool)0, double>(const T3 *, T3 *, T3 *, T3
+   16.3% n=   16 avg=  6013.8us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)
+    2.7% n=   24 avg=   673.1us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::StoredDerivatives<double>, double>(T1,
+function f64 K=16 (256x256x256x10, batch 2048; top kernels by total time)
+   30.4% n=   16 avg= 10761.0us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x128_16x3_nt_align1>(T1::Params)
+   30.2% n=   16 avg= 10682.7us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)
+   17.0% n=   16 avg=  6020.7us void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)
+   13.9% n=   24 avg=  3275.2us void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)8, (bool)0, double>(const T3 *, T3 *, T3 *, T3
+    2.9% n=   24 avg=   675.7us void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::StoredDerivatives<double>, double>(T1,

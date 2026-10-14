@@ -1,0 +1,79 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cpu
+Test project /home/core_ai/PyProjects/KAN/build-cpu
+      Start  1: layer
+ 1/31 Test  #1: layer ............................   Passed    0.00 sec
+      Start  2: network
+ 2/31 Test  #2: network ..........................   Passed    0.00 sec
+      Start  3: input_map
+ 3/31 Test  #3: input_map ........................   Passed    0.02 sec
+      Start  4: residual
+ 4/31 Test  #4: residual .........................   Passed    0.00 sec
+      Start  5: residual_formula
+ 5/31 Test  #5: residual_formula .................   Passed    0.00 sec
+      Start  6: residual_training
+ 6/31 Test  #6: residual_training ................   Passed   33.40 sec
+      Start  7: basis
+ 7/31 Test  #7: basis ............................   Passed    0.00 sec
+      Start  8: basis_config
+ 8/31 Test  #8: basis_config .....................   Passed    0.00 sec
+      Start  9: carrier
+ 9/31 Test  #9: carrier ..........................   Passed    0.00 sec
+      Start 10: hermite_function
+10/31 Test #10: hermite_function .................   Passed    0.00 sec
+      Start 11: local_basis
+11/31 Test #11: local_basis ......................   Passed    0.00 sec
+      Start 12: local_layer
+12/31 Test #12: local_layer ......................   Passed    0.00 sec
+      Start 13: rational
+13/31 Test #13: rational .........................   Passed    0.00 sec
+      Start 14: rational_layer
+14/31 Test #14: rational_layer ...................   Passed    0.01 sec
+      Start 15: rational_allocation
+15/31 Test #15: rational_allocation ..............   Passed    0.01 sec
+      Start 16: rational_policy
+16/31 Test #16: rational_policy ..................   Passed    0.00 sec
+      Start 17: initializer
+17/31 Test #17: initializer ......................   Passed    0.65 sec
+      Start 18: initializer_training
+18/31 Test #18: initializer_training .............   Passed   22.35 sec
+      Start 19: package_custom_include
+19/31 Test #19: package_custom_include ...........   Passed    1.05 sec
+      Start 20: package_default_configuration
+20/31 Test #20: package_default_configuration ....   Passed    1.10 sec
+      Start 21: fit_polynomial
+21/31 Test #21: fit_polynomial ...................   Passed    0.00 sec
+      Start 22: python
+22/31 Test #22: python ...........................   Passed    0.08 sec
+      Start 23: local_python
+23/31 Test #23: local_python .....................   Passed    0.07 sec
+      Start 24: rational_python
+24/31 Test #24: rational_python ..................   Passed    0.08 sec
+      Start 25: input_map_python
+25/31 Test #25: input_map_python .................   Passed    0.07 sec
+      Start 26: residual_python
+26/31 Test #26: residual_python ..................   Passed    0.07 sec
+      Start 27: initializer_python
+27/31 Test #27: initializer_python ...............   Passed    0.20 sec
+      Start 28: hermite_function_python
+28/31 Test #28: hermite_function_python ..........   Passed    0.08 sec
+      Start 29: precision_python
+29/31 Test #29: precision_python .................   Passed    0.07 sec
+      Start 30: resident_upload_python
+30/31 Test #30: resident_upload_python ...........   Passed    0.07 sec
+      Start 31: training_python
+31/31 Test #31: training_python ..................   Passed    0.07 sec
+
+100% tests passed, 0 tests failed out of 31
+
+Label Time Summary:
+carriers       =   0.08 sec*proc (5 tests)
+core           =  33.57 sec*proc (8 tests)
+cpu            =  58.61 sec*proc (21 tests)
+init           =  23.20 sec*proc (3 tests)
+integration    =   3.01 sec*proc (13 tests)
+local          =   0.08 sec*proc (3 tests)
+python         =   0.87 sec*proc (10 tests)
+rational       =   0.10 sec*proc (5 tests)
+resident       =   0.21 sec*proc (3 tests)
+
+Total Test time (real) =  59.48 sec

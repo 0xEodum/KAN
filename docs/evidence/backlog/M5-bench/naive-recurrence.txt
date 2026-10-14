@@ -1,0 +1,6 @@
+float64 x=38.5 n=741: naive 2.546357e-01, reference 2.507699e-01, relative error 1.54e-02
+float64 x=41.0 n=840: naive 0.000000e+00, reference 2.408848e-01, relative error 1.00e+00
+float64 x=45.0 n=1012: naive 0.000000e+00, reference 2.371762e-01, relative error 1.00e+00
+float32 x=13.5 n=90: naive 2.606935e-01, reference 2.606927e-01, relative error 3.03e-06
+float32 x=14.75 n=100: naive 0.000000e+00, reference 4.062068e-02, relative error 1.00e+00
+float32 x=20.0 n=199: naive 0.000000e+00, reference 2.546220e-01, relative error 1.00e+00

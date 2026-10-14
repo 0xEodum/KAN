@@ -17,6 +17,13 @@
 #if __has_include("kan/input_map.hpp")
 #define KAN_GOLDEN_STAGES 1
 #endif
+// Backlog M5: Hermite-function fixtures (HermiteConfig::normalization) are
+// appended to the basis and network fixture lists, so every earlier line of the
+// dump is unchanged. -DKAN_GOLDEN_NO_HERMITE_FUNCTION omits them: the pre-M5
+// dump, and the flag for building against a pre-M5 tree.
+#ifndef KAN_GOLDEN_NO_HERMITE_FUNCTION
+#define KAN_GOLDEN_HERMITE_FUNCTION 1
+#endif
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -166,6 +173,11 @@ std::vector<std::pair<std::string, BasisConfig>> basis_fixtures() {
              return t;
          }())},
         {"bspline_huge_domain", spline(2, {-1e308, -1e308, -1e308, 0, 1e308, 1e308, 1e308})},
+#ifdef KAN_GOLDEN_HERMITE_FUNCTION
+        // Backlog M5 (appended: the earlier fixtures' lines are unchanged).
+        {"hermite_function6", HermiteConfig{6, HermiteNormalization::Function}},
+        {"hermite_function128", HermiteConfig{128, HermiteNormalization::Function}},
+#endif
     };
 }
 
@@ -314,6 +326,12 @@ std::vector<NetworkFixture> network_fixtures() {
                         {1.0}, 1, 0});
     fixtures.push_back({"rbf_tiny_width", Network({seeded(Layer(1, 1, rbf({0, 1e-3}, 1e-160)), 0.1)}),
                         {1e-158}, 1, 0});
+#ifdef KAN_GOLDEN_HERMITE_FUNCTION
+    fixtures.push_back({"hermite_function",
+                        Network({seeded(Layer(2, 2, HermiteConfig{12, HermiteNormalization::Function}), 0.3),
+                                 seeded(Layer(2, 1, HermiteConfig{40, HermiteNormalization::Function}), 0.4)}),
+                        {-30, 0.5, 13.9, -2, 6, 1e300}, 3, 0.1});
+#endif
     return fixtures;
 }
 

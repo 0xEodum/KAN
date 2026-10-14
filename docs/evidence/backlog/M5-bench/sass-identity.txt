@@ -1,0 +1,9 @@
+# Backlog M5: per-kernel SASS of resident.cu, stub tree (bd12b0f + the public HermiteConfig field only; its FMA object was itself SASS-identical, 173/173, to the object built from bd12b0f) vs M5, docs/evidence/backlog/C5-bench/sass_cmp.py
+== build-cuda
+before 173 kernels, after 178, common 173, differing 0
+only after: 5 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb0EdEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi', '_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb0EfEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi', '_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb1EdEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi']
+only before: []
+== build-cuda-fma
+before 173 kernels, after 178, common 173, differing 0
+only after: 5 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb0EdEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi', '_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb0EfEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi', '_ZN3kan4cuda44_GLOBAL__N__resident12basis_kernelILNS_6detail9BasisKindE8ELb1EdEEvPKT1_PS5_S8_S8_mNS3_11BasisViewOfIS5_EEjNS1_8SiluRowsIS5_EEPi']
+only before: []
