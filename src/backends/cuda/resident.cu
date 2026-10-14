@@ -33,10 +33,12 @@ namespace {
 struct TestScopeState {
     SplinePath path = SplinePath::Automatic;
     ResidentLayout* layout = nullptr;
+    NonlinearReduction reduction = NonlinearReduction::Automatic;
 };
 thread_local TestScopeState test_scope;
 } // namespace
 ResidentTestScope::ResidentTestScope(SplinePath path, ResidentLayout* layout) { test_scope = {path, layout}; }
+ResidentTestScope::ResidentTestScope(NonlinearReduction reduction, ResidentLayout* layout) { test_scope = {SplinePath::Automatic, layout, reduction}; }
 ResidentTestScope::~ResidentTestScope() { test_scope = {}; }
 } // namespace testing
 namespace {
@@ -769,6 +771,52 @@ __global__ void nonlinear_staged_kernel(const T* dx, const T* dw, const T* w, T*
         report(c, status); report(v, status);
     }
 }
+// Tiled variant with the summation order of nonlinear_partial_kernel (backlog
+// C12). There, lane l of block (k, tile) accumulates rows tile*256 + l +
+// n*tiles*256 for n = 0, 1, ... and a shared tree sums the 256 lanes. When
+// the column blocks of one tile are not resident together, each warp load
+// fetches 32 sectors for 32 useful values and the rows come from DRAM once per
+// term (FP64 K=8: 44 GB/s effective on GB10). Here block (tile, group) owns
+// the chains of all 256 lanes for `group` consecutive terms k0.. as shared
+// accumulators at item lane*g + j: per chunk of 256 rows its threads read the
+// g values of every row (contiguous when g = terms) and update the items in
+// the same order, then run the same tree per term, so the partials are
+// bitwise those of the column kernel in either FMA mode.
+template<class T>
+__global__ void nonlinear_tile_kernel(const T* dx, const T* dw, const T* w, T* partial, std::size_t rows,
+                                      std::size_t terms, unsigned tiles, unsigned group, int* status) {
+    T* centers = stage_memory<T>();
+    T* widths = centers+std::size_t{256}*group;
+    const auto tile = blockIdx.x%tiles;
+    const auto k0 = static_cast<std::size_t>(blockIdx.x/tiles)*group;
+    const auto g = terms-k0 < group ? terms-k0 : static_cast<std::size_t>(group);
+    const auto items = 256*g;
+    for (auto i = static_cast<std::size_t>(threadIdx.x); i < items; i += blockDim.x) { centers[i] = 0; widths[i] = 0; }
+    const auto stride = static_cast<std::size_t>(tiles)*256;
+    for (auto base = static_cast<std::size_t>(tile)*256; base < rows; base += stride) {
+        // Each item is updated by one thread (the same one for every chunk).
+        const auto count = (rows-base < 256 ? rows-base : std::size_t{256})*g;
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < count; i += blockDim.x) {
+            const auto r = i/g, o = (base+r)*terms+k0+(i-r*g);
+            const T factor = w[o];
+            centers[i] += factor*(-dx[o]); widths[i] += factor*dw[o];
+        }
+    }
+    __syncthreads();
+    for (auto i = static_cast<std::size_t>(threadIdx.x); i < items; i += blockDim.x) { report(centers[i], status); report(widths[i], status); }
+    for (std::size_t step = 128; step; step /= 2) {
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < step*g; i += blockDim.x) {
+            centers[i] += centers[i+step*g]; widths[i] += widths[i+step*g];
+        }
+        __syncthreads();
+    }
+    for (auto j = static_cast<std::size_t>(threadIdx.x); j < g; j += blockDim.x) {
+        partial[(k0+j)*tiles+tile] = centers[j]; partial[(terms+k0+j)*tiles+tile] = widths[j];
+        report(centers[j], status); report(widths[j], status);
+    }
+}
+// Shared accumulators of one nonlinear_tile_kernel block.
+template<class T> constexpr std::size_t nonlinear_tile_bytes(std::size_t group) { return std::size_t{2}*256*group*sizeof(T); }
 template<class T>
 __global__ void nonlinear_finish_kernel(const T* partial, T* gradient, std::size_t terms, unsigned tiles, int* status) {
     const auto stride=static_cast<std::size_t>(gridDim.x)*blockDim.x;
@@ -1506,6 +1554,11 @@ struct TrainableRbfPlan {
     ExpansionPlan<T> expansion;
     std::size_t log_derivatives = 0, partials = 0;
     unsigned partial_tiles = 1;
+    // Center/log-width reduction (backlog C12, select_reduction): terms per
+    // nonlinear_tile_kernel block (0: never tiled), the least tile-kernel grid
+    // that the automatic choice accepts, and the path a test scope forces.
+    unsigned tile_group = 0, tile_min_blocks = 1;
+    testing::NonlinearReduction reduction = testing::NonlinearReduction::Automatic;
 };
 
 // Rational edges with the arguments z per (input, sample), edge-major caches
@@ -1780,17 +1833,16 @@ template<class T> std::size_t partial_extent(const Plan<T>& plan, std::size_t ca
     }, plan);
 }
 
-// Selection of the sparse B-spline path (backlog C5), per layer at
-// construction, so that the arena holds either the dense rows or the sparse
-// ones and graphs, uploads and rollback see a fixed layout.
-struct SplineDevice {
+// Device properties queried at construction by the sparse B-spline selection
+// (backlog C5) and the trainable-RBF reduction (C12).
+struct ExecutorDevice {
     int fp64_ratio = 0;           // cudaDevAttrSingleToDoublePrecisionPerfRatio
     unsigned multiprocessors = 1; // cudaDevAttrMultiProcessorCount
     std::size_t l2_bytes = 0;     // cudaDevAttrL2CacheSize
     std::size_t shared_optin = 0; // cudaDevAttrMaxSharedMemoryPerBlockOptin
 };
-SplineDevice spline_device() {
-    SplineDevice d;
+ExecutorDevice executor_device() {
+    ExecutorDevice d;
     int device = 0, value = 0;
     if (cudaGetDevice(&device) != cudaSuccess) return d;
     if (cudaDeviceGetAttribute(&value, cudaDevAttrSingleToDoublePrecisionPerfRatio, device) == cudaSuccess) d.fp64_ratio = value;
@@ -1802,6 +1854,9 @@ SplineDevice spline_device() {
         d.shared_optin = static_cast<std::size_t>(value);
     return d;
 }
+// Selection of the sparse B-spline path (backlog C5), per layer at
+// construction, so that the arena holds either the dense rows or the sparse
+// ones and graphs, uploads and rollback see a fixed layout.
 // Automatic selection (C5 evidence: GB10 sweep of complete training steps,
 // forced dense against forced sparse, 64-, 256- and 1024-wide networks, K/(p+1)
 // 1.5 to 24). A layer takes the sparse path when
@@ -1820,13 +1875,13 @@ SplineDevice spline_device() {
 // The ratios and floors are the smallest values at which no configuration of
 // the sweep ran slower with the automatic choice than with the dense rows.
 // Without a reduced FP64 rate FP64 uses the FP32 values.
-double sparse_spline_ratio(bool fp64, bool tensor_ops, bool upstream_in_l2, const SplineDevice& d) {
+double sparse_spline_ratio(bool fp64, bool tensor_ops, bool upstream_in_l2, const ExecutorDevice& d) {
     const bool slow_fp64 = fp64 && d.fp64_ratio >= 8;
     const double ratio = slow_fp64 ? 2.0 : tensor_ops ? 4.0 : 2.0;
     if (upstream_in_l2) return ratio;
     return slow_fp64 ? 8.0 : tensor_ops ? 16.0 : 6.0;
 }
-std::size_t sparse_spline_work(bool fp64, bool tensor_ops, const SplineDevice& d) {
+std::size_t sparse_spline_work(bool fp64, bool tensor_ops, const ExecutorDevice& d) {
     const unsigned bits = fp64 && d.fp64_ratio >= 8 ? 21 : tensor_ops && !fp64 ? 23 : 22;
     return (std::size_t{1} << bits)*d.multiprocessors;
 }
@@ -1842,7 +1897,7 @@ template<class T> std::size_t spline_input_bytes(std::size_t terms, unsigned gro
 // per SM on GB10's 100 KiB; more inputs per tile did not help).
 constexpr std::size_t spline_stage_bytes = std::size_t{24} << 10;
 template<class T>
-void select_sparse(BasisPlan<T>& plan, std::size_t capacity, bool tensor_ops, const SplineDevice& device, testing::SplinePath path) {
+void select_sparse(BasisPlan<T>& plan, std::size_t capacity, bool tensor_ops, const ExecutorDevice& device, testing::SplinePath path) {
     const auto& b = plan.expansion.block;
     const auto degree = plan.expansion.view.degree;
     if (plan.expansion.view.kind != detail::BasisKind::BSpline || path == testing::SplinePath::Dense) return;
@@ -1892,6 +1947,39 @@ void select_sparse(BasisPlan<T>& plan, std::size_t capacity, bool tensor_ops, co
     check(cub::DeviceSegmentedRadixSort::SortPairs(nullptr, p.sort_bytes, static_cast<const unsigned*>(nullptr), static_cast<unsigned*>(nullptr),
               static_cast<const unsigned*>(nullptr), static_cast<unsigned*>(nullptr), items, segments,
               static_cast<const int*>(nullptr), static_cast<const int*>(nullptr), 0, p.key_bits), "resident sparse sort storage");
+}
+
+// Trainable-RBF center/log-width reduction (backlog C12). A tile-kernel block
+// holds 256 lanes of accumulators for `group` terms in shared memory: all
+// terms when they fit the per-block opt-in limit, otherwise groups of a
+// multiple of 128 bytes of terms (whole cache lines of a row when terms is a
+// multiple of it). Per launch, FP32/TF32 layers whose rows fit the C1 stage
+// keep nonlinear_staged_kernel (as fast or faster, its own summation order);
+// the other layers take the tile kernel when its grid (term groups x tiles)
+// has at least one block per SM, or reaches the most tiles on devices with
+// more SMs than nonlinear_tiles (the C1 64-block staged kernel already won on
+// GA102's 82 SMs), otherwise the column kernel: below that the
+// few tile blocks serialize K times more work each (GB10: 2-5 us slower at
+// 512-4096 rows), while the column blocks of a tile are then few enough to be
+// resident together and to share the rows in L2.
+template<class T>
+void select_reduction(TrainableRbfPlan<T>& plan, const ExecutorDevice& device, testing::NonlinearReduction reduction) {
+    const auto terms = plan.expansion.block.terms;
+    plan.reduction = reduction;
+    plan.tile_min_blocks = std::min(device.multiprocessors, nonlinear_tiles);
+    const auto most = device.shared_optin/nonlinear_tile_bytes<T>(1);
+    constexpr auto line = std::size_t{128}/sizeof(T);
+    const auto group = terms <= most ? terms : most >= line ? most/line*line : most;
+    if (group == 0 || terms == 0 || (terms-1)/group+1 > 2147483647U/nonlinear_tiles) return;
+    plan.tile_group = static_cast<unsigned>(group);
+}
+template<class T>
+bool tiled_reduction(const TrainableRbfPlan<T>& plan, unsigned tiles, unsigned staged_rows) {
+    using testing::NonlinearReduction;
+    if (plan.tile_group == 0 || plan.reduction == NonlinearReduction::Column) return false;
+    if (plan.reduction == NonlinearReduction::Tile) return true;
+    const auto groups = (plan.expansion.block.terms-1)/plan.tile_group+1;
+    return staged_rows == 0 && groups*tiles >= plan.tile_min_blocks;
 }
 
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
@@ -2239,8 +2327,12 @@ template<class T> void run_backward(Context<T>& s, const TrainableRbfPlan<T>& pl
     const auto tiles=static_cast<unsigned>(std::min<std::size_t>(plan.partial_tiles,rows?((rows-1)/256+1):1));
     // Bound the launch dimension even for large valid basis term counts.
     if(b.terms>2147483647U/tiles)throw std::overflow_error("resident nonlinear launch size overflow");
-    const auto tile_rows = b.terms <= stage_threads ? stage_rows<T>(b.terms, 3) : 0;
-    if (rows && tile_rows) {
+    const auto tile_rows = b.terms <= stage_threads && plan.reduction == testing::NonlinearReduction::Automatic ? stage_rows<T>(b.terms, 3) : 0;
+    if (rows && tiled_reduction(plan, tiles, tile_rows)) {
+        const auto group = plan.tile_group;
+        nonlinear_tile_kernel<<<static_cast<unsigned>((b.terms-1)/group+1)*tiles, stage_threads, nonlinear_tile_bytes<T>(group), s.stream>>>(
+            s.ptr(p.derivatives), s.ptr(plan.log_derivatives), s.ptr(s.scratch), s.ptr(plan.partials), rows, b.terms, tiles, group, s.status);
+    } else if (rows && tile_rows) {
         nonlinear_staged_kernel<<<tiles, stage_threads, static_cast<std::size_t>(tile_rows)*b.terms*3*sizeof(T), s.stream>>>(
             s.ptr(p.derivatives), s.ptr(plan.log_derivatives), s.ptr(s.scratch), s.ptr(plan.partials), rows, b.terms, tiles,
             tile_rows, s.status);
@@ -2712,15 +2804,18 @@ struct Engine final : ResidentExecutor, Context<T> {
             parameter_count += extent(plans.back()).size;
         }
         // Backlog C5: path of every B-spline layer, which fixes the arena layout.
-        SplineDevice device;
-        const bool splines = std::any_of(plans.begin(), plans.end(), [](const Plan<T>& p) {
+        // Backlog C12: reduction kernels of every trainable-RBF layer.
+        ExecutorDevice device;
+        const bool queried = std::any_of(plans.begin(), plans.end(), [](const Plan<T>& p) {
             const auto* basis = std::get_if<BasisPlan<T>>(&p);
-            return basis && basis->expansion.view.kind == detail::BasisKind::BSpline;
+            return std::holds_alternative<TrainableRbfPlan<T>>(p) || (basis && basis->expansion.view.kind == detail::BasisKind::BSpline);
         });
-        if (splines && available()) {
-            device = spline_device();
-            for (auto& plan : plans)
+        if (queried && available()) {
+            device = executor_device();
+            for (auto& plan : plans) {
                 if (auto* basis = std::get_if<BasisPlan<T>>(&plan)) select_sparse(*basis, capacity, tensor_ops, device, testing::test_scope.path);
+                if (auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan)) select_reduction(*rbf, device, testing::test_scope.reduction);
+            }
         }
         Reservation<T> reserve;
         parameters = reserve(parameter_count); gradients = reserve(parameter_count); candidates = reserve(parameter_count);
@@ -2762,6 +2857,11 @@ struct Engine final : ResidentExecutor, Context<T> {
             layout->sparse.clear();
             for (const auto& plan : plans) layout->sparse.push_back(std::visit([](const auto& p) { return sparse_layer(p); }, plan));
             layout->arena_bytes = bytes;
+            layout->reduction_groups.clear();
+            for (const auto& plan : plans) {
+                const auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan);
+                layout->reduction_groups.push_back(rbf ? rbf->tile_group : 0);
+            }
         }
         try {
             if (!available()) throw std::runtime_error("no CUDA device available");
@@ -2802,6 +2902,12 @@ struct Engine final : ResidentExecutor, Context<T> {
                     if (spline_input_bytes<T>(b.terms, basis->sparse.group) > (std::size_t{48} << 10))
                         check(cudaFuncSetAttribute(spline_input_kernel<P, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
                 });
+            }
+            for (const auto& plan : plans) {
+                const auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan);
+                if (rbf && nonlinear_tile_bytes<T>(rbf->tile_group) > (std::size_t{48} << 10))
+                    check(cudaFuncSetAttribute(nonlinear_tile_kernel<T>, cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                               static_cast<int>(device.shared_optin)), "resident nonlinear shared memory");
             }
             for (std::size_t j = 0; j < plans.size(); ++j)
                 with_stage(plans[j], model.layers()[j], [&](const auto& p, const auto& stage, const auto& kind) {
