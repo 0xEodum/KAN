@@ -27,8 +27,15 @@ struct JacobiConfig {
     bool operator==(const JacobiConfig&) const = default;
 };
 
+// Hermite normalization (backlog M5). Physicists: H_n, the default; its terms
+// grow like 2^n n! and condition poorly at high degree. Function: the
+// normalized Hermite functions psi_n(x) = H_n(x) exp(-x^2/2) / sqrt(2^n n! sqrt(pi)),
+// orthonormal in L2(R) and bounded by pi^(-1/4) for every n and x.
+enum class HermiteNormalization { Physicists, Function };
+
 struct HermiteConfig {
-    std::size_t size = 4; // physicists' H_n
+    std::size_t size = 4; // terms of index 0..size-1
+    HermiteNormalization normalization = HermiteNormalization::Physicists;
     bool operator==(const HermiteConfig&) const = default;
 };
 

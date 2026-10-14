@@ -67,7 +67,8 @@ kan::BasisConfig family(test::Family kind) {
 }
 constexpr test::Family families[] = {test::Family::Chebyshev, test::Family::Legendre, test::Family::Jacobi,
                                      test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf,
-                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat};
+                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat,
+                                     test::Family::HermiteFunction};
 kan::RationalConfig rational_config(kan::DenominatorPolicy policy) {
     kan::RationalConfig r;
     r.numerator_degree = 3; r.denominator_degree = 2; r.center = 0.1; r.scale = 1.3; r.denominator_policy = policy;
@@ -353,6 +354,9 @@ TEST(upload_rejects_fixed_basis_configuration_changes) {
         {kan::MexicanHatConfig{{-1, 0, 1}, {0.5, 0.6, 0.7}}, kan::MexicanHatConfig{{-1, 0, 0.9}, {0.5, 0.6, 0.7}}},
         {kan::BSplineConfig{1, {0, 0, 0.5, 1, 1}}, kan::BSplineConfig{1, {0, 0, 0.4, 1, 1}}},
         {kan::BSplineConfig{1, {0, 0, 0.5, 1, 1}}, kan::BSplineConfig{2, {0, 0, 0, 1, 1, 1}}},
+        // Backlog M5: the Hermite normalization is fixed configuration.
+        {kan::HermiteConfig{4}, kan::HermiteConfig{4, kan::HermiteNormalization::Function}},
+        {kan::HermiteConfig{4, kan::HermiteNormalization::Function}, kan::HermiteConfig{4}},
     };
     for (const auto& [built, other] : pairs) {
         const kan::Network initial({seeded(kan::Layer(2, 2, built), 0.2)});

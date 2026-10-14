@@ -30,7 +30,7 @@ double objective(kan::cuda::ResidentNetwork& gpu, const std::vector<double>& x,
 TEST(resident_input_and_parameter_gradients_match_independent_finite_differences) {
     for (auto kind : {test::Family::Chebyshev, test::Family::Legendre,
                       test::Family::Jacobi, test::Family::Hermite,
-                      test::Family::Fourier, test::Family::GaussianRbf}) {
+                      test::Family::Fourier, test::Family::GaussianRbf, test::Family::HermiteFunction}) {
         const auto model = layer(kind);
         const std::vector<double> x{-0.63, 0.19, 0.72, -0.28}, dy{0.3, -0.7, 0.9, 0.2};
         kan::cuda::ResidentNetwork gpu(kan::Network({model}), 2);

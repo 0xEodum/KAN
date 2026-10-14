@@ -270,9 +270,18 @@ PYBIND11_MODULE(_kan, module) {
     config_class<kan::LegendreConfig>(module, "LegendreConfig")
         .def(py::init([](std::size_t size) { return kan::LegendreConfig{size}; }), py::arg("size") = 4)
         .def_readwrite("size", &kan::LegendreConfig::size);
+    py::native_enum<kan::HermiteNormalization>(module, "HermiteNormalization", "enum.Enum",
+                                               "Hermite basis normalization")
+        .value("PHYSICISTS", kan::HermiteNormalization::Physicists, "physicists' polynomials H_n (default)")
+        .value("FUNCTION", kan::HermiteNormalization::Function,
+               "normalized Hermite functions H_n(x) exp(-x^2/2) / sqrt(2^n n! sqrt(pi))")
+        .finalize();
     config_class<kan::HermiteConfig>(module, "HermiteConfig")
-        .def(py::init([](std::size_t size) { return kan::HermiteConfig{size}; }), py::arg("size") = 4)
-        .def_readwrite("size", &kan::HermiteConfig::size);
+        .def(py::init([](std::size_t size, kan::HermiteNormalization normalization) {
+            return kan::HermiteConfig{size, normalization}; }),
+             py::arg("size") = 4, py::arg("normalization") = kan::HermiteNormalization::Physicists)
+        .def_readwrite("size", &kan::HermiteConfig::size)
+        .def_readwrite("normalization", &kan::HermiteConfig::normalization);
     config_class<kan::JacobiConfig>(module, "JacobiConfig")
         .def(py::init([](std::size_t size, double alpha, double beta) { return kan::JacobiConfig{size, alpha, beta}; }),
              py::arg("size") = 4, py::arg("alpha") = 0.0, py::arg("beta") = 0.0)

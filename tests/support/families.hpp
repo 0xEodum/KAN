@@ -9,7 +9,9 @@
 
 namespace test {
 
-enum class Family { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, TrainableRbf, BSpline, MexicanHat };
+// HermiteFunction: HermiteConfig with the Function normalization (backlog M5).
+enum class Family { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, TrainableRbf, BSpline, MexicanHat,
+                    HermiteFunction };
 
 struct FamilyParameters {
     std::size_t size = 4; // global families only; local families use their vectors
@@ -30,6 +32,7 @@ inline kan::BasisConfig basis(Family family, const FamilyParameters& p) {
     case Family::TrainableRbf: return kan::TrainableRbfConfig{p.centers, p.log_widths};
     case Family::BSpline: return kan::BSplineConfig{p.degree, p.knots};
     case Family::MexicanHat: return kan::MexicanHatConfig{p.centers, p.scales};
+    case Family::HermiteFunction: return kan::HermiteConfig{p.size, kan::HermiteNormalization::Function};
     }
     return kan::ChebyshevConfig{p.size};
 }

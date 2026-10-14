@@ -144,6 +144,19 @@ TEST(polynomial_reference_moments_are_closed_forms) {
     // Hermite: numerical check under exp(-x^2).
     const auto hw = [](double x) { return std::exp(-x * x); };
     same_moments(her.second_moments, numeric_moments(kan::HermiteConfig{6}, -12, 12, hw), 1e-9);
+    // Normalized Hermite functions (backlog M5) under the same N(0, 1/2):
+    // E[psi_n^2] = Gamma(n+1/2) / (sqrt(2) pi n!), m_0 = 1/sqrt(2 pi),
+    // m_n = m_(n-1) (2n-1)/(2n).
+    const kan::HermiteConfig function{40, kan::HermiteNormalization::Function};
+    const auto fun = kan::reference_moments(function);
+    test::near(fun.variance, 0.5, 0);
+    REQUIRE(fun.second_moments.size() == 40);
+    double expected = 1 / std::sqrt(2 * std::numbers::pi);
+    for (std::size_t k = 0; k < 40; ++k) {
+        if (k) expected *= double(2 * k - 1) / double(2 * k);
+        test::near(fun.second_moments[k] / expected, 1, 1e-14);
+    }
+    same_moments(fun.second_moments, numeric_moments(function, -12, 12, hw), 1e-9);
 }
 
 TEST(localized_reference_moments_match_numerical_integration) {
@@ -251,6 +264,10 @@ TEST(variance_scaling_preserves_the_reference_second_moment) {
     std::vector<double> x(32 * 2048);
     for (auto& v : x) v = std::sqrt(0.5) * std::sqrt(-2 * std::log(next_u())) * std::cos(2 * pi * next_u());
     test::near(mean_square(hermite.forward(x, 2048)) / 0.5, 1, 0.2);
+    // Normalized Hermite functions (backlog M5), high degree, same measure.
+    kan::Layer functions(32, 32, kan::HermiteConfig{24, kan::HermiteNormalization::Function});
+    kan::initialize(functions, kan::VarianceScaling{1, kan::Distribution::Normal, 5, {}});
+    test::near(mean_square(functions.forward(x, 2048)) / 0.5, 1, 0.2);
 }
 
 TEST(variance_stays_bounded_through_eight_layers) {
@@ -264,6 +281,7 @@ TEST(variance_stays_bounded_through_eight_layers) {
         {"chebyshev", kan::ChebyshevConfig{5}, true}, {"legendre", kan::LegendreConfig{5}, true},
         {"jacobi", kan::JacobiConfig{5, 0.5, 0.5}, true}, {"bspline", uniform_spline(3, 5), true},
         {"hermite", kan::HermiteConfig{4}, true}, {"fourier", kan::FourierConfig{5, 1.0}, false},
+        {"hermite_fn", kan::HermiteConfig{12, kan::HermiteNormalization::Function}, false},
         {"rbf", kan::GaussianRbfConfig{linspace(-1, 1, 6), 0.4}, false},
         {"mexican_hat", kan::MexicanHatConfig{linspace(-1, 1, 5), std::vector<double>(5, 0.5)}, false},
     };
@@ -445,6 +463,9 @@ TEST(seeds_are_deterministic_and_pinned_across_platforms) {
          kan::VarianceScaling{1, kan::Distribution::Uniform, 7, {}}, "e46b5fb6a1201363"},
         {kan::Layer(5, 4, kan::FourierConfig{5, 2.5}), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}}, "309cb5b5cbe3b6d4"},
         {kan::Layer(5, 4, smooth), kan::VarianceScaling{1, kan::Distribution::Normal, 9, {0.4, 2}}, "44389dcaba3ba426"},
+        // Backlog M5; pinned with GCC on aarch64 (no MSVC run on that machine).
+        {kan::Layer(5, 4, kan::HermiteConfig{7, kan::HermiteNormalization::Function}),
+         kan::VarianceScaling{1, kan::Distribution::Uniform, 10, {}}, "e77ab1b759107f4f"},
     };
     std::string failures;
     for (auto& c : cases) {

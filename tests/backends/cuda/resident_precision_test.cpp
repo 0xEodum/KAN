@@ -90,7 +90,8 @@ kan::BasisConfig family(test::Family kind) {
 }
 constexpr test::Family families[] = {test::Family::Chebyshev, test::Family::Legendre, test::Family::Jacobi,
                                      test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf,
-                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat};
+                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat,
+                                     test::Family::HermiteFunction};
 
 void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients& expected) {
     // call_reduction * sum_b |U[b, o]| per output of layer j, U its upstream
@@ -210,7 +211,7 @@ TEST(default_precision_is_float64) {
     fp64.upload_input(std::vector<double>{1e39, 0.0}, 1);
 }
 
-// All nine basis families between input maps (affine, trainable LayerNorm,
+// All basis families (and the Hermite-function option) between input maps (affine, trainable LayerNorm,
 // tanh), so every shared host/device formula runs in single precision.
 TEST(float32_every_family_and_input_map_trains_like_fp64_cpu) {
     for (auto kind : families) {
@@ -233,6 +234,58 @@ TEST(float32_high_degree_recurrences_match_fp64_cpu) {
         kan::Network cpu({layer(3, 2, basis, 0.3)});
         train_like_cpu(std::move(cpu), 33, 33, 0.0, 2, 0.01);
     }
+}
+
+// psi_n(x) and psi_n'(x), n < terms, read exactly from the resident executor: a
+// 1 -> terms layer with identity coefficients gives y[b, o] = psi_o(x), and
+// `terms` samples of x with one-hot upstream rows give dx[b] = psi_b'(x).
+std::pair<std::vector<double>, std::vector<double>> resident_psi(double x, std::size_t terms, Precision precision) {
+    kan::Layer l(1, terms, kan::HermiteConfig{terms, kan::HermiteNormalization::Function});
+    std::vector<double> identity(terms * terms, 0.0), upstream(terms * terms, 0.0);
+    for (std::size_t k = 0; k < terms; ++k) identity[k * terms + k] = upstream[k * terms + k] = 1;
+    l.set_parameters(identity, std::vector<double>(terms, 0.0));
+    ResidentNetwork gpu(kan::Network({l}), terms, precision);
+    gpu.upload_input(std::vector<double>(terms, x), terms);
+    gpu.forward();
+    const auto out = gpu.download_output();
+    gpu.upload_output_gradient(upstream);
+    gpu.backward();
+    return {std::vector<double>(out.begin(), out.begin() + static_cast<std::ptrdiff_t>(terms)), gpu.download_gradients().input};
+}
+
+// Backlog M5: the ranges where exp(-x^2/2) underflows. FP32 beyond 14.4 up to the
+// tail cutoff (x^2 >= 448 for size <= 56, 8*size above) with rescaling; FP64
+// rescales from |x| ~ 27 and its weight underflows from 38.6. Reference: the
+// CPU FP64 evaluation (itself checked against a 700-digit reference); measured
+// FP32 errors are <= 5.3e-6 absolute (n*eps recurrence growth).
+TEST(resident_hermite_functions_hold_where_the_weight_underflows) {
+    const auto check = [](double x, std::size_t terms, Precision precision, double absolute, double relative) {
+        const auto expected = kan::evaluate_basis(kan::HermiteConfig{terms, kan::HermiteNormalization::Function}, x);
+        const auto [values, slopes] = resident_psi(x, terms, precision);
+        for (std::size_t n = 0; n < terms; ++n) {
+            const double dscale = std::sqrt(2.0 * double(n) + 1);
+            if (std::abs(values[n] - expected.values[n]) > absolute + relative * std::abs(expected.values[n]) ||
+                std::abs(slopes[n] - expected.derivatives[n]) > dscale * absolute + relative * std::abs(expected.derivatives[n]))
+                throw std::runtime_error(precise("x=", x, " n=", n, " value ", values[n], " vs ", expected.values[n],
+                                                 " slope ", slopes[n], " vs ", expected.derivatives[n]));
+        }
+    };
+    for (const double x : {15.0, -18.0, 21.0, 21.5}) check(x, 128, Precision::Float32, 2e-5, 1e-4);
+    check(30.0, 512, Precision::Float32, 1e-4, 1e-4);
+    for (const double x : {29.0, -35.0, 41.0, 45.0}) check(x, 1024, Precision::Float64, 1e-12, 1e-11);
+}
+
+// Normalized Hermite functions (backlog M5) at degrees the physicists'
+// polynomials cannot reach in FP32, on inputs scaled to |x| <= 0.9*scale:
+// up to 14.4, past the FP32 normal range of exp(-x^2/2) (|x| > 13.2).
+TEST(float32_high_degree_hermite_functions_match_fp64_cpu) {
+    const kan::HermiteConfig basis{128, kan::HermiteNormalization::Function};
+    for (const double scale : {1.0, 6.0, 16.0})
+        for (const auto precision : {Precision::Float32, Precision::TensorFloat32}) {
+            kan::Network cpu({kan::InputMap(3, kan::AffineMap{{scale, -scale, 0.8 * scale}, {0.0, 0.1, -0.1}}),
+                              layer(3, 2, basis, 0.3)});
+            train_like_cpu(std::move(cpu), 33, 33, 0.0, 2, 0.01, precision);
+        }
 }
 
 TEST(float32_rational_policies_match_fp64_cpu) {

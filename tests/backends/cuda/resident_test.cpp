@@ -50,7 +50,8 @@ void parity(test::Family kind) {
 }
 TEST(resident_all_families_mixed_topology_and_repeated_gpu_sgd) {
     for (auto kind : {test::Family::Chebyshev, test::Family::Legendre, test::Family::Jacobi,
-                      test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf}) parity(kind);
+                      test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf,
+                      test::Family::HermiteFunction}) parity(kind);
 }
 TEST(resident_states_upload_validation_and_move) {
     kan::cuda::ResidentNetwork gpu(network(test::Family::Legendre), 4);

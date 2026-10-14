@@ -23,8 +23,9 @@ def _add_dll_directories():
 
 _dll_directories = _add_dll_directories()
 
-from _kan import (ChebyshevConfig, LegendreConfig, JacobiConfig, HermiteConfig, FourierConfig,
-                  GaussianRbfConfig, TrainableRbfConfig, BSplineConfig, MexicanHatConfig, basis_size)
+from _kan import (ChebyshevConfig, LegendreConfig, JacobiConfig, HermiteConfig, HermiteNormalization,
+                  FourierConfig, GaussianRbfConfig, TrainableRbfConfig, BSplineConfig, MexicanHatConfig,
+                  basis_size)
 from _kan import DenominatorPolicy, RationalConfig, evaluate_basis, evaluate_rational, Layer, Network
 from _kan import BasisEdges, TrainableRbfEdges, RationalEdges
 from _kan import insert_knot, adapt_grid, set_rbf_parameters, set_rational_parameters
