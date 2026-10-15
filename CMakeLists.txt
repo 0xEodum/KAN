@@ -121,6 +121,9 @@ if(BUILD_TESTING)
     foreach(suite local_basis local_layer)
         kan_add_test(carriers/local ${suite} "cpu;local" 60 kan)
     endforeach()
+    # Backlog C13: derivative-coefficient form of the spline input derivative (shared formulas).
+    kan_add_test(carriers/local spline_derivative_formula "cpu;local" 60 kan)
+    target_include_directories(spline_derivative_formula_test PRIVATE src)
     # Backlog M2: rational denominator policies (rational_policy).
     foreach(suite rational rational_layer rational_allocation rational_policy)
         kan_add_test(carriers/rational ${suite} "cpu;rational" 60 kan)
@@ -184,6 +187,9 @@ if(BUILD_TESTING)
         # Backlog C5: sparse B-spline path; uses the private test hook (src/backends/cuda/resident_testing.hpp).
         kan_add_test(backends/cuda local_sparse_resident "cuda;local" 300 kan::cuda)
         target_include_directories(local_sparse_resident_test PRIVATE src)
+        # Backlog C13: FP32/TF32 B-spline input VJP accuracy (same private hook).
+        kan_add_test(backends/cuda local_spline_gradient_resident "cuda;local" 300 kan::cuda)
+        target_include_directories(local_spline_gradient_resident_test PRIVATE src)
         # Backlog C12: trainable-RBF center/log-width reduction paths (same private hook).
         kan_add_test(backends/cuda local_rbf_reduction_resident "cuda;local" 300 kan::cuda)
         target_include_directories(local_rbf_reduction_resident_test PRIVATE src)

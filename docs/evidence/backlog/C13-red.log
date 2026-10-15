@@ -1,0 +1,35 @@
+# C13 RED: the final suite tests/backends/cuda/local_spline_gradient_resident_test.cpp linked against the base
+# library (f9b8d01, parity build: scripts/link_harness.sh <base build> <suite> <exe> -I <base>/src -I tests), 2026-10-15T06:59:54Z.
+# RED cases: the two bound cases (TF32 and FP32 error/bound up to 75.6 and 89.3).
+# Pinning cases (pass before and after): two_layer_..._layer_by_layer, degree_zero_input_gradient_is_zero,
+# overflowing_difference_coefficients_are_reported.
+$ ./local_spline_gradient_resident_test
+  TF32 dense degree 3 intervals 128: largest error/bound 3.1541 (entry 2983)
+  TF32 dense degree 3 intervals 256: largest error/bound 75.6257 (entry 876)
+  TF32 sparse degree 3 intervals 128: largest error/bound 0.0026488 (entry 5862)
+  TF32 sparse degree 3 intervals 256: largest error/bound 0.0316058 (entry 1655)
+  FP32 dense degree 3 intervals 128: largest error/bound 1.30758 (entry 2962)
+  FP32 dense degree 3 intervals 256: largest error/bound 89.2714 (entry 3666)
+  FP32 sparse degree 3 intervals 128: largest error/bound 1.2055 (entry 5862)
+  FP32 sparse degree 3 intervals 256: largest error/bound 86.3048 (entry 1655)
+FAIL spline_input_gradient_is_bounded_by_the_difference_rounding: error/bound > 1: [TF32 dense degree 3 intervals 128: 3.154104] [TF32 dense degree 3 intervals 256: 75.625687] [FP32 dense degree 3 intervals 128: 1.307576] [FP32 dense degree 3 intervals 256: 89.271378] [FP32 sparse degree 3 intervals 128: 1.205498] [FP32 sparse degree 3 intervals 256: 86.304825]
+  TF32 dense degree 1 intervals 32: largest error/bound 1.40923 (entry 335)
+  TF32 sparse degree 1 intervals 32: largest error/bound 0.000286477 (entry 1843)
+  TF32 dense degree 2 intervals 32: largest error/bound 1.15547 (entry 5239)
+  TF32 sparse degree 2 intervals 32: largest error/bound 0.000200756 (entry 5012)
+  TF32 dense degree 3 intervals 32: largest error/bound 1.1467 (entry 5595)
+  TF32 sparse degree 3 intervals 32: largest error/bound 0.00018951 (entry 5620)
+  TF32 dense degree 5 intervals 64: largest error/bound 2.57222 (entry 3637)
+  FP32 dense degree 1 intervals 32: largest error/bound 0.155338 (entry 3820)
+  FP32 sparse degree 1 intervals 32: largest error/bound 0.195568 (entry 1843)
+  FP32 dense degree 2 intervals 32: largest error/bound 0.112172 (entry 820)
+  FP32 sparse degree 2 intervals 32: largest error/bound 0.13705 (entry 5012)
+  FP32 dense degree 3 intervals 32: largest error/bound 0.0922086 (entry 620)
+  FP32 sparse degree 3 intervals 32: largest error/bound 0.129372 (entry 5620)
+  FP32 dense degree 5 intervals 64: largest error/bound 0.196428 (entry 3437)
+FAIL spline_input_gradient_bound_holds_for_every_degree: error/bound > 1: [TF32 dense degree 1 intervals 32: 1.409230] [TF32 dense degree 2 intervals 32: 1.155465] [TF32 dense degree 3 intervals 32: 1.146696] [TF32 dense degree 5 intervals 64: 2.572223]
+PASS two_layer_tf32_input_gradient_matches_the_cpu_layer_by_layer
+PASS degree_zero_input_gradient_is_zero
+PASS overflowing_difference_coefficients_are_reported
+3/5 passed
+exit 1
