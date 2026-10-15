@@ -1,0 +1,125 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cuda-fma
+Test project /home/core_ai/PyProjects/KAN/build-cuda-fma
+      Start  1: layer
+ 1/53 Test  #1: layer ............................   Passed    0.00 sec
+      Start  2: network
+ 2/53 Test  #2: network ..........................   Passed    0.00 sec
+      Start  3: input_map
+ 3/53 Test  #3: input_map ........................   Passed    0.01 sec
+      Start  4: residual
+ 4/53 Test  #4: residual .........................   Passed    0.00 sec
+      Start  5: residual_formula
+ 5/53 Test  #5: residual_formula .................   Passed    0.00 sec
+      Start  6: residual_training
+ 6/53 Test  #6: residual_training ................   Passed   33.40 sec
+      Start  7: basis
+ 7/53 Test  #7: basis ............................   Passed    0.00 sec
+      Start  8: basis_config
+ 8/53 Test  #8: basis_config .....................   Passed    0.00 sec
+      Start  9: carrier
+ 9/53 Test  #9: carrier ..........................   Passed    0.00 sec
+      Start 10: hermite_function
+10/53 Test #10: hermite_function .................   Passed    0.00 sec
+      Start 11: local_basis
+11/53 Test #11: local_basis ......................   Passed    0.00 sec
+      Start 12: local_layer
+12/53 Test #12: local_layer ......................   Passed    0.00 sec
+      Start 13: spline_derivative_formula
+13/53 Test #13: spline_derivative_formula ........   Passed    0.01 sec
+      Start 14: rational
+14/53 Test #14: rational .........................   Passed    0.00 sec
+      Start 15: rational_layer
+15/53 Test #15: rational_layer ...................   Passed    0.03 sec
+      Start 16: rational_allocation
+16/53 Test #16: rational_allocation ..............   Passed    0.01 sec
+      Start 17: rational_policy
+17/53 Test #17: rational_policy ..................   Passed    0.00 sec
+      Start 18: initializer
+18/53 Test #18: initializer ......................   Passed    0.65 sec
+      Start 19: initializer_training
+19/53 Test #19: initializer_training .............   Passed   22.28 sec
+      Start 20: package_custom_include
+20/53 Test #20: package_custom_include ...........   Passed    0.88 sec
+      Start 21: package_default_configuration
+21/53 Test #21: package_default_configuration ....   Passed    0.90 sec
+      Start 22: cuda
+22/53 Test #22: cuda .............................   Passed    1.07 sec
+      Start 23: cuda_deprecation_available
+23/53 Test #23: cuda_deprecation_available .......   Passed    0.14 sec
+      Start 24: cuda_deprecation_resident_only
+24/53 Test #24: cuda_deprecation_resident_only ...   Passed    0.13 sec
+      Start 25: cuda_deprecation_legacy
+25/53 Test #25: cuda_deprecation_legacy ..........   Passed    0.43 sec
+      Start 26: resident
+26/53 Test #26: resident .........................   Passed    0.54 sec
+      Start 27: resident_review
+27/53 Test #27: resident_review ..................   Passed    0.57 sec
+      Start 28: resident_contraction
+28/53 Test #28: resident_contraction .............   Passed    0.61 sec
+      Start 29: resident_precision
+29/53 Test #29: resident_precision ...............   Passed    1.70 sec
+      Start 30: resident_upload
+30/53 Test #30: resident_upload ..................   Passed    0.93 sec
+      Start 31: resident_training
+31/53 Test #31: resident_training ................   Passed    1.19 sec
+      Start 32: resident_fused_expansion
+32/53 Test #32: resident_fused_expansion .........   Passed    0.47 sec
+      Start 33: local_resident
+33/53 Test #33: local_resident ...................   Passed    0.54 sec
+      Start 34: local_sparse_resident
+34/53 Test #34: local_sparse_resident ............   Passed    1.34 sec
+      Start 35: local_spline_gradient_resident
+35/53 Test #35: local_spline_gradient_resident ...   Passed    0.94 sec
+      Start 36: local_rbf_reduction_resident
+36/53 Test #36: local_rbf_reduction_resident .....   Passed    0.86 sec
+      Start 37: rational_resident
+37/53 Test #37: rational_resident ................   Passed    0.57 sec
+      Start 38: rational_policy_resident
+38/53 Test #38: rational_policy_resident .........   Passed    0.58 sec
+      Start 39: rational_resident_execution
+39/53 Test #39: rational_resident_execution ......   Passed    4.30 sec
+      Start 40: input_map_resident
+40/53 Test #40: input_map_resident ...............   Passed    0.54 sec
+      Start 41: residual_resident
+41/53 Test #41: residual_resident ................   Passed   15.52 sec
+      Start 42: initializer_resident
+42/53 Test #42: initializer_resident .............   Passed    1.81 sec
+      Start 43: fit_polynomial
+43/53 Test #43: fit_polynomial ...................   Passed    0.00 sec
+      Start 44: python
+44/53 Test #44: python ...........................   Passed    0.66 sec
+      Start 45: local_python
+45/53 Test #45: local_python .....................   Passed    0.61 sec
+      Start 46: rational_python
+46/53 Test #46: rational_python ..................   Passed    0.47 sec
+      Start 47: input_map_python
+47/53 Test #47: input_map_python .................   Passed    0.60 sec
+      Start 48: residual_python
+48/53 Test #48: residual_python ..................   Passed    0.74 sec
+      Start 49: initializer_python
+49/53 Test #49: initializer_python ...............   Passed    0.58 sec
+      Start 50: hermite_function_python
+50/53 Test #50: hermite_function_python ..........   Passed    0.78 sec
+      Start 51: precision_python
+51/53 Test #51: precision_python .................   Passed    0.62 sec
+      Start 52: resident_upload_python
+52/53 Test #52: resident_upload_python ...........   Passed    0.78 sec
+      Start 53: training_python
+53/53 Test #53: training_python ..................   Passed    0.76 sec
+
+100% tests passed, 0 tests failed out of 53
+
+Label Time Summary:
+build          =   0.70 sec*proc (3 tests)
+carriers       =   0.79 sec*proc (5 tests)
+core           =  50.82 sec*proc (10 tests)
+cpu            =  58.19 sec*proc (22 tests)
+cuda           =  34.80 sec*proc (21 tests)
+init           =  25.32 sec*proc (4 tests)
+integration    =   8.38 sec*proc (13 tests)
+local          =   4.31 sec*proc (8 tests)
+python         =   6.59 sec*proc (10 tests)
+rational       =   5.95 sec*proc (8 tests)
+resident       =   8.17 sec*proc (10 tests)
+
+Total Test time (real) =  99.60 sec

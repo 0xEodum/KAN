@@ -1,0 +1,10 @@
+Backlog C13: mutation checks of the new CPU suite spline_derivative_formula (build-cpu), 2026-10-14.
+Each mutation was applied to src/carriers/local/local_formulas.hpp, the suite rebuilt and run, then reverted.
+
+1. spline_derivative_coefficient scaled by 1.001:
+   FAIL lower_terms_reproduce_the_spline_derivative_through_difference_coefficients: double degree 1 single interval:
+   x=-1.000000 sum c*B'=-0.405094 sum C*B_{p-1}=-0.405499
+2. Lower mode writes lower[r] instead of lower[r + 1] (off by one degree-(p-1) term):
+   FAIL lower_terms_reproduce_the_spline_derivative_through_difference_coefficients: double degree 1 single interval:
+   degree-(p-1) values sum to 0.000000
+Unmodified: 3/3 passed.

@@ -1,0 +1,13 @@
+terms 60 prec 0 degree 3 hash 1c2a3241262ea903
+terms 60 prec 0 degree 5 hash 90b14ebd662ea903
+terms 60 prec 1 degree 3 hash 1c2a3241262ea903
+terms 60 prec 1 degree 5 hash 90b14ebd662ea903
+terms 130 prec 0 degree 3 hash 2eee9e20062ea903
+terms 130 prec 0 degree 5 hash ec255e78862ea903
+terms 130 prec 1 degree 3 hash 2eee9e20062ea903
+terms 130 prec 1 degree 5 hash ec255e78862ea903
+terms 300 prec 0 degree 3 hash 97387e7f262ea903
+terms 300 prec 0 degree 5 hash 31d2ddee462ea903
+terms 300 prec 1 degree 3 hash 97387e7f262ea903
+terms 300 prec 1 degree 5 hash 31d2ddee462ea903
+base == C13: forward outputs bitwise identical (diff of the two runs empty)

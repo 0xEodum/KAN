@@ -1,0 +1,21 @@
+Generating SQLite file nsys/base-tf32-K48.sqlite from nsys/base-tf32-K48.nsys-rep
+Processing [nsys/base-tf32-K48.sqlite] with [/opt/nvidia/nsight-systems/2025.3.2/host-linux-armv8/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+31.4,202223200,78,2592605.1,2536400.0,2495680,2992576,127096.9,"void kan::cuda::<unnamed>::basis_kernel<(kan::detail::BasisKind)6, (bool)0, float>(const T3 *, T3 *, T3 *, T3 *, unsigned long, kan::detail::BasisViewOf<T3>, unsigned int, kan::cuda::<unnamed>::SiluRows<T3>, int *)"
+19.9,128359104,52,2468444.3,2443760.0,2396480,2774304,82495.6,void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_tn_align4>(T1::Params)
+16.8,108168288,42,2575435.4,3764880.0,39296,4099168,1816584.1,"void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::RecomputedDerivatives<(kan::detail::BasisKind)6, float>, float>(T1, const T2 *, T2 *, unsigned long, unsigned long, T2 *, unsigned long, const T2 *, unsigned int, const T2 *, unsigned long, T2, unsigned int, int *)"
+8.1,52319296,28,1868546.3,1844096.0,1826720,2178400,71040.1,void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nt_align4>(T1::Params)
+7.8,50003296,26,1923203.7,1889872.0,1873984,2213920,88409.4,void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_64x128_32x3_tn_align1>(T1::Params)
+5.8,37495104,14,2678221.7,2589760.0,2546752,3014496,175295.6,void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nn_align4>(T1::Params)
+4.7,30005504,14,2143250.3,2061216.0,2041888,2471232,152705.4,void cutlass::Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(T1::Params)
+3.8,24688480,14,1763462.9,1750864.0,1715584,1904096,50961.0,void cutlass::Kernel2<cutlass_80_tensorop_s1688gemm_256x128_16x3_nt_align1>(T1::Params)
+0.6,3941312,14,281522.3,280608.0,277280,288032,3115.1,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+0.4,2533824,28,90493.7,89888.0,88160,104032,2911.6,"void kan::cuda::<unnamed>::tanh_input_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+0.3,2111104,52,40598.2,41824.0,36064,48576,2777.8,"void kan::cuda::<unnamed>::tanh_forward_kernel<float>(const T1 *, T1 *, unsigned long, T1)"
+0.2,1272640,78,16315.9,21376.0,1696,33312,10206.9,"void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long, unsigned long, int *)"
+0.2,1043680,28,37274.3,36832.0,35872,42784,1461.1,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)16, (int)4, (int)1024, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T10)"
+0.1,499776,14,35698.3,32960.0,32320,63200,8077.1,"void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<const float>, cublasGemvTensorStridedBatched<float>, float>>(T10)"
+0.0,44768,14,3197.7,3008.0,2912,5280,610.6,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,32704,28,1168.0,1120.0,1088,1536,106.8,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, float, (bool)1, (bool)0, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.0,2592,1,2592.0,2592.0,2592,2592,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long, T1)"
+

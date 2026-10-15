@@ -254,7 +254,8 @@ build), `train_step(learning_rate, coefficient_l2=0.0, loss=...)`,
 **Contraction engine (backlog C2).** For `BasisEdges` and `TrainableRbfEdges` layers the
 resident executor computes the dense contraction and its VJPs with cuBLAS:
 `Y = Phi*C^T + b`, `dC = U^T*Phi + lambda*C`, `db = U^T*1` and `W = U*C`, from which
-`dx = sum_k Phi' (.) W` and the trainable-RBF center/log-width VJPs are reduced. A forward
+`dx = sum_k Phi' (.) W` and the trainable-RBF center/log-width VJPs are reduced (FP32/TF32
+B-spline layers contract derivative coefficients instead, see "Spline input VJP"). A forward
 contraction of at most `2^23` multiply-adds (`batch*outputs*inputs*terms`) instead runs one
 warp per output, with the bias and the finiteness check in the same launch, because cuBLAS
 executes such tiny products as a single latency-bound block. For the same reason a layer
@@ -266,7 +267,10 @@ by `TrainableRbfEdges`; FP32/TF32 `BasisEdges` layers (backlog C3) store only `P
 backward pass recomputes `Phi'` from the layer input with the forward's formula, so the
 results are unchanged (bitwise in both builds) and each such layer reserves one
 `capacity*inputs*terms` region less (rows too long for the staged tile, above 85 terms,
-keep the stored rows). The cuBLAS handle is created at construction and runs on the executor's stream with a
+keep the stored rows). B-spline layers (backlog C13) evaluate the degree-`p-1` basis
+instead of `Phi'` in that finish and store no `Phi'` rows at any length (beyond the stage the
+basis kernel writes only the values, from the sparse form of the same evaluation: identical
+values, derivatives still evaluated and checked). The cuBLAS handle is created at construction and runs on the executor's stream with a
 workspace inside the construction-time arena, so numerical calls make no `cudaMalloc` and
 no arena growth and `workspace_allocations()` is unchanged (the handle's own
 library-internal state, created once with it, is not counted). cuBLAS sums in its own (fused multiply-add, tiled) order: results are no
@@ -299,7 +303,10 @@ therefore keep, per input and sample, the index `g` of the first such term (32-b
 (`[inputs][P][capacity]`, samples fastest; zero outside the domain) instead of the dense
 `Phi` (and `Phi'`) rows, and contract only them: `y = bias + sum_i sum_j phi_j*C[o,i,g+j]`,
 `dC[o,i,k] = sum` over the samples with `g <= k < g+P` of `U[b,o]*phi`, plus `lambda*C`,
-`db = sum_b U`, `dx = sum_j phi'_j * sum_o U[b,o]*C[o,i,g+j]`. Kernels: a tiled basis
+`db = sum_b U`, `dx = sum_j phi'_j * sum_o U[b,o]*C[o,i,g+j]` (FP64; FP32/TF32 layers keep
+the `P-1` degree-`p-1` values instead of the derivatives and contract the derivative
+coefficients, `dx = sum_j B_{g+1+j,p-1} * sum_o U[b,o]*C*[o,i,g+j]`, see "Spline input
+VJP"). Kernels: a tiled basis
 kernel writes the sparse rows (and, with the residual branch, `S` and `silu'`); the forward
 and input-VJP kernels map lanes to samples and read C tiles staged in shared memory; the
 coefficient and bias VJPs walk each input's samples in the order of a segmented radix sort
@@ -323,22 +330,93 @@ rows grow; on a 99 KiB device this allows up to 1856 terms, the forward up to 12
 704 (FP64)) and `inputs*capacity` fits 32-bit sort indices; the dense
 forward contraction would run on cuBLAS at capacity (above the small-kernel threshold) and
 has at least `2^22` (FP32), `2^23` (TF32) or `2^21` (FP64) multiply-adds per SM at capacity;
-`terms/(degree+1)` reaches 2 (FP32), 4 (TF32) or 2 (FP64 on a device whose
-`cudaDevAttrSingleToDoublePrecisionPerfRatio` is at least 8; the FP32 values otherwise);
+`terms/(degree+1)` reaches 4 (FP32), 5 (TF32) or 2 (FP64 on a device whose
+`cudaDevAttrSingleToDoublePrecisionPerfRatio` is at least 8; 2 otherwise);
 and, when the layer's upstream (`capacity*outputs` values) exceeds half the L2 cache,
-6 (FP32), 16 (TF32) or 8 (FP64, extrapolated, not measured), because the coefficient VJP
-rereads the upstream once per input. The other constants come from a GB10 sweep of complete
+6 (FP32), 20 (TF32) or 8 (FP64, extrapolated, not measured; 6 at a full FP64 rate), because the coefficient VJP
+rereads the upstream once per input (FP32 4, TF32 5 and 20 since backlog C13, whose cheaper
+dense input VJP moved the crossovers; at these values two measured boundary configurations run
+at 0.97-0.98 of the dense step: [C13 evidence](evidence/backlog/C13.md)). The other constants come from a GB10 sweep of complete
 training steps ([C5 evidence](evidence/backlog/C5.md)) and have been validated on GB10 only; SM count, L2 size, FP64 rate and shared-memory
-limit are read from the device. Memory: a sparse layer reserves `2P` scalars and four 32-bit
+limit are read from the device. Memory: a sparse layer reserves `2P` (FP64) or `2P-1`
+(FP32/TF32) scalars and four 32-bit
 indices per input and sample, `2*inputs` segment offsets and the sort's temporary storage instead of
 `capacity*inputs*terms` values (`Phi`, plus `Phi'` in FP64), and needs no share of the
 `W = U*C` scratch or of the small parameter-VJP tiles; allocation count unchanged.
 *Status:* the sparse rows, outputs, coefficient, bias and input VJPs are checked like the
-dense ones. One difference: the dense path forms `W = U*C` for every term, so an overflowing
+dense ones. One difference: the dense FP64 path forms `W = U*C` for every term, so an overflowing
 `U*C` at a term whose basis derivative is zero becomes `inf*0 = NaN` in `dx` and is reported;
 the sparse path never forms that product, so such a step succeeds with the (finite) input
-VJP. A test-only hook (`src/backends/cuda/resident_testing.hpp`, not installed) reports each
+VJP (FP32/TF32: both paths, see "Spline input VJP"). A test-only hook (`src/backends/cuda/resident_testing.hpp`, not installed) reports each
 executor's layout and can force either path for every supported layer.
+
+**Spline input VJP (backlog C13).** The derivative of a clamped spline is a spline of
+one degree less on the same knots: `d/dx sum_k c_k B_{k,p}(x) = sum_{j=1}^{K-1} C*_j
+B_{j,p-1}(x)` with the derivative coefficients `C*_j = (c_j - c_{j-1}) s_j`, `s_j = p /
+(t_{j+p} - t_j)` (`spline_derivative_coefficient` and `spline_derivative_scale` in
+`src/carriers/local/local_formulas.hpp`; `s_j = 0` for a zero knot gap, whose `B_{j,p-1}`
+vanishes; the halved division for a gap beyond the range).
+Its weights `B_{j,p-1}(x)` are nonnegative and sum to one in the domain. The signed
+derivatives `B'_{k,p}`, of order `p/(knot spacing)` and summing to zero, instead multiply
+the rounding of `W = U*C` by `sum_k |B'_k|`, which grows with the term count: under TF32,
+for coefficients smooth over the grid, the dense input VJP exceeded the TF32 tolerance from
+about 48 terms (2.6x at 48, 7.0x at 192; [C13 evidence](evidence/backlog/C13.md)). FP32/TF32
+B-spline layers therefore compute, in every backward pass that needs the input VJP, `C*`
+from the current `C` (one kernel; graphs, uploads and rollback need nothing) and
+- dense: `C*` in rows of `terms-1`, `W* = U*C*` (cuBLAS, TF32 tensor ops under
+  `TensorFloat32`, in the W scratch), then per (sample, input) `dx = sum_j B_{g+1+j,p-1}(x) W*[g+j]` over the
+  `p` nonzero degree-`p-1` values of `x` (`spline_lower_terms`: the Cox-de Boor values at the
+  start of the last step of the forward's evaluation, so span, side at repeated knots and
+  right endpoint are the forward's);
+- sparse: `C*` in the layout of `C` (rows of `terms`, the last zero; rows of `terms-1` and
+  differencing while staging were both slower), the same sum over `C*` tiles staged as the C
+  tiles were (`P-1` terms per sample, stored degree-`p-1` rows).
+Memory: no `Phi'` rows (dense layers above 85 terms previously stored them), the knot
+scales (`terms-1` values) per such layer, after its knots, and one region
+shared by these layers for `C*` (the largest `outputs*inputs*(terms-1)`, or `*terms` for a
+sparse layer), reserved after every other region and only when such a layer of degree >= 1
+exists; allocation count unchanged; FP64 and other families' arenas are unchanged.
+Degree zero gives `dx = 0` without a contraction. Error of the input VJP against the exact
+`sum_j B_{j,p-1} sum_o U C*_j` at the executor's operands, per entry: at most
+`u * sum_j B_{g+1+j,p-1}(x) sum_o |U[b,o]| |C*[o,i,j]|` with `u = 2^-9` (TF32: operand
+rounding of `U` and `C*`, safe for truncating tensor-op kernels, plus FP32 accumulation) or
+`(outputs+8)*2^-24` (FP32: any summation order, `C*` and basis rounding); it does not grow with
+the term count. The CTest suite `local_spline_gradient_resident` checks exactly this bound
+(both paths, degrees 1..3 and 5, up to 259 terms). FP64 layers keep `W = U*C` and `Phi'`
+(results unchanged); the CPU, the FP64 reference, is unchanged. *Status:* the input VJP is
+checked as before; an FP32/TF32 B-spline layer never forms `U*C`, so an overflowing `U*C`
+at a term of zero derivative is not reported (the C5 sparse difference now holds for both
+paths), while a `C*` beyond the FP32 range (a derivative coefficient beyond the range; a
+difference `c_j - c_{j-1}` that overflows is halved first, so representable `C*` are formed) is reported by the input VJP of every sample whose
+degree-`p-1` terms include it (eager `backward` raises `std::overflow_error`; a training step
+raises and rolls back). The forward and its status are unchanged (the sparse basis kernel
+still evaluates and checks the derivatives it no longer stores).
+*Other families (TF32).* `dx = sum_k Phi'_k W_k` with `W = U*C` from tensor-op GEMMs, error
+at most about `2^-10 * sum_k |Phi'_k| sum_o |U||C_k|` (the operand rounding of `C`; the
+rounding of `U` only perturbs the upstream). Measured against the C1 TF32 tolerance over
+sizes 8..256, five coefficient profiles (including least-squares fits of smooth functions)
+and two input widths and distributions, by a rule fixed before the matrix ran (a family fails
+when more than one cell with a well-conditioned forward exceeds the tolerance): Jacobi
+exceeded it (up to 1.85x) for fitted coefficients at every size from 16 and its layers
+therefore run their `W = U*C` GEMM with FP32 math (`CUBLAS_DEFAULT_MATH`, restored after
+the call, also on an exception; host-side, captured into graphs) under `TensorFloat32`
+(measured: 1.04x of the 256-wide Jacobi step, 1.15x at 1024 wide). Single cells exceed it without triggering the rule: Legendre size 16 with fitted
+coefficients (1.23x; the other 31 cells pass) and normalized Hermite functions at sizes
+128/256 with a non-decaying synthetic coefficient profile (1.11x/1.77x; fitted coefficients
+0.17x). Hermite physicists' polynomials at fitted coefficients and Mexican hats fitted to
+functions with a nonzero mean exceed it as well, but so do their TF32 forward outputs: the
+representation is ill-conditioned there, which no input-VJP precision repairs; the FP32
+input VJP of the 256-center Mexican-hat fit also exceeds the C1 FP32 tolerance (6.7x, FP32
+forward 0.08x; unchanged by C13, not addressed here).
+*Reference.* The derivative of a degree-1 spline (or at an interior knot of multiplicity
+`p`) jumps at its knots, so any forward rounding that moves an activation across such a knot
+changes that layer's input VJP by the full jump, and with it every upstream layer's input
+and parameter VJPs. Under TF32 (forward rounding about `2^-11` of the terms) the network input
+VJP of the C5 two-layer case (degrees 3 and 1) differs from the CPU evaluated at its own
+activations by 0.46 (expected 0.398, -0.060 on the dense path) before and after C13; against
+the CPU evaluated at the executor's own upstream it is within the C1 tolerance (0.17 of it).
+Comparisons across such layers use the executor's upstream (the C5 suite therefore compares
+the TF32 dense and sparse paths with the CPU only).
 
 **Precision policy (backlog C1).** `ResidentNetwork(network, capacity, precision)` takes a
 `kan::cuda::Precision`: `Float64` (default; unchanged FP64 storage and kernels, the parity
@@ -367,7 +445,10 @@ at the executor's parameters per entry within `2e-4*|e| + 5e-5*max|e| + 1e-37`, 
 [C1 evidence](evidence/backlog/C1.md)), where the TF32 bias VJP of every layer but the last
 adds `2^-11*sum_b |U|` (its upstream U is itself a TF32 contraction output; the rounding does
 not cancel with the batch sum; an empirical scale, needed on GB10 with cuBLAS 13.1,
-[aarch64 port](evidence/port-aarch64.md)); trajectories over
+[aarch64 port](evidence/port-aarch64.md)); the input VJPs of B-spline layers satisfy the
+tighter per-entry bound of "Spline input VJP" (backlog C13), and gradients upstream of a
+spline layer with a discontinuous derivative are compared at the executor's own upstream
+(same paragraph); trajectories over
 several SGD steps diverge further because SGD amplifies rounding. The FP32 small-kernel thresholds are `2^24` forward
 multiply-adds and, for the parameter VJP, at most `2^15` coefficients plus outputs and at
 most `2^22` `batch*(coefficients+outputs)`. Python: `kan.Precision.FLOAT64/FLOAT32/TF32`
@@ -897,7 +978,9 @@ properties (backlog R4). The basis family tag and flat views are in
 and the normalized Hermite functions: global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
 (Fourier) and `src/carriers/local/local_formulas.hpp` (B-spline, Gaussian RBF, Mexican
 hat: local support or decaying tails; `spline_span_terms` is the sparse form of the spline
-recurrence, and the dense `spline_terms` scatters its result, backlog C5). Rational formulas are in
+recurrence, and the dense `spline_terms` scatters its result, backlog C5; `spline_lower_terms`,
+`spline_derivative_scale` and `spline_derivative_coefficient` give the derivative's spline of one
+degree less, backlog C13). Rational formulas are in
 `src/carriers/rational/rational_formulas.hpp`; residual-branch formulas in
 `src/core/residual_formulas.hpp`. Public declarations and validation live in
 `include/kan/basis.hpp`/`src/carriers/basis.cpp` and

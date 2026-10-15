@@ -1,0 +1,52 @@
+### base-parity
+bspline3 small batch 33
+  input            max|err|/max|e| 1.676e-07  FP32 tolerance ratio 0.001
+  coefficients 0   max|err|/max|e| 2.269e-07  FP32 tolerance ratio 0.002
+  bias 0           max|err|/max|e| 1.374e-07  FP32 tolerance ratio 0.001
+  coefficients 1   max|err|/max|e| 1.689e-07  FP32 tolerance ratio 0.002
+  bias 1           max|err|/max|e| 3.020e-07  FP32 tolerance ratio 0.001
+bspline3 wide batch 700
+  input            max|err|/max|e| 6.687e-07  FP32 tolerance ratio 0.008
+  coefficients 0   max|err|/max|e| 3.424e-06  FP32 tolerance ratio 0.060
+  bias 0           max|err|/max|e| 8.038e-06  FP32 tolerance ratio 0.066
+  coefficients 1   max|err|/max|e| 7.315e-06  FP32 tolerance ratio 0.091
+  bias 1           max|err|/max|e| 2.302e-06  FP32 tolerance ratio 0.022
+### new-parity
+bspline3 small batch 33
+  input            max|err|/max|e| 2.286e-07  FP32 tolerance ratio 0.002
+  coefficients 0   max|err|/max|e| 2.269e-07  FP32 tolerance ratio 0.002
+  bias 0           max|err|/max|e| 1.597e-07  FP32 tolerance ratio 0.001
+  coefficients 1   max|err|/max|e| 1.689e-07  FP32 tolerance ratio 0.002
+  bias 1           max|err|/max|e| 3.020e-07  FP32 tolerance ratio 0.001
+bspline3 wide batch 700
+  input            max|err|/max|e| 6.525e-07  FP32 tolerance ratio 0.007
+  coefficients 0   max|err|/max|e| 3.095e-06  FP32 tolerance ratio 0.053
+  bias 0           max|err|/max|e| 5.141e-06  FP32 tolerance ratio 0.065
+  coefficients 1   max|err|/max|e| 7.315e-06  FP32 tolerance ratio 0.091
+  bias 1           max|err|/max|e| 2.302e-06  FP32 tolerance ratio 0.022
+### base-fma
+bspline3 small batch 33
+  input            max|err|/max|e| 2.286e-07  FP32 tolerance ratio 0.002
+  coefficients 0   max|err|/max|e| 2.269e-07  FP32 tolerance ratio 0.002
+  bias 0           max|err|/max|e| 1.374e-07  FP32 tolerance ratio 0.001
+  coefficients 1   max|err|/max|e| 1.689e-07  FP32 tolerance ratio 0.002
+  bias 1           max|err|/max|e| 3.020e-07  FP32 tolerance ratio 0.001
+bspline3 wide batch 700
+  input            max|err|/max|e| 7.490e-07  FP32 tolerance ratio 0.008
+  coefficients 0   max|err|/max|e| 3.314e-06  FP32 tolerance ratio 0.053
+  bias 0           max|err|/max|e| 8.407e-06  FP32 tolerance ratio 0.062
+  coefficients 1   max|err|/max|e| 7.923e-06  FP32 tolerance ratio 0.081
+  bias 1           max|err|/max|e| 2.302e-06  FP32 tolerance ratio 0.022
+### new-fma
+bspline3 small batch 33
+  input            max|err|/max|e| 2.159e-07  FP32 tolerance ratio 0.002
+  coefficients 0   max|err|/max|e| 2.272e-07  FP32 tolerance ratio 0.002
+  bias 0           max|err|/max|e| 1.374e-07  FP32 tolerance ratio 0.001
+  coefficients 1   max|err|/max|e| 1.689e-07  FP32 tolerance ratio 0.002
+  bias 1           max|err|/max|e| 3.020e-07  FP32 tolerance ratio 0.001
+bspline3 wide batch 700
+  input            max|err|/max|e| 6.525e-07  FP32 tolerance ratio 0.006
+  coefficients 0   max|err|/max|e| 2.896e-06  FP32 tolerance ratio 0.046
+  bias 0           max|err|/max|e| 6.393e-06  FP32 tolerance ratio 0.058
+  coefficients 1   max|err|/max|e| 7.923e-06  FP32 tolerance ratio 0.081
+  bias 1           max|err|/max|e| 2.302e-06  FP32 tolerance ratio 0.022

@@ -1,0 +1,26 @@
+### memcheck --leak-check full build-cuda/local_spline_gradient_resident
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+### memcheck --leak-check full build-cuda/local_sparse_resident
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+### memcheck --leak-check full build-cuda-fma/local_spline_gradient_resident
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+### memcheck --leak-check full build-cuda-fma/local_sparse_resident
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+### racecheck build-cuda/local_spline_gradient_resident
+5/5 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+### synccheck build-cuda/local_spline_gradient_resident
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+### initcheck build-cuda/local_spline_gradient_resident
+5/5 passed
+========= ERROR SUMMARY: 0 errors
+### memcheck --leak-check full after the review fixes (2026-10-15), build-cuda and build-cuda-fma/local_spline_gradient_resident: 5/5 passed, 0 bytes leaked, 0 errors (both)

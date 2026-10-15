@@ -220,6 +220,10 @@ Update 2026-10-14 (backlog M5): the golden and FP32 harnesses append Hermite-fun
 The current local reference is [backlog/M5-bench/golden/](backlog/M5-bench/golden/sha256-linux.txt).
 The files and hashes below remain the pre-M5 reference, which the harnesses reproduce byte for
 byte with `-DKAN_GOLDEN_NO_HERMITE_FUNCTION` ([M5 evidence](backlog/M5.md#validation)).
+Update 2026-10-14 (backlog C13): the C3 FP32 dumps change in their B-spline gradient lines (FP32
+input VJP on the derivative-coefficient form); the current reference is
+[backlog/C13-bench/golden/](backlog/C13-bench/golden/sha256-linux.txt) (the other six dumps are
+unchanged from M5's).
 
 The x86 references are recorded as SHA-256 hashes and byte counts only (M3 phase 2
 `golden.txt`, C6–C8, C3); no x86 dump file is in the repository, so the comparison with x86 is

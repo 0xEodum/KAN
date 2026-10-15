@@ -1,0 +1,16 @@
+Generating SQLite file nsys/base-f32-1024-K48.sqlite from nsys/base-f32-1024-K48.nsys-rep
+Processing [nsys/base-f32-1024-K48.sqlite] with [/opt/nvidia/nsight-systems/2025.3.2/host-linux-armv8/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+41.9,323990784,14,23142198.9,22974352.0,11367616,35177216,12011117.9,"void kan::cuda::<unnamed>::spline_parameter_kernel<(unsigned int)4, float>(const unsigned int *, const unsigned int *, const T2 *, unsigned long, const T2 *, const T2 *, T2 *, T2 *, T2, unsigned long, unsigned long, unsigned long, unsigned long, unsigned int, int *)"
+36.3,280473568,24,11686398.7,11857792.0,9189568,14340192,2400727.7,"void kan::cuda::<unnamed>::spline_forward_kernel<(unsigned int)4, float>(const unsigned int *, const T2 *, unsigned long, const T2 *, const T2 *, T2 *, unsigned long, unsigned long, unsigned long, unsigned long, unsigned int, int *)"
+13.3,103102240,7,14728891.4,14876640.0,14084224,14940480,323056.9,"void kan::cuda::<unnamed>::spline_input_kernel<(unsigned int)4, float>(const unsigned int *, const T2 *, unsigned long, const T2 *, const T2 *, T2 *, unsigned long, unsigned long, unsigned long, unsigned long, unsigned int, int *)"
+4.9,37805536,7,5400790.9,5359968.0,5284928,5582176,113909.1,"void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+2.7,20644032,24,860168.0,861840.0,837440,881888,12294.8,"void kan::cuda::<unnamed>::spline_basis_kernel<(unsigned int)4, (bool)0, float>(const T3 *, kan::cuda::<unnamed>::SparseRows<T3>, unsigned long, unsigned long, const T3 *, unsigned long, kan::cuda::<unnamed>::SiluRows<T3>, int *)"
+0.6,4622464,14,330176.0,330224.0,310880,340896,8512.0,"void cub::CUB_300001_SM_1210::detail::radix_sort::DeviceSegmentedRadixSortKernel<cub::CUB_300001_SM_1210::detail::radix::policy_hub<unsigned int, unsigned int, int>::Policy1000, (bool)0, (cub::CUB_300001_SM_1210::SortOrder)0, unsigned int, unsigned int, int *, int *, int, cub::CUB_300001_SM_1210::detail::identity_decomposer_t>(const T4 *, T4 *, const T5 *, T5 *, T6, T7, int, int, int, T9)"
+0.2,1278720,7,182674.3,180800.0,180608,187648,3221.3,"void kan::cuda::<unnamed>::tanh_input_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)"
+0.2,1188448,12,99037.3,98064.0,96640,104672,2782.1,"void kan::cuda::<unnamed>::tanh_forward_kernel<float>(const T1 *, T1 *, unsigned long, T1)"
+0.0,146080,2,73040.0,73040.0,61664,84416,16088.1,"kan::cuda::<unnamed>::spline_indices_kernel(unsigned int *, unsigned long, unsigned long)"
+0.0,26208,7,3744.0,3072.0,3008,5504,1161.0,"void kan::cuda::<unnamed>::commit_kernel<float>(const T1 *, T1 *, unsigned long, kan::cuda::<unnamed>::DeviceControl *)"
+0.0,25248,14,1803.4,912.0,896,5056,1348.5,"kan::cuda::<unnamed>::spline_segments_kernel(int *, unsigned long, unsigned long, unsigned long)"
+0.0,2528,1,2528.0,2528.0,2528,2528,0.0,"void kan::cuda::<unnamed>::fill_kernel<float>(T1 *, unsigned long, T1)"
+

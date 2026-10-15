@@ -1,0 +1,24 @@
+--- base/src/backends/cuda/resident.cu	2026-10-14 12:19:57.000000000 +0000
++++ diag-src/src/backends/cuda/resident.cu	2026-10-14 12:27:52.704473565 +0000
+@@ -12,6 +12,7 @@
+ #include <cstddef>
+ #include <cmath>
+ #include <cstdint>
++#include <cstdlib>
+ #include <limits>
+ #include <stdexcept>
+ #include <string>
+@@ -2289,8 +2290,13 @@
+     }
+     if (s.batch && with_w) {
+         // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
++        // C13 diagnostic only: KAN_C13_W_FP32=1 runs this GEMM with FP32 math in TF32 mode.
++        static const bool w_fp32 = std::getenv("KAN_C13_W_FP32") != nullptr;
++        cublasMath_t mode{};
++        if (w_fp32) { cublasGetMathMode(s.blas, &mode); cublasSetMathMode(s.blas, CUBLAS_DEFAULT_MATH); }
+         check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
+               "resident input VJP contraction");
++        if (w_fp32) cublasSetMathMode(s.blas, mode);
+     }
+     const auto rows = with_dx ? s.batch*b.inputs : 0;
+     const auto finish = [&](auto source) {
