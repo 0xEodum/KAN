@@ -157,6 +157,22 @@ __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_d
         const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
         for (auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; index < count; index += stride) {
             const auto row = index * terms;
+            if constexpr (Kind == detail::BasisKind::BSpline && !std::is_same_v<T, double>) {
+                if (!derivatives) {
+                    const T x = input[index];
+                    const detail::BasisRowOf<T> out{values + row, nullptr, nullptr, nullptr};
+                    // FP32/TF32 B-spline rows beyond the stage (backlog C13): the input
+                    // VJP reads no Phi', so only the values are written, from the
+                    // sparse form of the same evaluation (identical values; the
+                    // derivatives are still evaluated and checked).
+                    T v[detail::max_spline_degree+1], d[detail::max_spline_degree+1];
+                    for (std::size_t k = 0; k < terms; ++k) out.values[k] = 0;
+                    const auto g = detail::spline_span_terms(basis.knots, terms, basis.degree, x, v, d, guard);
+                    if (g != terms) for (std::size_t r = 0; r <= basis.degree; ++r) out.values[g+r] = v[r];
+                    if constexpr (Residual) write_silu(silu, index, x, guard);
+                    continue;
+                }
+            }
             const detail::BasisRowOf<T> out{values + row, derivatives + row, nullptr,
                                             basis.trainable ? log_derivatives + row : nullptr};
             const T x = input[index];
@@ -290,6 +306,27 @@ template<class Source> constexpr detail::BasisKind recomputed_kind = detail::Bas
 template<detail::BasisKind Kind, class T> constexpr detail::BasisKind recomputed_kind<RecomputedDerivatives<Kind, T>> = Kind;
 // Stage planes: Phi' and W, plus the recomputed values.
 template<class Source> constexpr unsigned stage_planes = stored_rows<Source> ? 2 : 3;
+// Input VJP of FP32/TF32 B-spline layers (backlog C13): W holds W* = U*C*
+// over the derivative coefficients C* (spline_derivative_coefficient, rows of
+// terms-1), and dx[r] = sum_j B_{g+1+j,p-1}(x) W*[r, g+j] over the degree
+// nonzero degree-(p-1) values of x = input[r] (spline_lower_terms; g the
+// first term of x). The weights are nonnegative and sum to one, so the
+// rounding of W* (TF32 operands) is not amplified as it is by the signed
+// derivatives B'_{k,p} of order degree/knot spacing, which sum to zero. FP64
+// keeps W = U*C and Phi' (results unchanged).
+// Degree: the layer's degree as a compile-time constant for degrees 1..3 (the
+// spline evaluation then stays in registers; C13 profiling: the runtime-degree
+// form was 1.4x slower than the C3 finish at 12 terms), 0 for any degree.
+template<class T> constexpr bool spline_difference_vjp = !std::is_same_v<T, double>;
+template<class T, unsigned Degree> struct SplineDifferences {
+    const T* input;
+    const T* knots;
+    std::size_t terms, degree;
+};
+template<class Source> constexpr bool difference_rows = false;
+template<class T, unsigned Degree> constexpr bool difference_rows<SplineDifferences<T, Degree>> = true;
+template<class Source> constexpr unsigned difference_degree = 0;
+template<class T, unsigned Degree> constexpr unsigned difference_degree<SplineDifferences<T, Degree>> = Degree;
 
 // One launch finishes a layer's backward: dx[r] = sum_k Phi'[r,k]*W[r,k] for
 // the rows r = (sample, input), then the `checked` parameter VJPs [dC | db]:
@@ -305,14 +342,33 @@ __global__ void backward_finish_kernel(Source source, const T* w, T* dx,
                                        T lambda, unsigned tile_rows, int* status) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     if (tile_rows == 0) {
-        if constexpr (stored_rows<Source>) {
+        if constexpr (difference_rows<Source>) {
+            // W* rows of terms-1 values; a row outside the domain (or of degree zero) is zero.
+            constexpr unsigned D = difference_degree<Source>;
+            constexpr std::size_t width = D ? D : detail::max_spline_degree;
+            const auto span = source.terms-1;
+            const std::size_t degree = D ? std::size_t{D} : source.degree;
+            for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
+                T sum = 0;
+                if (degree != 0) {
+                    T values[width+1], lower[width];
+                    const auto g = detail::spline_lower_terms(source.knots, source.terms, degree, source.input[index],
+                                                              values, lower, CheckedEarlier{});
+                    if (g != source.terms) {
+                        const T* row = w+index*span+g;
+                        for (std::size_t j = 0; j < degree; ++j) sum += lower[j]*row[j];
+                    }
+                }
+                dx[index] = sum; report(sum, status);
+            }
+        } else if constexpr (stored_rows<Source>) {
             for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
                 T sum = 0;
                 for (std::size_t k = 0; k < terms; ++k) sum += source.rows[index*terms+k]*w[index*terms+k];
                 dx[index] = sum; report(sum, status);
             }
         }
-    } else {
+    } else if constexpr (!difference_rows<Source>) {
         T* stage = stage_memory<T>();
         const auto plane = static_cast<std::size_t>(tile_rows)*terms;
         for (auto base = static_cast<std::size_t>(blockIdx.x)*tile_rows; base < rows;
@@ -356,6 +412,25 @@ __global__ void fill_kernel(T* values, std::size_t count, T value) {
     for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < count; index += stride)
         values[index] = value;
 }
+// Derivative coefficients of a B-spline layer (backlog C13): for every edge
+// q = (o, i) and j = 1..terms-1, C*[q*span + j-1] = (c_j - c_{j-1}) s_j
+// (s_j = p/(t_{j+p} - t_j), the layer's knot scales, uploaded at
+// construction) in rows of span = terms-1 (dense: the W* GEMM operand) or
+// span = terms with a zero last term (sparse: the C layout the input-VJP
+// kernel stages; staging the differences there instead cost 10% of the
+// 1024-wide step, C13 evidence). Computed in every backward pass from the current C, so
+// graphs, uploads and rollback need nothing; not checked here: a nonfinite
+// C* reaches every input VJP whose degree-(p-1) terms include it.
+// Index: 32-bit when every coefficient index fits (the division per element
+// is the kernel's main instruction cost), 64-bit otherwise.
+template<class Index, class T>
+__global__ void spline_difference_kernel(const T* c, const T* scales, T* differences, Index count, Index span, Index terms) {
+    const auto stride = static_cast<Index>(gridDim.x)*blockDim.x;
+    for (auto e = static_cast<Index>(blockIdx.x)*blockDim.x+threadIdx.x; e < count; e += stride) {
+        const Index q = e/span, j = e-q*span, k = q*terms+j+1;
+        differences[e] = j+1 < terms ? detail::spline_derivative_coefficient(c[k-1], c[k], scales[j]) : T(0);
+    }
+}
 // Sparse B-spline path (backlog C5). At any input only degree+1 = P of a
 // spline's terms can be nonzero, so a sparse layer keeps per input and sample
 // the index g of the first of them (`first`, unsigned [inputs][capacity]) and
@@ -398,12 +473,17 @@ template<class T> struct SparseRows {
 // samples fastest (coalesced). With the residual branch the same pass writes
 // the layer's S and silu' rows (backlog M3).
 template<class T> constexpr unsigned spline_tile_samples = std::is_same_v<T, double> ? 16 : 32;
+// FP32/TF32 (backlog C13): the derivative rows hold the degree-(p-1) values
+// of the input VJP (spline_lower_terms; P-1 rows, none for degree zero)
+// instead of the P input derivatives.
+template<class T, unsigned P> constexpr unsigned sparse_derivative_rows = spline_difference_vjp<T> ? P-1 : P;
+template<class T> std::size_t sparse_derivative_count(unsigned width) { return spline_difference_vjp<T> ? width-1 : width; }
 template<unsigned P, bool Residual, class T>
 __global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
                                     const T* knots, std::size_t terms, SiluRows<T> silu, int* status) {
-    constexpr unsigned TS = spline_tile_samples<T>;
+    constexpr unsigned TS = spline_tile_samples<T>, D = sparse_derivative_rows<T, P>;
     __shared__ unsigned first[32][TS+1];
-    __shared__ T values[P][32][TS+1], derivatives[P][32][TS+1];
+    __shared__ T values[P][32][TS+1], derivatives[D ? D : 1][32][TS+1];
     const StatusGuard guard{status};
     const auto i0 = static_cast<std::size_t>(blockIdx.x)*32;
     for (auto b0 = static_cast<std::size_t>(blockIdx.y)*TS; b0 < batch; b0 += static_cast<std::size_t>(gridDim.y)*TS) {
@@ -413,13 +493,20 @@ __global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::siz
             if (i >= inputs || b >= batch) continue;
             const T x = input[b*inputs+i];
             T v[P], d[P];
-            auto g = detail::spline_span_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
+            std::size_t g;
+            if constexpr (spline_difference_vjp<T>) g = detail::spline_lower_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
+            else g = detail::spline_span_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
             if (g == terms) {
                 g = 0;
                 for (unsigned j = 0; j < P; ++j) { v[j] = 0; d[j] = 0; }
             }
             first[ii][bb] = static_cast<unsigned>(g);
-            for (unsigned j = 0; j < P; ++j) { values[j][ii][bb] = v[j]; derivatives[j][ii][bb] = d[j]; }
+            if constexpr (spline_difference_vjp<T>) {
+                for (unsigned j = 0; j < P; ++j) values[j][ii][bb] = v[j];
+                if constexpr (D != 0) for (unsigned j = 0; j < D; ++j) derivatives[j][ii][bb] = d[j];
+            } else {
+                for (unsigned j = 0; j < P; ++j) { values[j][ii][bb] = v[j]; derivatives[j][ii][bb] = d[j]; }
+            }
             if constexpr (Residual) write_silu(silu, b*inputs+i, x, guard);
         }
         __syncthreads();
@@ -428,9 +515,14 @@ __global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::siz
             const auto i = i0+ii, b = b0+bb;
             if (i >= inputs || b >= batch) continue;
             rows.first[i*rows.capacity+b] = first[ii][bb];
-            for (unsigned j = 0; j < P; ++j) {
-                rows.values[(i*P+j)*rows.capacity+b] = values[j][ii][bb];
-                rows.derivatives[(i*P+j)*rows.capacity+b] = derivatives[j][ii][bb];
+            if constexpr (spline_difference_vjp<T>) {
+                for (unsigned j = 0; j < P; ++j) rows.values[(i*P+j)*rows.capacity+b] = values[j][ii][bb];
+                if constexpr (D != 0) for (unsigned j = 0; j < D; ++j) rows.derivatives[(i*D+j)*rows.capacity+b] = derivatives[j][ii][bb];
+            } else {
+                for (unsigned j = 0; j < P; ++j) {
+                    rows.values[(i*P+j)*rows.capacity+b] = values[j][ii][bb];
+                    rows.derivatives[(i*P+j)*rows.capacity+b] = derivatives[j][ii][bb];
+                }
             }
         }
         __syncthreads();
@@ -513,7 +605,10 @@ __global__ void __launch_bounds__(stage_threads) spline_forward_kernel(const uns
 // memory) inputs; output chunks of two vectors at a time: U[b, chunk]
 // rows (padded by one vector) and C[chunk, i, :] staged as rows (i, k) of the
 // chunk's outputs. Each thread accumulates w_j = sum_o U[b,o]*C[o,i,g+j] in
-// ascending o, then dx = sum_j phi'_j*w_j.
+// ascending o, then dx = sum_j phi'_j*w_j. FP32/TF32 layers (backlog C13)
+// launch it with P-1 terms per sample over the derivative coefficients C*
+// (rows of terms-1) and the degree-(p-1) rows: w*_j = sum_o U[b,o]*C*[o,i,g+j],
+// dx = sum_j B_{g+1+j,p-1}*w*_j (nonnegative weights summing to one).
 constexpr unsigned spline_dx_inputs = 8;
 template<class T> constexpr unsigned spline_dx_outputs = 2*vector16<T>;
 template<class T> constexpr unsigned spline_dx_stride = spline_dx_outputs<T>+vector16<T>;
@@ -1392,6 +1487,10 @@ struct Context {
     // cuBLAS workspace, so cuBLAS never allocates during execution.
     std::size_t scratch = 0, ones = 0, blas_workspace = 0;
     std::size_t partials = 0; // small parameter VJP tiles, shared like the scratch
+    // Derivative coefficients C* of the FP32/TF32 B-spline layers (backlog C13),
+    // shared like the scratch (largest outputs*inputs*(terms-1), or *terms for
+    // a sparse layer); none otherwise.
+    std::size_t differences = 0;
     // Residual branch GEMM workspace (residual_workspace_bytes), reserved only
     // when some branch takes a cuBLAS path at capacity.
     std::size_t residual_workspace = 0;
@@ -1404,6 +1503,17 @@ struct Context {
         check(cublasSetWorkspace(blas, ptr(residual_workspace), residual_workspace_bytes), "resident cuBLAS workspace");
         try { f(); } catch (...) { cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes); throw; }
         check(cublasSetWorkspace(blas, ptr(blas_workspace), blas_workspace_bytes), "resident cuBLAS workspace");
+    }
+    // Runs the cuBLAS calls `f` with FP32 (non-tensor-op) math, then restores the
+    // handle's mode (TF32 under TensorFloat32; a no-op otherwise). Backlog C13:
+    // input-VJP GEMMs of the families whose TF32 rounding the derivatives amplify.
+    template<class F> void with_fp32_math(F&& f) {
+        cublasMath_t mode{};
+        check(cublasGetMathMode(blas, &mode), "resident cuBLAS math mode");
+        if (mode == CUBLAS_DEFAULT_MATH) { f(); return; }
+        check(cublasSetMathMode(blas, CUBLAS_DEFAULT_MATH), "resident cuBLAS FP32 math");
+        try { f(); } catch (...) { cublasSetMathMode(blas, mode); throw; }
+        check(cublasSetMathMode(blas, mode), "resident cuBLAS math mode");
     }
     std::vector<std::size_t> activation, upstream;
     T* arena = nullptr;
@@ -1518,6 +1628,9 @@ struct ExpansionPlan {
     ParameterBlock block;
     detail::BasisViewOf<T> view; // host scalars; vector pointers are set per launch
     std::size_t values = 0, derivatives = 0, centers = 0, scales = 0, knots = 0;
+    // FP32/TF32 B-spline layers of degree >= 1 (backlog C13): the knot scales
+    // s_j = p/(t_{j+p} - t_j), j = 1..terms-1, of the derivative coefficients.
+    std::size_t knot_scales = 0;
     // Phi' rows kept from forward to backward; otherwise (backlog C3) the
     // backward finish recomputes them from the layer input (no derivatives region).
     bool stored_derivatives = true;
@@ -1735,24 +1848,30 @@ template<class T> std::size_t index_elements(std::size_t count) { return (produc
 template<class T> void reserve_sparse(SparseSplinePlan& p, const ParameterBlock& b, std::size_t capacity, Reservation<T>& reserve) {
     const auto samples = product(capacity, b.inputs), rows = product(samples, p.width);
     p.first = reserve(index_elements<T>(samples));
-    p.values = reserve(rows); p.derivatives = reserve(rows);
+    p.values = reserve(rows); p.derivatives = reserve(product(samples, sparse_derivative_count<T>(p.width)));
     p.sorted_first = reserve(index_elements<T>(samples)); p.order = reserve(index_elements<T>(samples));
     p.indices = reserve(index_elements<T>(samples)); p.offsets = reserve(index_elements<T>(product(b.inputs, 2)));
     p.sort_storage = reserve((p.sort_bytes+sizeof(T)-1)/sizeof(T));
+}
+template<class T> void reserve_knot_scales(ExpansionPlan<T>& p, Reservation<T>& reserve) {
+    if constexpr (spline_difference_vjp<T>) if (p.view.degree != 0) p.knot_scales = reserve(p.block.terms-1);
 }
 template<class T> void reserve_workspace(BasisPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
     if (plan.sparse.active) {
         reserve_sparse(plan.sparse, p.block, capacity, reserve);
         p.knots = reserve(p.block.terms+p.view.degree+1);
+        reserve_knot_scales(p, reserve);
         return;
     }
     p.stored_derivatives = !recompute_derivatives(p);
+    // FP32/TF32 B-spline layers never read Phi' (backlog C13), also beyond the stage.
+    if (spline_difference_vjp<T> && p.view.kind == detail::BasisKind::BSpline) p.stored_derivatives = false;
     reserve_rows(p, capacity, reserve);
     if (p.view.kind == detail::BasisKind::GaussianRbf || p.view.kind == detail::BasisKind::MexicanHat)
         p.centers = reserve(p.block.terms);
     if (p.view.kind == detail::BasisKind::MexicanHat) p.scales = reserve(p.block.terms);
-    if (p.view.kind == detail::BasisKind::BSpline) p.knots = reserve(p.block.terms+p.view.degree+1);
+    if (p.view.kind == detail::BasisKind::BSpline) { p.knots = reserve(p.block.terms+p.view.degree+1); reserve_knot_scales(p, reserve); }
 }
 template<class T> void reserve_workspace(TrainableRbfPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
@@ -1862,24 +1981,31 @@ ExecutorDevice executor_device() {
 // 1.5 to 24). A layer takes the sparse path when
 // - terms/(degree+1) reaches the precision's ratio: FP64 on a device with a
 //   reduced FP64 rate (fp64_ratio >= 8) 2, where both paths are FP64-ALU bound
-//   at about the same rate per multiply-add; FP32 2 against SGEMM plus the
-//   dense rows' memory traffic; TF32 4 against tensor-op GEMMs;
+//   at about the same rate per multiply-add; FP32 4 against SGEMM plus the
+//   dense rows' memory traffic; TF32 5 against tensor-op GEMMs (backlog C13
+//   re-measured both after its cheaper dense input VJP: C5's FP32 2 and TF32 4
+//   now gave 0.81 and 0.94 of the dense step at 256 wide);
 // - and, when the layer's upstream U (capacity*outputs values) exceeds half the
-//   L2 cache, a higher ratio: FP32 6, TF32 16, FP64 8 (FP64 not measured:
-//   extrapolated as four times its in-L2 ratio, like the first FP32 rule): the coefficient VJP rereads U once per input, from L2 while it
+//   L2 cache, a higher ratio: FP32 6, TF32 20 (C13; C5's 16 gave 0.93), FP64 8
+//   (FP64 not measured: extrapolated as four times its in-L2 ratio, like the
+//   first FP32 rule): the coefficient VJP rereads U once per input, from L2 while it
 //   fits and from DRAM otherwise (1024-wide steps: 4096*1024 FP32 = 16 MiB);
 // - and its dense forward contraction has at least 2^22 (FP32), 2^23 (TF32) or
 //   2^21 (FP64) multiply-adds per SM at capacity (2.0e8 / 4.0e8 / 1.0e8 on GB10's
 //   48 SMs): below, the sparse step's extra launches and serial per-warp sample
 //   walks cost more than the saved multiply-adds (64x64x32x16 at batch 1024).
 // The ratios and floors are the smallest values at which no configuration of
-// the sweep ran slower with the automatic choice than with the dense rows.
-// Without a reduced FP64 rate FP64 uses the FP32 values.
+// the C5 sweep ran slower with the automatic choice than with the dense rows;
+// C13's re-measured values leave two boundary configurations within 3% of the
+// dense step (FP32 64-wide K=48 0.97, TF32 degree 1 at ratio 5 0.98, where
+// degree 3 gains 1.11; one ratio for all degrees, C13 evidence).
+// Without a reduced FP64 rate FP64 uses C5's FP32 values (2, and 6 out of L2;
+// C13 changed only the FP32/TF32 kernels).
 double sparse_spline_ratio(bool fp64, bool tensor_ops, bool upstream_in_l2, const ExecutorDevice& d) {
     const bool slow_fp64 = fp64 && d.fp64_ratio >= 8;
-    const double ratio = slow_fp64 ? 2.0 : tensor_ops ? 4.0 : 2.0;
-    if (upstream_in_l2) return ratio;
-    return slow_fp64 ? 8.0 : tensor_ops ? 16.0 : 6.0;
+    if (fp64) return slow_fp64 ? (upstream_in_l2 ? 2.0 : 8.0) : (upstream_in_l2 ? 2.0 : 6.0);
+    if (upstream_in_l2) return tensor_ops ? 5.0 : 4.0;
+    return tensor_ops ? 20.0 : 6.0;
 }
 std::size_t sparse_spline_work(bool fp64, bool tensor_ops, const ExecutorDevice& d) {
     const unsigned bits = fp64 && d.fp64_ratio >= 8 ? 21 : tensor_ops && !fp64 ? 23 : 22;
@@ -1990,7 +2116,18 @@ template<class T> void upload_carrier(Context<T>& s, const BasisPlan<T>& plan, c
         using C = std::decay_t<decltype(c)>;
         if constexpr (std::is_same_v<C, GaussianRbfConfig> || std::is_same_v<C, MexicanHatConfig>) s.upload(s.ptr(p.centers), {c.centers.data(), terms});
         if constexpr (std::is_same_v<C, MexicanHatConfig>) s.upload(s.ptr(p.scales), {c.scales.data(), terms});
-        if constexpr (std::is_same_v<C, BSplineConfig>) s.upload(s.ptr(p.knots), {c.knots.data(), terms+c.degree+1});
+        if constexpr (std::is_same_v<C, BSplineConfig>) {
+            s.upload(s.ptr(p.knots), {c.knots.data(), terms+c.degree+1});
+            if constexpr (spline_difference_vjp<T>) {
+                if (c.degree != 0) {
+                    // Knot scales in T from the rounded knots, as the device would compute them.
+                    std::vector<double> scales(terms-1);
+                    for (std::size_t j = 1; j < terms; ++j)
+                        scales[j-1] = detail::spline_derivative_scale(c.degree, narrow<T>(c.knots[j+c.degree]), narrow<T>(c.knots[j]));
+                    s.upload(s.ptr(p.knot_scales), scales);
+                }
+            }
+        }
     }, edges.basis);
 }
 template<class T> void upload_carrier(Context<T>& s, const TrainableRbfPlan<T>& plan, const TrainableRbfEdges& edges) {
@@ -2117,6 +2254,22 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
         s.batch*b.outputs, b.outputs, s.status);
     check(cudaGetLastError(), "resident forward bias launch");
 }
+// Derivative coefficients C* of a B-spline layer of degree >= 1 into the
+// shared differences region (backlog C13), rows of `span` (terms-1 or terms).
+template<class T> void spline_differences(Context<T>& s, const ExpansionPlan<T>& p, std::size_t span) {
+    const auto& b = p.block;
+    const auto edges = product(b.outputs, b.inputs), count = product(edges, span);
+    const T* c = s.ptr(s.parameters+b.offset);
+    // The kernel also forms coefficient indices up to edges*terms, and its
+    // grid-stride index must not wrap past count.
+    if (product(edges, b.terms) <= std::numeric_limits<unsigned>::max()-std::size_t{blocks(count)}*256)
+        spline_difference_kernel<unsigned><<<blocks(count), 256, 0, s.stream>>>(c, s.ptr(p.knot_scales), s.ptr(s.differences),
+            static_cast<unsigned>(count), static_cast<unsigned>(span), static_cast<unsigned>(b.terms));
+    else
+        spline_difference_kernel<std::size_t><<<blocks(count), 256, 0, s.stream>>>(c, s.ptr(p.knot_scales), s.ptr(s.differences),
+            count, span, b.terms);
+    check(cudaGetLastError(), "resident spline difference launch");
+}
 // Sparse B-spline path (backlog C5).
 template<class T> SparseRows<T> sparse_rows(Context<T>& s, const SparseSplinePlan& p) {
     return {reinterpret_cast<unsigned*>(s.ptr(p.first)), s.ptr(p.values), s.ptr(p.derivatives), s.capacity};
@@ -2194,8 +2347,21 @@ template<class T> void sparse_backward(Context<T>& s, const BasisPlan<T>& plan, 
         check(cudaGetLastError(), "resident sparse parameter launch");
         if (!with_dx || !s.batch) return;
         const dim3 inputs(static_cast<unsigned>((s.batch-1)/stage_threads+1), static_cast<unsigned>((b.inputs-1)/p.group+1));
-        spline_input_kernel<P><<<inputs, stage_threads, spline_input_bytes<T>(b.terms, p.group), s.stream>>>(rows.first, rows.derivatives,
-            s.capacity, c, u, s.ptr(s.upstream[j]), s.batch, b.inputs, b.outputs, b.terms, p.group, s.status);
+        if constexpr (spline_difference_vjp<T>) {
+            // Backlog C13: P-1 terms over C* (rows of terms, the last zero); degree zero has dx = 0.
+            constexpr unsigned D = sparse_derivative_rows<T, P>;
+            if constexpr (D == 0) {
+                fill_kernel<<<blocks(s.batch*b.inputs), 256, 0, s.stream>>>(s.ptr(s.upstream[j]), s.batch*b.inputs, T(0));
+            } else {
+                spline_differences(s, plan.expansion, b.terms);
+                spline_input_kernel<D><<<inputs, stage_threads, spline_input_bytes<T>(b.terms, p.group), s.stream>>>(rows.first,
+                    rows.derivatives, s.capacity, s.ptr(s.differences), u, s.ptr(s.upstream[j]), s.batch, b.inputs, b.outputs, b.terms,
+                    p.group, s.status);
+            }
+        } else {
+            spline_input_kernel<P><<<inputs, stage_threads, spline_input_bytes<T>(b.terms, p.group), s.stream>>>(rows.first, rows.derivatives,
+                s.capacity, c, u, s.ptr(s.upstream[j]), s.batch, b.inputs, b.outputs, b.terms, p.group, s.status);
+        }
         check(cudaGetLastError(), "resident sparse input gradient launch");
     });
 }
@@ -2287,22 +2453,54 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
         }
         check(cudaMemsetAsync(db, 0, b.outputs*sizeof(T), s.stream), "resident bias VJP reset");
     }
+    // Backlog C13: FP32/TF32 B-spline layers contract the derivative
+    // coefficients instead (W* = U*C*, rows of terms-1; nothing for degree zero).
+    bool differences = false;
+    if constexpr (spline_difference_vjp<T>) differences = p.view.kind == detail::BasisKind::BSpline;
     if (s.batch && with_w) {
-        // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
-        check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
-              "resident input VJP contraction");
+        if (!differences) {
+            // Input VJP: column-major W^T (IK x batch) = C^T * U^T, then dx = sum_k Phi' * W.
+            // Jacobi layers (backlog C13) run this GEMM in FP32 math under TF32: the
+            // TF32 rounding of C, amplified by the derivatives' growth toward the
+            // endpoints, exceeded the TF32 tolerance for fitted coefficients.
+            const auto contract = [&] {
+                check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik, n, o, &one, c, ik, u, o, &zero, s.ptr(s.scratch), ik),
+                      "resident input VJP contraction");
+            };
+            if (!std::is_same_v<T, double> && p.view.kind == detail::BasisKind::Jacobi) s.with_fp32_math(contract);
+            else contract();
+        } else if constexpr (spline_difference_vjp<T>) {
+            if (p.view.degree != 0) {
+                spline_differences(s, p, b.terms-1);
+                const auto ik1 = static_cast<std::int64_t>(b.inputs*(b.terms-1));
+                check(gemm(s.blas, CUBLAS_OP_N, CUBLAS_OP_N, ik1, n, o, &one, s.ptr(s.differences), ik1, u, o, &zero,
+                           s.ptr(s.scratch), ik1), "resident input VJP contraction");
+            }
+        }
     }
     const auto rows = with_dx ? s.batch*b.inputs : 0;
     const auto finish = [&](auto source) {
         constexpr auto planes = stage_planes<decltype(source)>;
-        const auto tile_rows = stage_rows<T>(b.terms, planes);
+        const auto tile_rows = difference_rows<decltype(source)> ? 0u : stage_rows<T>(b.terms, planes);
         const auto shared = static_cast<std::size_t>(tile_rows)*b.terms*planes*sizeof(T);
         const auto grid = std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
         backward_finish_kernel<<<grid, stage_threads, shared, s.stream>>>(source, s.ptr(s.scratch),
             s.ptr(s.upstream[j]), rows, b.terms, dc, checked, small ? s.ptr(s.partials) : nullptr, tiles, c,
             b.coefficients, lambda, tile_rows, s.status);
     };
-    if (p.stored_derivatives) {
+    if (differences) {
+        if constexpr (spline_difference_vjp<T>) {
+            const auto launch = [&](auto degree) {
+                finish(SplineDifferences<T, decltype(degree)::value>{s.ptr(s.activation[j]), s.ptr(p.knots), b.terms, p.view.degree});
+            };
+            switch (p.view.degree) {
+            case 1: launch(std::integral_constant<unsigned, 1>{}); break;
+            case 2: launch(std::integral_constant<unsigned, 2>{}); break;
+            case 3: launch(std::integral_constant<unsigned, 3>{}); break;
+            default: launch(std::integral_constant<unsigned, 0>{});
+            }
+        }
+    } else if (p.stored_derivatives) {
         finish(StoredDerivatives<T>{s.ptr(p.derivatives)});
     } else if constexpr (!std::is_same_v<T, double>) {
         const auto basis = device_basis(s, p, s.ptr(p.centers), nullptr);
@@ -2851,6 +3049,17 @@ struct Engine final : ResidentExecutor, Context<T> {
                 }
             }, plan);
         if (this->has_residual_workspace) this->residual_workspace = reserve(residual_workspace_bytes/sizeof(T));
+        // Backlog C13: after every earlier region, only when some layer needs it.
+        std::size_t difference_size = 0;
+        if constexpr (spline_difference_vjp<T>)
+            for (const auto& plan : plans)
+                if (const auto* basis = std::get_if<BasisPlan<T>>(&plan)) {
+                    const auto& e = basis->expansion;
+                    if (e.view.kind == detail::BasisKind::BSpline && e.view.degree != 0)
+                        difference_size = std::max(difference_size, product(product(e.block.outputs, e.block.inputs),
+                                                                            basis->sparse.active ? e.block.terms : e.block.terms-1));
+                }
+        if (difference_size) this->differences = reserve(difference_size);
         graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
         if (auto* layout = testing::test_scope.layout) {
@@ -2899,8 +3108,14 @@ struct Engine final : ResidentExecutor, Context<T> {
                     const auto limit = static_cast<int>(device.shared_optin);
                     if (product(spline_forward_row_bytes<T>(b.terms), basis->sparse.chunk) > (std::size_t{48} << 10))
                         check(cudaFuncSetAttribute(spline_forward_kernel<P, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
-                    if (spline_input_bytes<T>(b.terms, basis->sparse.group) > (std::size_t{48} << 10))
+                    if constexpr (spline_difference_vjp<T>) {
+                        constexpr unsigned D = sparse_derivative_rows<T, P>;
+                        if constexpr (D != 0)
+                            if (spline_input_bytes<T>(b.terms, basis->sparse.group) > (std::size_t{48} << 10))
+                                check(cudaFuncSetAttribute(spline_input_kernel<D, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
+                    } else if (spline_input_bytes<T>(b.terms, basis->sparse.group) > (std::size_t{48} << 10)) {
                         check(cudaFuncSetAttribute(spline_input_kernel<P, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, limit), "resident sparse shared memory");
+                    }
                 });
             }
             for (const auto& plan : plans) {

@@ -164,9 +164,13 @@ TEST(sparse_matches_cpu_and_dense_for_every_supported_degree) {
     }
     // Forced sparse, large term count, against the forced dense path of the same precision
     // (FP64, FP32) and the CPU (all). TF32 is compared with the CPU only: the
-    // dense TF32 input VJP of large-term splines carries the TF32 rounding of
-    // W = U*C amplified by spline derivatives of order degree/knot spacing
-    // (0.46 absolute here, also before C5), while the sparse kernels compute in FP32.
+    // dense TF32 forward rounds layer 0's outputs by about 2^-11 of their terms
+    // (2.6e-4 here), which moves some layer-1 inputs across a knot of the
+    // degree-1 layer, whose derivative jumps there; the sparse kernels compute
+    // in FP32. (Backlog C13 evidence: against the CPU evaluated at the dense
+    // executor's own activations the dense TF32 input VJP is within the C1
+    // tolerance; the case's 0.46 deviation, expected 0.398 against -0.060,
+    // was this jump, not the input-VJP formula.)
     for (auto p : precisions) {
         const kan::Network n({seeded(kan::Layer(64, 40, spline(3, 48)), 0.2), seeded(kan::Layer(40, 4, spline(1, 30)), 0.6)});
         ResidentLayout layout;
@@ -348,7 +352,7 @@ TEST(sparse_status_reports_overflow_and_rolls_back) {
 // term count across the threshold gives a sparse executor computing the same
 // function (refinement preserves it) as the dense executor before.
 TEST(sparse_upload_parameters_and_knot_insertion_growth) {
-    // 6 terms (ratio 1.5, below FP32's 2 on every device) grow to 30 (ratio 7.5;
+    // 6 terms (ratio 1.5, below FP32's 4 on every device) grow to 30 (ratio 7.5;
     // 1.0e9 multiply-adds, above 2^22 per SM up to about 230 SMs).
     const auto n = single(seeded(kan::Layer(128, 64, spline(3, 6)), 0.2));
     ResidentLayout layout;

@@ -62,9 +62,18 @@ KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree
 // domain return `terms` and write nothing: all terms are zero. Dense = true
 // writes all `terms` values and derivatives (zero outside the span) in place,
 // the M3 evaluation; both forms perform the same operations.
-template<bool Dense, class Scalar, class Guard>
+//
+// Lower = true (sparse form only, backlog C13) writes, instead of the input
+// derivatives, the degree nonzero degree-(degree-1) values the derivative is
+// built from: d[r] = B_{first+1+r, degree-1}(x), r < degree (nothing for degree
+// zero). They are the Cox-de Boor values at the start of the last step, so the
+// span, the side taken at repeated knots and the right endpoint are those of
+// the values. The derivative expressions are still evaluated and guarded (the
+// status the values' derivatives report is unchanged) but not written.
+template<bool Dense, bool Lower = false, class Scalar, class Guard>
 KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
                                             Scalar* v, Scalar* d, const Guard& guard) {
+    static_assert(!(Dense && Lower), "the lower-degree values have the sparse form only");
     if constexpr (Dense) {
         for (std::size_t k = 0; k < terms; ++k) {
             v[k] = 0;
@@ -89,10 +98,14 @@ KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, 
     lower[degree] = 1;
     const auto start = span - degree;
     const auto out = Dense ? start : 0; // output index of term start
-    if constexpr (!Dense) {
+    if constexpr (!Dense && !Lower) {
         if (degree == 0) d[0] = 0; // degree-zero derivatives are zero
     }
     for (std::size_t p = 1; p <= degree; ++p) {
+        if constexpr (Lower) {
+            if (p == degree)
+                for (std::size_t r = 0; r < degree; ++r) d[r] = lower[r + 1];
+        }
         for (std::size_t r = degree - p; r <= degree; ++r) {
             const auto i = start + r;
             Scalar value = 0;
@@ -100,9 +113,11 @@ KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, 
             if (lower[r + 1] != 0)
                 value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
             next[r] = guard(value);
-            if (p == degree)
-                d[out + r] = guard(spline_slope_term(lower[r], p, t[i + p], t[i]) -
-                                   spline_slope_term(lower[r + 1], p, t[i + p + 1], t[i + 1]));
+            if (p == degree) {
+                const Scalar derivative = guard(spline_slope_term(lower[r], p, t[i + p], t[i]) -
+                                                spline_slope_term(lower[r + 1], p, t[i + p + 1], t[i + 1]));
+                if constexpr (!Lower) d[out + r] = derivative;
+            }
         }
         for (std::size_t r = degree - p; r <= degree; ++r) lower[r] = next[r];
     }
@@ -113,6 +128,37 @@ template<class Scalar, class Guard>
 KAN_HOST_DEVICE std::size_t spline_span_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
                                               Scalar* v, Scalar* d, const Guard& guard) {
     return spline_evaluate<false>(t, terms, degree, x, v, d, guard);
+}
+// The values and (backlog C13) the degree nonzero degree-(degree-1) values of
+// the derivative's spline (see spline_evaluate, Lower); returns `first` as
+// spline_span_terms does (`terms` outside the domain, nothing written).
+template<class Scalar, class Guard>
+KAN_HOST_DEVICE std::size_t spline_lower_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                               Scalar* v, Scalar* lower, const Guard& guard) {
+    return spline_evaluate<false, true>(t, terms, degree, x, v, lower, guard);
+}
+// Derivative coefficients (backlog C13). The derivative of a clamped spline is
+// a spline of one degree less on the same knots,
+//   d/dx sum_k c_k B_{k,p}(x) = sum_{j=1}^{K-1} C*_j B_{j,p-1}(x),
+//   C*_j = (c_j - c_{j-1}) s_j,  s_j = p / (t_{j+p} - t_j),
+// (B_{0,p-1} and B_{K,p-1} vanish on clamped knots; a zero knot gap gives a
+// vanishing B_{j,p-1} and s_j = 0), the regrouping of terms that
+// spline_evaluate's derivative expressions perform per input. Its weights are
+// nonnegative and sum to one at every input of the domain, so rounding of C*
+// or of products with C* is not amplified, unlike the signed derivatives
+// B'_{k,p}, of order p/(knot spacing), which sum to zero. The knot scales s_j
+// depend on the knots only (spline_slope_term: zero gap, overflow-safe division).
+template<class Scalar>
+KAN_HOST_DEVICE inline Scalar spline_derivative_scale(std::size_t degree, Scalar right, Scalar left) {
+    return spline_slope_term(Scalar(1), degree, right, left);
+}
+// A difference beyond the range (coefficients of opposite sign near the
+// largest value) is halved first, so C* overflows only when its value does.
+template<class Scalar>
+KAN_HOST_DEVICE inline Scalar spline_derivative_coefficient(Scalar previous, Scalar current, Scalar scale) {
+    const Scalar difference = current - previous;
+    if (math::finite(difference)) return difference * scale;
+    return (Scalar(0.5) * current - Scalar(0.5) * previous) * scale * Scalar(2);
 }
 template<class Scalar, class Guard>
 KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
