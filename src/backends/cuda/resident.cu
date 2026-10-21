@@ -1349,14 +1349,20 @@ __global__ void transpose_kernel(const T* in, T* out, std::size_t rows, std::siz
         __syncthreads();
     }
 }
-// Forward: block (o, chunk slot); thread t owns samples chunk*256*S + t +
-// 256*s, s < S, and sums each over (i, k) in ascending order starting from
-// bias[o], the CPU's order. Chunks beyond gridDim.y stride.
+// Forward: block (o, chunk slot, input split); thread t owns samples
+// chunk*256*S + t + 256*s, s < S, and sums each over (i, k) in ascending
+// order. Chunks beyond gridDim.y stride. Unsplit (gridDim.z = 1) the sum
+// starts from bias[o] and is y (the CPU's order); split z sums the inputs
+// [z*per, (z+1)*per) from zero into partial[z*batch*outputs + b*outputs + o],
+// which wavelet_forward_finish_kernel adds to the bias in the order of z.
 template<unsigned S, class T>
 __global__ void __launch_bounds__(wavelet_threads)
-wavelet_forward_kernel(WaveletArgs<T> a, const T* bias, T* y, int* status) {
+wavelet_forward_kernel(WaveletArgs<T> a, const T* bias, T* y, int* status, std::size_t per, T* partial) {
     const CheckedEarlier unchecked;
     const auto o = static_cast<std::size_t>(blockIdx.x);
+    const bool whole = gridDim.z == 1;
+    const auto i_begin = static_cast<std::size_t>(blockIdx.z)*per, i_end = a.inputs-i_begin < per ? a.inputs : i_begin+per;
+    T* const out = whole ? y : partial+static_cast<std::size_t>(blockIdx.z)*a.batch*a.outputs;
     constexpr auto span = static_cast<std::size_t>(wavelet_threads)*S;
     for (auto first = static_cast<std::size_t>(blockIdx.y)*span; first < a.batch; first += static_cast<std::size_t>(gridDim.y)*span) {
       // Full chunks compile without any test of the batch end. In the last,
@@ -1370,10 +1376,10 @@ wavelet_forward_kernel(WaveletArgs<T> a, const T* bias, T* y, int* status) {
         bool valid[S], active[S];
 #pragma unroll
         for (unsigned s = 0; s < S; ++s) {
-            sum[s] = bias[o]; valid[s] = !Partial || first+threadIdx.x+s*wavelet_threads < end;
+            sum[s] = whole ? bias[o] : T(0); valid[s] = !Partial || first+threadIdx.x+s*wavelet_threads < end;
             active[s] = !Partial || __any_sync(0xffffffffU, valid[s]);
         }
-        for (std::size_t i = 0; i < a.inputs; ++i) {
+        for (std::size_t i = i_begin; i < i_end; ++i) {
             T x[S];
 #pragma unroll
             for (unsigned s = 0; s < S; ++s) x[s] = valid[s] ? a.xt[i*a.capacity+first+threadIdx.x+s*wavelet_threads] : T(0);
@@ -1399,9 +1405,23 @@ wavelet_forward_kernel(WaveletArgs<T> a, const T* bias, T* y, int* status) {
         }
 #pragma unroll
         for (unsigned s = 0; s < S; ++s)
-            if (valid[s]) { y[(first+threadIdx.x+s*wavelet_threads)*a.outputs+o] = sum[s]; report(sum[s], status); }
+            if (valid[s]) {
+                out[(first+threadIdx.x+s*wavelet_threads)*a.outputs+o] = sum[s];
+                if (whole) report(sum[s], status);
+            }
       };
       if (end-first == span) chunk(std::false_type{}); else chunk(std::true_type{});
+    }
+}
+// y = bias + the `splits` partial sums of a split forward, in order of z.
+template<class T>
+__global__ void wavelet_forward_finish_kernel(const T* partial, unsigned splits, const T* bias, T* y, std::size_t batch,
+                                              std::size_t outputs, int* status) {
+    const auto count = batch*outputs, stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto r = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; r < count; r += stride) {
+        T sum = bias[r%outputs];
+        for (unsigned z = 0; z < splits; ++z) sum += partial[z*count+r];
+        y[r] = sum; report(sum, status);
     }
 }
 // Largest samples per thread S of the forward and backward kernels.
@@ -1418,7 +1438,10 @@ inline std::size_t wavelet_chunks(std::size_t batch, unsigned samples) {
 // warp-vote recompute path of every unrolled sample otherwise doubles the
 // registers (64 -> 128, two blocks); on GB10 a cap of 85 registers ran the
 // 256-wide step in 2.21 ms against 2.29 (64 registers) and 3.36 (51, with
-// spills). FP64 1 (no cap): 2 and 3 were 2-4% slower.
+// spills). FP64 1 (no cap): 2 and 3 were 2-4% slower. The cap is the
+// same on sm_86 and sm_121 (64K registers, 1536 threads per multiprocessor);
+// both compile every instantiation without spills (M7 review: per-round
+// addresses in shared memory, u read again in the rare path).
 template<class T> constexpr int wavelet_backward_blocks = 3;
 template<> constexpr int wavelet_backward_blocks<double> = 1;
 // Wavelets per reduction round of the backward kernel.
@@ -2031,15 +2054,22 @@ struct RationalPlan {
 // input xt (inputs, capacity) and upstream ut (outputs, capacity), the
 // per-wavelet scales r and a, the backward kernel's partial sums (`slots`
 // planes of 3*count) and, with output splits, the dx partials (`splits` rows of
-// capacity*inputs). Launch geometry (select_wavelet_launch): `wave` blocks fill
-// the device once; slots and splits are their maxima at capacity.
+// capacity*inputs) and, with forward input splits, the forward partial sums.
+// Launch geometry (select_wavelet_launch): slots and both splits are maxima
+// fixed at construction; every launch chooses within them (cost model).
 template<class T>
 struct WaveletPlan {
     using edges_type = WaveletEdges;
     ParameterBlock block;
     std::size_t count = 0;
     std::size_t xt = 0, ut = 0, inverse = 0, amplitude = 0, partials = 0, dx_partials = 0;
-    unsigned wave = 1, slots = 1, splits = 1;
+    unsigned slots = 1, splits = 1;
+    // Forward input splits: partial sums of at most y_partial_values values.
+    std::size_t y_partials = 0, y_partial_values = 0;
+    // Device: multiprocessors and resident blocks per multiprocessor of every
+    // instantiation, index log2(S) (occupancy API; backward with dx).
+    unsigned multiprocessors = 1;
+    unsigned forward_resident[4] = {1, 1, 1, 1}, backward_resident[4] = {1, 1, 1, 1};
     testing::WaveletLaunch forced{}; // test hook: nonzero values replace the choice
 };
 
@@ -2270,6 +2300,7 @@ template<class T> void reserve_workspace(WaveletPlan<T>& plan, std::size_t capac
     plan.inverse = reserve(plan.count); plan.amplitude = reserve(plan.count);
     plan.partials = reserve(product(product(plan.count, 3), plan.slots));
     if (plan.splits > 1) plan.dx_partials = reserve(product(product(capacity, b.inputs), plan.splits));
+    if (plan.y_partial_values) plan.y_partials = reserve(plan.y_partial_values);
 }
 template<class T> void reserve_workspace(AffinePlan<T>& plan, std::size_t, Reservation<T>& reserve) {
     plan.scale = reserve(plan.block.features); plan.shift = reserve(plan.block.features);
@@ -2492,34 +2523,179 @@ bool tiled_reduction(const TrainableRbfPlan<T>& plan, unsigned tiles, unsigned s
     return staged_rows == 0 && groups*tiles >= plan.tile_min_blocks;
 }
 
+// Calls f(std::integral_constant<unsigned, S>) for every instantiated S <= Most
+// (largest first).
+template<unsigned Most, class F> void for_wavelet_samples(F&& f) {
+    if constexpr (Most >= 8) f(std::integral_constant<unsigned, 8>{});
+    if constexpr (Most >= 4) f(std::integral_constant<unsigned, 4>{});
+    if constexpr (Most >= 2) f(std::integral_constant<unsigned, 2>{});
+    f(std::integral_constant<unsigned, 1>{});
+}
+constexpr unsigned log2_samples(unsigned samples) { return samples >= 8 ? 3 : samples >= 4 ? 2 : samples >= 2 ? 1 : 0; }
+
+// Cost model of a wavelet launch (backlog M7 review). It chooses the samples
+// per thread S and the splits of every launch from the device's
+// multiprocessors and each instantiation's resident blocks (CUDA runtime), so
+// the choice adapts to the device; the constants below were fitted on GB10 to
+// per-kernel times of 3080 forced geometries (M7 evidence, launch model).
+// `groups` block groups (forward: outputs x input splits; backward: inputs x
+// output splits) each run the batch's chunks of 256 S samples over `slots`
+// blocks (forward: one per chunk), `iterations` wavelets per chunk. With
+// n = min(blocks per multiprocessor, resident) blocks at a time, one
+// iteration of a block costs max(n (S + overhead), latency): issue-bound when
+// enough warps are resident, latency-bound otherwise (a partial chunk costs
+// as much as a full one: its idle sample slots stay in the unrolled code).
+// The busiest multiprocessor runs about max(1, per/n) + tail such blocks,
+// each with a fixed cost per resident block. Units: one thread evaluation.
+inline constexpr double wavelet_iteration_overhead = 3, wavelet_iteration_latency = 20, wavelet_wave_tail = 0.5,
+                        wavelet_block_cost = 50, wavelet_split_launch = 100; // the extra reduction kernel of a split
+inline double wavelet_launch_cost(std::size_t batch, unsigned samples, std::size_t groups, std::size_t slots, double iterations,
+                                  unsigned multiprocessors, unsigned resident) {
+    if (!batch || !groups) return 0;
+    const auto chunks = wavelet_chunks(batch, samples);
+    slots = std::max<std::size_t>(1, std::min(slots, chunks));
+    const double blocks = static_cast<double>(groups)*static_cast<double>(slots), per = blocks/multiprocessors;
+    const double n = std::min(std::ceil(per), static_cast<double>(std::max(resident, 1u)));
+    const double block = static_cast<double>(chunks)/static_cast<double>(slots)*iterations*
+                         std::max(n*(samples+wavelet_iteration_overhead), wavelet_iteration_latency) + wavelet_block_cost*n;
+    return (std::max(1.0, per/n)+wavelet_wave_tail)*block;
+}
+
+// Forward launch for a batch: S, input splits and inputs per split. The
+// choice minimizes the cost model over S and splits z; a split forward is
+// considered only while outputs x chunks x z stays within one wave of its
+// instantiation (resident blocks x multiprocessors), which bounds the partial
+// sums (wavelet_forward_partials). Ties keep the larger S, then fewer splits.
+struct WaveletForwardLaunch {
+    unsigned samples = 1, splits = 1;
+    std::size_t per = 1;
+};
+template<class T> std::size_t wavelet_most_input_splits(const WaveletPlan<T>& plan, std::size_t chunks, unsigned resident) {
+    const auto& b = plan.block;
+    const auto wave = static_cast<std::size_t>(plan.multiprocessors)*resident;
+    if (b.inputs < 2 || !chunks || !b.outputs || b.outputs*chunks >= wave) return 1;
+    return std::min<std::size_t>({b.inputs, wave/(b.outputs*chunks), 65535});
+}
+template<class T> WaveletForwardLaunch wavelet_forward_launch(const WaveletPlan<T>& plan, std::size_t batch) {
+    const auto& b = plan.block;
+    WaveletForwardLaunch best;
+    best.per = std::max<std::size_t>(1, b.inputs);
+    const auto& forced = plan.forced;
+    double least = std::numeric_limits<double>::infinity();
+    for_wavelet_samples<wavelet_forward_samples<T>>([&](auto S) {
+        constexpr unsigned samples = decltype(S)::value;
+        if (forced.forward_samples && forced.forward_samples != samples) return;
+        const auto chunks = wavelet_chunks(batch, samples);
+        const auto resident = plan.forward_resident[log2_samples(samples)];
+        auto most = forced.input_splits ? forced.input_splits : wavelet_most_input_splits(plan, chunks, resident);
+        if (batch*b.outputs) most = std::max<std::size_t>(1, std::min<std::size_t>(most, std::max<std::size_t>(1, plan.y_partial_values/(batch*b.outputs))));
+        for (std::size_t z = forced.input_splits ? most : 1; z <= most; ++z) {
+            const auto per = (b.inputs+z-1)/z, splits = b.inputs ? (b.inputs+per-1)/per : 1;
+            if (splits != z && !forced.input_splits) continue; // the same partition as a smaller z
+            const double cost = wavelet_launch_cost(batch, samples, b.outputs*splits, chunks, static_cast<double>(per*b.terms),
+                                                    plan.multiprocessors, resident) +
+                                (splits > 1 ? wavelet_split_launch : 0.0);
+            if (cost < least) { least = cost; best = {samples, static_cast<unsigned>(splits), std::max<std::size_t>(1, per)}; }
+        }
+    });
+    return best;
+}
+// Values of the forward partial sums any batch up to the capacity may need.
+template<class T> std::size_t wavelet_forward_partials(const WaveletPlan<T>& plan, std::size_t capacity) {
+    const auto& b = plan.block;
+    if (plan.forced.input_splits) {
+        const auto z = std::min<std::size_t>(plan.forced.input_splits, b.inputs);
+        return z > 1 ? product(product(capacity, b.outputs), z) : 0;
+    }
+    std::size_t values = 0;
+    for_wavelet_samples<wavelet_forward_samples<T>>([&](auto S) {
+        constexpr unsigned samples = decltype(S)::value;
+        const auto span = static_cast<std::size_t>(wavelet_threads)*samples;
+        const auto resident = plan.forward_resident[log2_samples(samples)];
+        for (std::size_t chunks = 1; chunks <= wavelet_chunks(capacity, samples); ++chunks) {
+            const auto z = wavelet_most_input_splits(plan, chunks, resident);
+            if (z < 2) break; // more chunks only lower the splits
+            values = std::max(values, product(product(z, std::min(chunks*span, capacity)), b.outputs));
+        }
+    });
+    return values;
+}
+// Backward launch for a batch: S, partial slots (at most plan.slots) and
+// output splits (at most plan.splits) minimizing the cost model.
+struct WaveletBackwardLaunch {
+    unsigned samples = 1, slots = 1;
+    std::size_t splits = 1, per = 1;
+};
+template<class T> WaveletBackwardLaunch wavelet_backward_launch(const WaveletPlan<T>& plan, std::size_t batch) {
+    const auto& b = plan.block;
+    const auto& forced = plan.forced;
+    WaveletBackwardLaunch best;
+    best.per = std::max<std::size_t>(1, b.outputs);
+    double least = std::numeric_limits<double>::infinity();
+    for_wavelet_samples<wavelet_backward_samples<T>>([&](auto S) {
+        constexpr unsigned samples = decltype(S)::value;
+        if (forced.backward_samples && forced.backward_samples != samples) return;
+        const auto chunks = wavelet_chunks(batch, samples);
+        const auto slots = static_cast<unsigned>(std::max<std::size_t>(1, std::min<std::size_t>(chunks, plan.slots)));
+        const auto resident = plan.backward_resident[log2_samples(samples)];
+        const std::size_t most = forced.splits ? forced.splits : std::max<std::size_t>(1, std::min<std::size_t>(plan.splits, b.outputs));
+        for (std::size_t z = forced.splits ? most : 1; z <= most; ++z) {
+            const auto per = std::max<std::size_t>(1, (b.outputs+z-1)/z), splits = b.outputs ? (b.outputs+per-1)/per : 1;
+            if (splits != z && !forced.splits) continue;
+            const double cost = wavelet_launch_cost(batch, samples, b.inputs*splits, slots, static_cast<double>(per*b.terms),
+                                                    plan.multiprocessors, resident) +
+                                (splits > 1 ? wavelet_split_launch : 0.0);
+            if (cost < least) { least = cost; best = {samples, slots, splits, per}; }
+        }
+    });
+    return best;
+}
+
 // Launch geometry of a wavelet layer (backlog M7), at construction: `wave`
 // = multiprocessors x resident backward blocks per multiprocessor (occupancy
 // API); `slots` = the chunks of a full batch at 4 samples per thread (FP64:
 // 2), at least enough for inputs*slots >= wave, so a block runs about one
 // chunk, but partial planes of at most the layer's xt + ut workspace; `splits`
-// the output splits that fill one wave when inputs*slots does not (at most
-// min(outputs, 16)).
+// the most output splits the cost model may choose: dx partials of at most
+// the same workspace, at most min(outputs, 16). Every instantiation's
+// residency and the forward partials' bound are recorded for the launches.
 template<class T> void select_wavelet_launch(WaveletPlan<T>& plan, std::size_t capacity, const ExecutorDevice& device,
                                              testing::WaveletLaunch forced) {
     const auto supported = [](unsigned v, unsigned most) { return v == 0 || ((v & (v-1)) == 0 && v <= most); };
     if (!supported(forced.forward_samples, wavelet_forward_samples<T>) || !supported(forced.backward_samples, wavelet_backward_samples<T>))
         throw std::invalid_argument("resident wavelet test launch: unsupported samples per thread");
+    if (forced.slots > 65535 || forced.splits > 65535 || forced.input_splits > 65535)
+        throw std::invalid_argument("resident wavelet test launch: slots or splits beyond the grid limit");
     // Occupancy of the instantiation the full-batch backward launches (largest S).
     int resident = 0;
     if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&resident, wavelet_backward_kernel<wavelet_backward_samples<T>, true, T>,
-                                                      wavelet_threads, 0) != cudaSuccess)
+                                                      wavelet_threads, 0) != cudaSuccess) {
+        cudaGetLastError(); // clear: a stale error would be reported by a later launch check
         resident = 1;
+    }
     const auto wave = std::max<std::size_t>(1, static_cast<std::size_t>(device.multiprocessors)*static_cast<std::size_t>(std::max(resident, 1)));
     const auto& b = plan.block;
     const auto most = std::max<std::size_t>(1, wavelet_chunks(capacity, 1));
     const auto budget = std::max<std::size_t>(1, product(capacity, b.inputs+b.outputs)/std::max<std::size_t>(1, product(plan.count, 3)));
     auto slots = std::max(wavelet_chunks(capacity, std::is_same_v<T, double> ? 2 : 4), (wave-1)/b.inputs+1);
     slots = std::max<std::size_t>(1, std::min({slots, most, budget, std::size_t{65535}}));
-    const auto splits = b.inputs*slots >= wave ? 1 : std::min<std::size_t>({(wave-1)/(b.inputs*slots)+1, b.outputs, 16});
-    plan.wave = static_cast<unsigned>(std::min<std::size_t>(wave, 1u << 30));
+    const auto splits = std::max<std::size_t>(1, std::min<std::size_t>({(b.inputs+b.outputs)/std::max<std::size_t>(1, b.inputs), b.outputs, 16}));
     plan.slots = forced.slots ? forced.slots : static_cast<unsigned>(slots);
     plan.splits = forced.splits ? forced.splits : static_cast<unsigned>(splits);
     plan.forced = forced;
+    plan.multiprocessors = std::max(1u, device.multiprocessors);
+    const auto occupancy = [](auto kernel) {
+        int blocks = 0;
+        if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks, kernel, wavelet_threads, 0) != cudaSuccess) { cudaGetLastError(); blocks = 1; }
+        return static_cast<unsigned>(std::max(blocks, 1));
+    };
+    for_wavelet_samples<wavelet_forward_samples<T>>([&](auto S) {
+        plan.forward_resident[log2_samples(S)] = occupancy(wavelet_forward_kernel<decltype(S)::value, T>);
+    });
+    for_wavelet_samples<wavelet_backward_samples<T>>([&](auto S) {
+        plan.backward_resident[log2_samples(S)] = occupancy(wavelet_backward_kernel<decltype(S)::value, true, T>);
+    });
+    plan.y_partial_values = wavelet_forward_partials(plan, capacity);
 }
 
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
@@ -2807,22 +2983,10 @@ template<class T> void run_forward(Context<T>& s, const RationalPlan<T>& plan, s
     });
     check(cudaGetLastError(),"resident rational forward launch");
 }
-// Per-edge wavelets (backlog M7, kernels above). Samples per thread S
-// (rules fitted to a GB10 sweep of complete training steps, M7 evidence;
-// `wave` is derived from the device): the batch's S, the largest power of two
-// with 256*S*15/16 <= batch (a larger S lets most lanes of a chunk evaluate
-// beyond the batch), at most 8; FP64 forward 1 (FP64-ALU bound: occupancy beats amortization)
-// and backward at most 4 (8 doubles the registers). When the grid would be
-// short of the device, FP32 forward S = 8 drops to 4 (outputs * chunks below
-// one wave) and the backward S halves, down to 2, while inputs * chunks is
-// below half a wave (the backward gains more from large S: its reductions
-// are per S samples).
-inline unsigned wavelet_batch_samples(std::size_t batch, unsigned most) {
-    unsigned samples = 1;
-    // 2S samples per thread when their chunk is at least 15/16 filled.
-    while (samples < most && static_cast<std::size_t>(samples)*2*wavelet_threads*15 <= 16*batch) samples *= 2;
-    return samples;
-}
+// Per-edge wavelets (backlog M7, kernels above). Samples per thread S and
+// the splits of every launch come from the cost model (wavelet_forward_launch,
+// wavelet_backward_launch): FP64 instantiates forward S = 1 (FP64-ALU bound:
+// occupancy beats amortization) and backward S <= 4 (8 doubles the registers).
 // Instantiates only S <= Most (FP64: forward 1, backward 4).
 template<unsigned Most, class F> void with_wavelet_samples(unsigned samples, F&& f) {
     if constexpr (Most >= 8) if (samples == 8) { f(std::integral_constant<unsigned, 8>{}); return; }
@@ -2849,16 +3013,21 @@ template<class T> void run_forward(Context<T>& s, const WaveletPlan<T>& plan, st
                                                                     s.ptr(plan.amplitude), plan.count);
     check(cudaGetLastError(), "resident wavelet scale launch");
     transpose(s, s.ptr(s.activation[j]), s.ptr(plan.xt), s.batch, b.inputs, s.capacity);
-    unsigned samples = wavelet_batch_samples(s.batch, wavelet_forward_samples<T>);
-    if (samples == 8 && b.outputs*wavelet_chunks(s.batch, 8) < plan.wave) samples = 4;
-    if (plan.forced.forward_samples) samples = plan.forced.forward_samples;
+    const auto launch = wavelet_forward_launch(plan, s.batch);
     if (b.outputs > 2147483647U) throw std::overflow_error("resident wavelet launch size overflow");
-    const auto chunks = static_cast<unsigned>(std::min<std::size_t>(wavelet_chunks(s.batch, samples), 65535));
-    with_wavelet_samples<wavelet_forward_samples<T>>(samples, [&](auto S) {
-        wavelet_forward_kernel<decltype(S)::value><<<dim3(static_cast<unsigned>(b.outputs), chunks), wavelet_threads, 0, s.stream>>>(
-            wavelet_args(s, plan), s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), s.status);
+    const auto chunks = static_cast<unsigned>(std::min<std::size_t>(wavelet_chunks(s.batch, launch.samples), 65535));
+    T* y = s.ptr(s.activation[j+1]);
+    T* partial = launch.splits > 1 ? s.ptr(plan.y_partials) : y;
+    with_wavelet_samples<wavelet_forward_samples<T>>(launch.samples, [&](auto S) {
+        wavelet_forward_kernel<decltype(S)::value><<<dim3(static_cast<unsigned>(b.outputs), chunks, launch.splits), wavelet_threads, 0, s.stream>>>(
+            wavelet_args(s, plan), s.ptr(s.parameters+b.bias()), y, s.status, launch.per, partial);
     });
     check(cudaGetLastError(), "resident wavelet forward launch");
+    if (launch.splits > 1) {
+        wavelet_forward_finish_kernel<<<blocks(s.batch*b.outputs), 256, 0, s.stream>>>(partial, launch.splits, s.ptr(s.parameters+b.bias()), y,
+                                                                                     s.batch, b.outputs, s.status);
+        check(cudaGetLastError(), "resident wavelet forward reduction launch");
+    }
 }
 template<class T> void run_forward(Context<T>& s, const AffinePlan<T>& plan, std::size_t j) {
     const auto count = s.batch*plan.block.features;
@@ -3029,9 +3198,9 @@ template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, 
     });
     check(cudaGetLastError(),"resident rational parameter gradient launch");
 }
-// Backward of per-edge wavelets: S as above; slots = min(chunks, plan.slots);
-// the outputs are split over grid z (dx then reduced by the input finish)
-// when inputs * slots stays below one wave.
+// Backward of per-edge wavelets: S, slots (at most plan.slots) and output
+// splits over grid z (dx then reduced by the input finish) from the cost
+// model (wavelet_backward_launch).
 template<class T> void run_backward(Context<T>& s, const WaveletPlan<T>& plan, std::size_t j, T lambda) {
     const auto& b = plan.block;
     const bool dx = s.batch && s.input_gradient(j);
@@ -3041,15 +3210,10 @@ template<class T> void run_backward(Context<T>& s, const WaveletPlan<T>& plan, s
     check(cudaGetLastError(), "resident wavelet bias launch");
     unsigned slots = 0;
     if (s.batch) {
-        unsigned samples = wavelet_batch_samples(s.batch, wavelet_backward_samples<T>);
-        while (samples > 2 && 2*b.inputs*wavelet_chunks(s.batch, samples) < plan.wave) samples /= 2;
-        if (plan.forced.backward_samples) samples = plan.forced.backward_samples;
-        slots = static_cast<unsigned>(std::min<std::size_t>(wavelet_chunks(s.batch, samples), plan.slots));
-        std::size_t splits = 1;
-        if (b.inputs*slots < plan.wave) splits = std::min<std::size_t>(plan.splits, (plan.wave-1)/(b.inputs*slots)+1);
-        if (plan.forced.splits) splits = plan.forced.splits;
-        const auto per = (b.outputs-1)/splits+1;
-        splits = (b.outputs-1)/per+1;
+        const auto launch = wavelet_backward_launch(plan, s.batch);
+        const unsigned samples = launch.samples;
+        const std::size_t per = launch.per, splits = launch.splits;
+        slots = launch.slots;
         if (b.inputs > 2147483647U) throw std::overflow_error("resident wavelet launch size overflow");
         T* dx_out = splits > 1 ? s.ptr(plan.dx_partials) : s.ptr(s.upstream[j]);
         const auto grid = dim3(static_cast<unsigned>(b.inputs), slots, static_cast<unsigned>(splits));
@@ -3612,9 +3776,18 @@ struct Engine final : ResidentExecutor, Context<T> {
             for (const auto& plan : plans) layout->sparse.push_back(std::visit([](const auto& p) { return sparse_layer(p); }, plan));
             layout->arena_bytes = bytes;
             layout->reduction_groups.clear();
+            layout->wavelet_forward.clear();
+            layout->multiprocessors = device.multiprocessors;
             for (const auto& plan : plans) {
                 const auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan);
                 layout->reduction_groups.push_back(rbf ? rbf->tile_group : 0);
+                testing::ResidentLayout::WaveletForward forward;
+                if (const auto* wavelet = std::get_if<WaveletPlan<T>>(&plan)) {
+                    const auto launch = wavelet_forward_launch(*wavelet, capacity);
+                    forward = {launch.samples, launch.splits,
+                               wavelet->block.outputs*wavelet_chunks(capacity, launch.samples)*launch.splits};
+                }
+                layout->wavelet_forward.push_back(forward);
             }
         }
         try {
