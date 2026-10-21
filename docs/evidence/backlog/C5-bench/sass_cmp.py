@@ -1,5 +1,7 @@
 """Compare per-kernel SASS of two resident.cu objects (backlog C5): every kernel
-present in both must be instruction-identical (addresses stripped).
+present in both must be instruction-identical (addresses stripped; addresses of
+any width: up to the M7 review only the first 64 KB of a kernel, four-digit
+addresses, were compared).
 Usage: python sass_cmp.py <before.o> <after.o>"""
 import re, subprocess, sys
 def kernels(obj):
@@ -10,10 +12,10 @@ def kernels(obj):
         if m:
             if name: out[name] = body
             name, body = re.sub(r'_GLOBAL__N__[0-9a-f]+_11_resident_cu_[0-9a-f]{8}', '_GLOBAL__N__resident', m.group(1)), []
-        elif name and re.search(r'/\*[0-9a-f]{4}\*/', line):
+        elif name and re.search(r'/\*[0-9a-f]{4,}\*/', line):
             # Constant bank 4 offsets are relocations of global tables (they move
             # when the TU gains globals, e.g. CUB's); instructions are compared.
-            body.append(re.sub(r'c\[0x4\]\[[^\]]*\]', 'c[0x4][*]', re.sub(r'/\*[0-9a-f]{4}\*/|;\s*/\*.*', '', line)).strip())
+            body.append(re.sub(r'c\[0x4\]\[[^\]]*\]', 'c[0x4][*]', re.sub(r'/\*[0-9a-f]{4,}\*/|;\s*/\*.*', '', line)).strip())
     if name: out[name] = body
     return out
 a, b = kernels(sys.argv[1]), kernels(sys.argv[2])
