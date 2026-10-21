@@ -1,0 +1,2 @@
+200 random sets (1-50 wavelets, translations spread 1e-3..1e3, log scales -9.5..5.5): max relative difference quadrature vs closed form 2.59e-10; against a long-double erfl reference: quadrature 2.59e-10, closed form 1.39e-15
+1024x1024 distinct wavelets: quadrature 4.284 s (4.09 us/wavelet), closed form 0.123 s (0.118 us/wavelet), max rel diff 2.6e-15

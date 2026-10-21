@@ -1,0 +1,23 @@
+== parity build (C5 sass_cmp.py with addresses of any width)
+before 185 kernels, after 218, common 185, differing 0
+only after: 33 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident16transpose_kernelIdEEvPKT_PS3_mmm', '_ZN3kan4cuda44_GLOBAL__N__resident16transpose_kernelIfEEvPKT_PS3_mmm', '_ZN3kan4cuda44_GLOBAL__N__resident19wavelet_bias_kernelIdEEvPKT_PS3_mmmPi']
+only before: []
+== fma build
+before 185 kernels, after 218, common 185, differing 0
+only after: 33 e.g. ['_ZN3kan4cuda44_GLOBAL__N__resident16transpose_kernelIdEEvPKT_PS3_mmm', '_ZN3kan4cuda44_GLOBAL__N__resident16transpose_kernelIfEEvPKT_PS3_mmm', '_ZN3kan4cuda44_GLOBAL__N__resident19wavelet_bias_kernelIdEEvPKT_PS3_mmmPi']
+only before: []
+== SASS size of the backward kernels, parity build, 6856b4f vs review
+wavelet_backward_kernelILj1ELb0EdEEvNS1_11WaveletArgsIT1_EEP before   184.9 KB after    51.2 KB
+wavelet_backward_kernelILj1ELb0EfEEvNS1_11WaveletArgsIT1_EEP before    54.0 KB after    12.8 KB
+wavelet_backward_kernelILj1ELb1EdEEvNS1_11WaveletArgsIT1_EEP before   182.4 KB after    52.2 KB
+wavelet_backward_kernelILj1ELb1EfEEvNS1_11WaveletArgsIT1_EEP before    54.6 KB after    13.9 KB
+wavelet_backward_kernelILj2ELb0EdEEvNS1_11WaveletArgsIT1_EEP before   293.4 KB after    65.2 KB
+wavelet_backward_kernelILj2ELb0EfEEvNS1_11WaveletArgsIT1_EEP before    71.6 KB after    15.1 KB
+wavelet_backward_kernelILj2ELb1EdEEvNS1_11WaveletArgsIT1_EEP before   295.6 KB after    66.9 KB
+wavelet_backward_kernelILj2ELb1EfEEvNS1_11WaveletArgsIT1_EEP before    74.1 KB after    17.0 KB
+wavelet_backward_kernelILj4ELb0EdEEvNS1_11WaveletArgsIT1_EEP before   508.5 KB after    92.1 KB
+wavelet_backward_kernelILj4ELb0EfEEvNS1_11WaveletArgsIT1_EEP before   107.0 KB after    20.1 KB
+wavelet_backward_kernelILj4ELb1EdEEvNS1_11WaveletArgsIT1_EEP before   512.9 KB after    97.1 KB
+wavelet_backward_kernelILj4ELb1EfEEvNS1_11WaveletArgsIT1_EEP before   111.9 KB after    23.2 KB
+wavelet_backward_kernelILj8ELb0EfEEvNS1_11WaveletArgsIT1_EEP before   173.4 KB after    30.0 KB
+wavelet_backward_kernelILj8ELb1EfEEvNS1_11WaveletArgsIT1_EEP before   192.5 KB after    38.0 KB

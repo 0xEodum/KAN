@@ -1,0 +1,35 @@
+== sweepA 08:47:50
+0 %, 2405 MHz, 11.70 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== cost 08:51:16
+96 %, 2502 MHz, 34.95 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== ab 08:52:55
+96 %, 2450 MHz, 81.61 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== sweepB 08:54:18
+96 %, 2515 MHz, 34.12 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== nsys 08:57:44
+96 %, 2522 MHz, 35.00 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== frozen 08:57:51
+2 %, 2418 MHz, 14.40 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python
+== end 08:58:56
+1 %, 2496 MHz, 19.06 W
+2687, python3
+838763, python3
+2931494, /home/core_ai/lprsm/inference-env/bin/python

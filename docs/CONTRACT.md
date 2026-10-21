@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4 and M5)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4, M5 and M7)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -142,15 +142,16 @@ requirements apply; CPU/GPU equivalence is tolerance-based.
 trainable state with the parameters of a host `Network`, so one executor can be reused for
 weights trained on the CPU or restored from elsewhere: KAN-layer coefficients (rational
 numerators included) and biases, trainable RBF centers and log widths, rational
-denominators, SiLU residual-branch weights (backlog M3), and LayerNorm gain and bias. Structure is what the executor was built for and
+denominators, wavelet translations and log scales (backlog M7), SiLU residual-branch weights
+(backlog M3), and LayerNorm gain and bias. Structure is what the executor was built for and
 is never uploaded; it must match exactly, otherwise `std::invalid_argument` names the first
 differing layer: the number of layers; per position the kind (KAN layer or input map) and
-dimensions; the carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`) or map kind; whether
+dimensions; the carrier (`BasisEdges`, `TrainableRbfEdges`, `RationalEdges`, `WaveletEdges`) or map kind; whether
 a KAN layer has the residual branch ("residual branch presence");
 and the fixed configuration, compared with `operator==`: the whole `BasisConfig` of a
 `BasisEdges` layer (family, size, Jacobi alpha/beta, Fourier frequency, Gaussian centers and
 width, B-spline degree and knots, Mexican-hat centers and scales), the term count of a
-trainable RBF, the whole `RationalConfig` (degrees, center, scale, epsilon, denominator
+trainable RBF, the `WaveletConfig` (wavelets per edge), the whole `RationalConfig` (degrees, center, scale, epsilon, denominator
 policy), `AffineMap` and `TanhMap` values, the LayerNorm epsilon and whether it has
 gain/bias. Spline knots are configuration, not state: `insert_knot`/`adapt_grid` change the
 term count, and knots moved at an equal count (`set_carrier`) change the fixed function
@@ -665,10 +666,14 @@ A `Layer` holds dimensions, a per-output bias and exactly one `kan::Carrier`
 - `TrainableRbfEdges{basis, coefficients}`: the same expansion and contraction,
   plus nonlinear shared centers/log widths with their own VJPs.
 - `RationalEdges{config, coefficients, denominators}`: nonlinear per-edge P/Q.
+- `WaveletEdges{config, coefficients, translations, log_scales}`: per-edge trainable
+  Mexican-hat wavelets, nonlinear in the per-edge-term translations and log scales (backlog M7,
+  below); no expansion is shared between edges, so it has no contraction form.
 
 `Layer(inputs, outputs, BasisConfig)` selects `TrainableRbfEdges` for a
 `TrainableRbfConfig` and `BasisEdges` otherwise; `Layer(inputs, outputs, RationalConfig)`
-selects `RationalEdges`. `carrier()` returns the carrier; `terms()` is the number of
+selects `RationalEdges`, `Layer(inputs, outputs, WaveletConfig)` selects `WaveletEdges`.
+`carrier()` returns the carrier; `terms()` is the number of
 coefficients per edge; `coefficients()`/`bias()` and `set_parameters` act on every
 carrier's per-edge coefficient tensor (the tensor the coefficient L2 penalizes, together
 with the layer's residual-branch weights).
@@ -679,12 +684,13 @@ Carriers and configurations are values with `operator==`.
 `LayerGradients{input, coefficients, bias, nonlinear, residual}`: `nonlinear` is a
 `NonlinearGradients` variant whose alternative corresponds to the carrier
 (`std::monostate`, `TrainableRbfGradients{centers, log_widths}`,
-`RationalGradients{denominators}`). SGD rejects a gradient whose alternative does not
+`RationalGradients{denominators}`, `WaveletGradients{translations, log_scales}`). SGD rejects a gradient whose alternative does not
 match the carrier with `std::invalid_argument`. `residual` is the residual-branch weight
 gradient (backlog M3), empty for a layer without the branch.
 
 Family-specific operations are free functions in `include/kan/families.hpp`
-(`insert_knot`, `adapt_grid`, `set_rbf_parameters`, `set_rational_parameters`); each
+(`insert_knot`, `adapt_grid`, `set_rbf_parameters`, `set_rational_parameters`,
+`set_wavelet_parameters`); each
 requires its carrier and basis type, raises `std::invalid_argument` otherwise, and
 commits through `set_carrier`.
 
@@ -803,6 +809,7 @@ family's reference measure and `m_k = E[phi_k(x)^2]` under it:
 | B-spline | uniform on the domain [t_p, t_K] | (p+1)-point Gauss-Legendre per span (exact) | L²/12 |
 | Gaussian RBF (fixed, trainable) | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 9w | L²/12 |
 | Mexican hat | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 12s | L²/12 |
+| Per-edge wavelets (backlog M7) | uniform on [min(τ − s), max(τ + s)] over the layer's wavelets | per wavelet, closed form `(G(q_hi) − G(q_lo))/L`, `G(q) = erf(q)/2 + (q − 2q³)e^{−q²}/(3√π)` | L²/12 |
 
 The Hermite functions are orthonormal under the Lebesgue measure, which is not a probability
 measure; they keep the physicists' N(0, 1/2), so switching the normalization does not change the
@@ -811,7 +818,16 @@ below). Coincident centers use [c-h, c+h], h the largest width or scale. With in
 coefficients `Var_c E_x[y²] = sum_i sum_k sigma_k² m_k` without cross terms, so
 `sigma_k² = gain²·variance / (inputs·terms·m_k)` (`m_k = 0` gives 0) gives every term the same
 share and `E[y²] = gain²·variance` for inputs drawn from the measure (variance-preserving).
-Uniform draws are `sqrt(3)·sigma_k·(2u-1)`, normal draws `sigma_k·z`. Rational edges use z
+Uniform draws are `sqrt(3)·sigma_k·(2u-1)`, normal draws `sigma_k·z`. Per-edge wavelets
+(`WaveletEdges`, backlog M7) use one moment per wavelet, `sigma_j² = gain²·variance /
+(inputs·size·m_j)`, with `s = exp(l)` by the portable exponential and `m_j` in closed form (erf by
+its positive series `(2/√π) q e^{−q²} Σ (2q²)^n/(2n+1)!!` and the portable exponential, `G = ±1/2`
+beyond `|q| = 7`: bitwise portable, about 0.12 µs per wavelet, within 1.4e-15 of a long-double
+reference); the measure spans every wavelet's central lobe `[τ - s, τ + s]` (`[-1, 1]` for the
+constructor's placement). Their translations and log scales are kept, like trainable RBF centers;
+`NoiseInit` uses `G = size`. With one wavelet per edge all edges of an input share ψ, whose mean on
+the measure is far from zero, so a single draw's `E[y²]` spreads over about 0.8–1.4 of the target
+(the guarantee is in expectation over initialization; the test averages 16 seeds). Rational edges use z
 uniform on [-radius, radius] (x on center ± radius·scale, variance (radius·scale)²/3) and the
 edge's own drawn denominator: `mu_k = E[u^{2k}/Q(radius·u)²]` by 16 panels of 8-point
 Gauss-Legendre, `sigma_k = sqrt(gain²·variance/(inputs·(m+1)·mu_k)) / radius^k`. A layer whose
@@ -966,6 +982,138 @@ captured training steps; the deprecated `kan::cuda::forward/backward(Layer)` ada
   layers with the branch and their current weights (exact widening), `download_gradients()`
   fills `LayerGradients::residual` (empty without the branch).
 
+## Per-edge trainable wavelets (backlog M7)
+
+`include/kan/wavelet.hpp`, carrier `kan::WaveletEdges` (Wav-KAN, Bozorgasl and Chen 2024). Every
+edge (o,i) holds `config.size >= 1` wavelets k, each with its own coefficient `w`, translation `τ`
+and log scale `l` (layout `(outputs, inputs, size)`, index `j = (o·inputs + i)·size + k`):
+
+```
+phi_{o,i}(x) = sum_k w_j psi_j(x),   psi_j(x) = A s^(-1/2) (1 - q^2) exp(-q^2/2),
+q = (x - τ_j)/s,  s = exp(l_j),  A = 2/(sqrt(3) pi^(1/4))
+```
+
+the L2-normalized Mexican hat of `MexicanHatConfig` with τ and s trainable per edge and term.
+`size = 1` is Wav-KAN's edge `w ψ((x - τ)/s)` up to the factor `s^(-1/2)`, a reparametrization of
+`w` that keeps the M3 normalization (and its moments) and changes only `d/dl`; `size > 1` is a
+per-edge trainable wavelet dictionary (the M3 dictionary made per-edge and trainable). Scope
+decision (M7 evidence): per-edge parameters as the backlog states, not per-input shared ones (that
+would be a Mexican-hat `TrainableRbfEdges`, with a GEMM form); the cost is measured below.
+`coefficients` is the carrier's per-edge coefficient tensor (`coefficients()`, `set_parameters`,
+the L2 penalty); τ and l are nonlinear parameters (unpenalized, like RBF centers/widths).
+
+- *Configuration and validation.* `WaveletConfig{size = 1}` (value type, `operator==`);
+  `validate_wavelet` rejects `size = 0`. A log scale is valid when `l` is finite and `exp(l)` and
+  `exp(-l)` are finite and nonzero (`kan::valid_log_scale`, |l| below about 709.78);
+  translations must be finite. Invalid user data raise `std::invalid_argument` (`set_carrier`,
+  `set_wavelet_parameters`, `evaluate_wavelet`).
+- *Construction.* `Layer(inputs, outputs, WaveletConfig)`: zero coefficients and bias; term k of
+  every edge at `τ = -1 + (2k+1)/size`, `s = 1/size` (`l = -log(size)`): equispaced hats on [-1, 1]
+  whose zero crossings meet; `size = 1` gives Wav-KAN's `τ = 0, s = 1`. Distinct starting τ matter:
+  terms of an edge that start equal stay equal under SGD.
+- *Derivatives* (one wavelet, unit coefficient, `kan::evaluate_wavelet(x, τ, l)` returns all four):
+  `dψ/dx = A s^(-3/2) q (q² - 3) E`, `dψ/dτ = -dψ/dx`, `dψ/dl = -A s^(-1/2) E (q² - r1)(q² - r2)`
+  (`= A s^(-1/2) E (-q⁴ + 3.5 q² - 0.5)`, roots `r1,2 = (7 ± sqrt 41)/4` correctly rounded; the
+  factored form keeps relative accuracy near the roots), `E = exp(-q²/2)`.
+- *Evaluation* (single host/device source `wavelet_scales`, `wavelet_terms` in
+  `src/carriers/local/local_formulas.hpp`). Per wavelet once per call: `r = exp(-l)`,
+  `a = A sqrt(r)`; per sample `q = (x - τ) r`, then one exponential. Where `q²` is not finite the
+  distance is retried as `x r - τ r` (an overflowed `x - τ`), otherwise the result is the exact zero
+  tail; where `E` is below the normal range (`q² > 1416` FP64, `> 175` FP32) all three are formed in
+  log space (out-of-line `wavelet_tail_terms`), which keeps the derivatives of narrow wavelets whose
+  `E` underflows (tested at `s = exp(-700)`, 40 scales out). No intermediate is NaN for finite data.
+  Accuracy against long-double closed forms: relative `1e-15 (8 + q²)` (the rounding of `q²/2`) with
+  an absolute floor `1e-15 a` near the polynomial zeros.
+- *CPU order.* Forward `y[b,o] = bias[o]` then `+= w_j ψ_j(x[b,i])` in ascending i, then k;
+  backward per sample, output, input and term (`t = w dψ/dx`): `dx += u t`, `dw += u ψ`,
+  `dτ -= u t`, `dl += u (w dψ/dl)`, the parameter sums in ascending b. Nonfinite intermediates or
+  results raise `std::overflow_error`.
+- *SGD, L2, residual branch.* SGD updates `w`, `τ`, `l` with the other parameters after validating
+  everything; a candidate log scale outside the valid range raises `std::overflow_error` with the
+  layer unchanged (as an RBF width). `regularization` penalizes `w` (and the residual weights) only;
+  `WaveletGradients` of the penalty are zero vectors. The residual branch works as for every carrier.
+  `set_parameters` keeps τ and l; `set_wavelet_parameters(layer, coefficients, translations,
+  log_scales, bias)` replaces all of them atomically (`std::invalid_argument` for another carrier).
+- *Initializers.* See the initializer section (lobe-span measure, per-wavelet moments, τ and l kept,
+  `NoiseInit` `G = size`); pinned digest `b36eaec5aa0cc030` (GCC, aarch64; the quadrature of the
+  first M7 version gave `ebfe9f8b648306d3`).
+- *Python.* `kan.WaveletConfig(size=1)`, `kan.Layer(inputs, outputs, wavelet=...)`,
+  `kan.WaveletEdges` snapshot (`config`, `coefficients`, `translations`, `log_scales`, each
+  `(outputs, inputs, size)`), `kan.set_wavelet_parameters`, `kan.evaluate_wavelet(x, translation,
+  log_scale)` returning `(value, d/dx, d/dtranslation, d/dlog_scale)`, `kan.valid_log_scale`,
+  `LayerGradients.translations` / `.log_scales` (shape `(0,)` for other carriers).
+
+**Resident executor.** `WaveletEdges` run in every precision, eager and in captured training steps.
+Parameter block `[coefficients | bias | translations | log scales | residual]`. Structure for
+`upload_parameters`: the `WaveletConfig` (a different `size` is rejected); translations and log
+scales are state. FP32 rejects translations beyond `FLT_MAX` and log scales whose `exp(±l)` leave
+the float range (`std::invalid_argument`, construction and upload). SGD candidates of the log scales
+are checked on the device (`validate_log_scale_kernel`), so a failing step rolls back (C9) and eager
+SGD stays atomic. A finite candidate outside the range raises `std::overflow_error` "resident
+wavelet log-scale candidate leaves the valid range" (status bit 4, the CPU's cause). A nonfinite
+candidate, including one that a finite gradient pushes to ±inf, reports "nonfinite resident
+numerical result" as before; the CPU names the range in the latter case, with the same exception
+type. Trainable RBF widths report "nonfinite" in both cases (their kernels are unchanged).
+
+- *Kernels* (`src/backends/cuda/resident.cu`). Per forward: `wavelet_scales_kernel` (r, a per
+  wavelet; reused by the backward), the layer input transposed to `xt [i·capacity + b]` and
+  `wavelet_forward_kernel` (block = output, sample chunk and input split, thread = S samples, lanes =
+  consecutive samples; parameters at block-uniform addresses; unsplit, the sum from the bias in
+  ascending i, k: the CPU order; with z > 1 input splits each split sums its inputs from zero and
+  `wavelet_forward_finish_kernel` adds bias + split 0 + split 1 + ... in order). Per backward: the upstream transposed to `ut [o·capacity + b]`, `wavelet_bias_kernel`
+  (warp per output, fixed lane order and shuffle tree), `wavelet_backward_kernel` (block = input,
+  partial slot and output split; one evaluation per sample and wavelet gives dx, accumulated over
+  (o, k) in the CPU order, and the three sample sums, reduced per wavelet by a fixed lane butterfly,
+  then over the 8 warps in order, into the slot's partial plane), `wavelet_input_finish_kernel` (dx
+  over the output splits, in order) and `wavelet_finish_kernel` (parameter VJPs over the slots, in
+  order, `+ λw`). No floating-point atomics: results are deterministic for one device, batch and
+  build. The direct path is branch-free; a group of samples whose warp has a rare sample (log-space
+  or retried distance) is recomputed with `wavelet_terms` before use, so every lane gets the
+  formula's result (bitwise in the parity build; with `KAN_CUDA_FMA=ON` the two inlined copies may
+  contract differently). Full sample chunks compile without batch-end tests; in the last, partial
+  chunk lanes beyond the batch evaluate at `x = τ` with `u = 0` (direct path, exact zero
+  contributions) and warps entirely beyond it skip the sample slot. Intermediates are not checked one by one: every CPU-guarded intermediate is
+  summed into a reported result, so the reported status is the CPU's.
+- *FP32 envelope.* The FP32 direct path computes `E = 2^(c q²)`, `c = -log2(e)/2` rounded to float,
+  with one `ex2.approx.ftz` (relative error below 2^-22; the rounding of `c q²` adds at most
+  `|c q²| 2^-24 < 8e-6` to the exponent) and flushes exactly where the log-space branch takes over.
+  FP64 uses `exp` (the CPU formula). TF32 has no contraction in this carrier: it computes it as FP32
+  (only a residual branch's GEMMs use TF32).
+- *Launch geometry* (selected per call from the batch by a cost model, M7 evidence "Launch model"):
+  for every instantiated S (FP32 1, 2, 4, 8; FP64 forward 1, backward 1, 2, 4) and split count z the
+  estimated time `(max(1, b/n) + 0.5)·(c/slots·it·max(n·(S + 3), 20) + 50·n)` is minimized (plus 100
+  for the extra reduction kernel of z > 1; ties keep the larger S, then the smaller z), with c the
+  chunks of 256·S samples, `it` the wavelets a block evaluates per chunk, b the blocks per
+  multiprocessor and n = min(⌈b⌉, resident blocks of that instantiation). Multiprocessors and
+  resident blocks come from the CUDA runtime (`cudaOccupancyMaxActiveBlocksPerMultiprocessor` per
+  instantiation), so the choice adapts to the device; the relative costs (3, 20, 0.5, 50, 100, in
+  thread evaluations) were fitted on GB10 to per-kernel times of 3080 forced geometries. Forward
+  input splits are considered while `outputs·chunks·z` stays within one wave of the instantiation;
+  backward output splits up to `min(outputs, 16, (inputs + outputs)/inputs)` (the dx partials stay
+  within the layer's `xt + ut` size). Backward partial slots: at construction the chunks of a full
+  batch at S = 4 (FP64 2), at least `wave/inputs` (`wave` = multiprocessors x resident blocks of the
+  largest backward instantiation), at most what fits the layer's `xt + ut` size. The backward kernel
+  is compiled for 3 resident blocks per multiprocessor in FP32 (`__launch_bounds__`; at most 80
+  registers allocated, no spills on sm_86 or sm_121). A private test hook (`testing::WaveletLaunch`:
+  samples, slots, output splits, input splits) forces any instantiated geometry for
+  device-independent tests (others raise `std::invalid_argument`).
+- *Workspace* (per wavelet layer, in the construction-time arena): `xt` (capacity x inputs), `ut`
+  (capacity x outputs), r and a (one value each per wavelet), the partial planes (slots x 3 x
+  wavelets), with output splits splits x capacity x inputs dx partials and, for layers whose
+  forward may split its inputs, the forward partial sums (at most the largest `z·batch·outputs` the
+  model may choose for a batch up to the capacity, within one wave of blocks of 256·S samples).
+- *Parity.* FP64 within `1e-11|e| + 1e-12 max|e|` of the CPU in the suite (order of the parameter
+  sums, of split forward sums and the libm/CUDA exponential differ); FP32/TF32 within the C1
+  tolerances; training steps bitwise the eager sequence (the geometry is a function of the batch and the
+  device; a sample's forward output may differ in rounding between batches or devices).
+- *Cost* (complete `train_step`, GB10, M7 evidence): an evaluation per sample, output, input and
+  term with no GEMM; against the fixed dictionary with the same parameters per edge (3K terms)
+  1.3-5.5x the FP32 step (2.9-3.1x at 256 wide), 4.1x in TF32, 3.3-6.6x in FP64. Narrow wavelets
+  whose warps mostly hold log-space samples cost more per evaluation (FP32 64-wide, placement
+  s = 1/16 and 1/32 on [-1, 1]: 3.1x and 3.8x the evaluation cost at s = 1/4). A batch just above
+  a multiple of 256·S costs more than its valid samples suggest (FP32 256-wide: 2049 samples 1.54x
+  of 2048).
+
 ## Extension boundaries
 
 Basis, rational and residual-branch formulas have a single source shared by the CPU
@@ -977,16 +1125,17 @@ properties (backlog R4). The basis family tag and flat views are in
 `src/carriers/polynomial/polynomial_formulas.hpp` (Chebyshev, Legendre, Jacobi, Hermite
 and the normalized Hermite functions: global three-term recurrences), `src/carriers/trigonometric/fourier_formulas.hpp`
 (Fourier) and `src/carriers/local/local_formulas.hpp` (B-spline, Gaussian RBF, Mexican
-hat: local support or decaying tails; `spline_span_terms` is the sparse form of the spline
+hat: local support or decaying tails, with the per-edge trainable wavelets of backlog M7; `spline_span_terms` is the sparse form of the spline
 recurrence, and the dense `spline_terms` scatters its result, backlog C5; `spline_lower_terms`,
 `spline_derivative_scale` and `spline_derivative_coefficient` give the derivative's spline of one
 degree less, backlog C13). Rational formulas are in
 `src/carriers/rational/rational_formulas.hpp`; residual-branch formulas in
 `src/core/residual_formulas.hpp`. Public declarations and validation live in
 `include/kan/basis.hpp`/`src/carriers/basis.cpp` and
-`include/kan/rational.hpp`/`src/carriers/rational/rational.cpp`. Family operations
-(`include/kan/families.hpp`) are in `src/carriers/local/local_operations.cpp` (knots, RBF
-parameters) and `src/carriers/rational/rational_operations.cpp`. The carrier-independent
+`include/kan/rational.hpp`/`src/carriers/rational/rational.cpp`. Wavelet configuration validation and `evaluate_wavelet` are in
+`src/carriers/local/wavelet.cpp`, their CPU loops in `src/backends/cpu/wavelet_edges.cpp`. Family operations
+(`include/kan/families.hpp`) are in `src/carriers/local/local_operations.cpp` (knots, RBF and
+wavelet parameters) and `src/carriers/rational/rational_operations.cpp`. The carrier-independent
 Layer protocol, including the SiLU residual branch, lives in `src/core/layer.cpp`;
 topology in `src/core/network.cpp`; input maps in `src/core/input_map.cpp` with their
 shared host/device formulas in `src/core/input_map_formulas.hpp`; shape and finiteness

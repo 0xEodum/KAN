@@ -1,0 +1,85 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cpu
+Test project /home/core_ai/PyProjects/KAN/build-cpu
+      Start  1: layer
+ 1/34 Test  #1: layer ............................   Passed    0.00 sec
+      Start  2: network
+ 2/34 Test  #2: network ..........................   Passed    0.00 sec
+      Start  3: input_map
+ 3/34 Test  #3: input_map ........................   Passed    0.01 sec
+      Start  4: residual
+ 4/34 Test  #4: residual .........................   Passed    0.00 sec
+      Start  5: residual_formula
+ 5/34 Test  #5: residual_formula .................   Passed    0.00 sec
+      Start  6: residual_training
+ 6/34 Test  #6: residual_training ................   Passed   33.11 sec
+      Start  7: basis
+ 7/34 Test  #7: basis ............................   Passed    0.00 sec
+      Start  8: basis_config
+ 8/34 Test  #8: basis_config .....................   Passed    0.00 sec
+      Start  9: carrier
+ 9/34 Test  #9: carrier ..........................   Passed    0.00 sec
+      Start 10: hermite_function
+10/34 Test #10: hermite_function .................   Passed    0.00 sec
+      Start 11: local_basis
+11/34 Test #11: local_basis ......................   Passed    0.00 sec
+      Start 12: local_layer
+12/34 Test #12: local_layer ......................   Passed    0.00 sec
+      Start 13: wavelet
+13/34 Test #13: wavelet ..........................   Passed    0.01 sec
+      Start 14: spline_derivative_formula
+14/34 Test #14: spline_derivative_formula ........   Passed    0.00 sec
+      Start 15: rational
+15/34 Test #15: rational .........................   Passed    0.00 sec
+      Start 16: rational_layer
+16/34 Test #16: rational_layer ...................   Passed    0.01 sec
+      Start 17: rational_allocation
+17/34 Test #17: rational_allocation ..............   Passed    0.01 sec
+      Start 18: rational_policy
+18/34 Test #18: rational_policy ..................   Passed    0.00 sec
+      Start 19: initializer
+19/34 Test #19: initializer ......................   Passed    1.06 sec
+      Start 20: initializer_training
+20/34 Test #20: initializer_training .............   Passed   22.34 sec
+      Start 21: package_custom_include
+21/34 Test #21: package_custom_include ...........   Passed    0.12 sec
+      Start 22: package_default_configuration
+22/34 Test #22: package_default_configuration ....   Passed    0.12 sec
+      Start 23: fit_polynomial
+23/34 Test #23: fit_polynomial ...................   Passed    0.00 sec
+      Start 24: python
+24/34 Test #24: python ...........................   Passed    0.07 sec
+      Start 25: local_python
+25/34 Test #25: local_python .....................   Passed    0.09 sec
+      Start 26: rational_python
+26/34 Test #26: rational_python ..................   Passed    0.12 sec
+      Start 27: input_map_python
+27/34 Test #27: input_map_python .................   Passed    0.07 sec
+      Start 28: residual_python
+28/34 Test #28: residual_python ..................   Passed    0.07 sec
+      Start 29: initializer_python
+29/34 Test #29: initializer_python ...............   Passed    0.20 sec
+      Start 30: hermite_function_python
+30/34 Test #30: hermite_function_python ..........   Passed    0.07 sec
+      Start 31: wavelet_python
+31/34 Test #31: wavelet_python ...................   Passed    0.08 sec
+      Start 32: precision_python
+32/34 Test #32: precision_python .................   Passed    0.10 sec
+      Start 33: resident_upload_python
+33/34 Test #33: resident_upload_python ...........   Passed    0.06 sec
+      Start 34: training_python
+34/34 Test #34: training_python ..................   Passed    0.05 sec
+
+100% tests passed, 0 tests failed out of 34
+
+Label Time Summary:
+carriers       =   0.08 sec*proc (5 tests)
+core           =  33.27 sec*proc (8 tests)
+cpu            =  56.84 sec*proc (23 tests)
+init           =  23.60 sec*proc (3 tests)
+integration    =   1.22 sec*proc (14 tests)
+local          =   0.19 sec*proc (6 tests)
+python         =   0.98 sec*proc (11 tests)
+rational       =   0.14 sec*proc (5 tests)
+resident       =   0.20 sec*proc (3 tests)
+
+Total Test time (real) =  57.82 sec

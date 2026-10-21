@@ -9,7 +9,7 @@ backward and training; optional Python bindings expose the same implementation.
 | Category | Available | Planned |
 |---|---|---|
 | Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite or normalized Hermite functions (`HermiteConfig::normalization`) | Additional families |
-| Harmonic / wave | Fourier, normalized Mexican-hat wavelets | Additional wavelets |
+| Harmonic / wave | Fourier, normalized Mexican-hat wavelets (fixed dictionary or per-edge trainable, Wav-KAN) | Additional wavelets |
 | Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
 | Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
 | Input maps | Explicit affine (fixed, from data range or moments), tanh, LayerNorm (trainable gain/bias) layers | — |
@@ -236,7 +236,7 @@ auto penalty = localized.regularization(0.01); // value and coefficient VJP
 // Trainable RBF: shared centers and log widths are nonlinear parameters.
 const kan::TrainableRbfConfig radial{{-0.5,0.5}, {std::log(0.4),std::log(0.6)}}; // include <cmath>
 kan::Layer learnable(1,1,radial); // explicitly initialize coefficients for training
-// A layer holds one carrier (kan::BasisEdges, TrainableRbfEdges or RationalEdges):
+// A layer holds one carrier (kan::BasisEdges, TrainableRbfEdges, RationalEdges or WaveletEdges):
 const auto& edges = std::get<kan::BasisEdges>(localized.carrier());
 const auto& knots = std::get<kan::BSplineConfig>(edges.basis).knots;
 // backward returns kan::TrainableRbfGradients{centers, log_widths} in
@@ -253,6 +253,21 @@ coefficient L2 gradients on the GPU; CPU callers explicitly add the regularizati
 VJP to their loss gradients. Python exposes the same operations (`kan.insert_knot(layer, x)`,
 `layer.carrier`); see
 [localized Python examples](tests/python/local_python_test.py).
+
+## Per-edge trainable wavelets (Wav-KAN)
+
+```cpp
+kan::Layer wav(2, 3, kan::WaveletConfig{2}); // 2 wavelets per edge, placed on [-1, 1]
+kan::initialize(wav, kan::VarianceScaling{}); // coefficients; translations/log scales kept
+auto g = wav.backward(x, batch, upstream);   // g.nonlinear: kan::WaveletGradients
+wav.sgd(g, 0.01);                            // updates w, tau and log scales per edge
+```
+
+Every edge has its own wavelets `w * A s^(-1/2) (1 - q^2) exp(-q^2/2)`, `q = (x - tau)/s`,
+`s = exp(l)`, with `w`, `tau` and `l` trained per edge and term (backlog M7; `size = 1` is
+Wav-KAN's edge). `kan::set_wavelet_parameters` replaces them; the resident executor runs
+them in every precision. See the [wavelet contract](docs/CONTRACT.md#per-edge-trainable-wavelets-backlog-m7)
+and [Python examples](tests/python/wavelet_python_test.py).
 
 ## Rational use
 
@@ -356,7 +371,7 @@ that matter for execution (backlog R4):
 | `src/carriers/` | Basis family tag, flat views and family dispatch, basis validation |
 | `src/carriers/polynomial/` | Chebyshev, Legendre, Jacobi, Hermite (polynomials and normalized functions): global support, three-term recurrences |
 | `src/carriers/trigonometric/` | Fourier: global, periodic |
-| `src/carriers/local/` | B-spline, Gaussian RBF, Mexican hat: local support or decaying tails; knot and RBF-parameter operations |
+| `src/carriers/local/` | B-spline, Gaussian RBF, Mexican hat (fixed and per-edge trainable wavelets): local support or decaying tails; knot, RBF- and wavelet-parameter operations |
 | `src/carriers/rational/` | Rational edges: per-edge P/Q with denominator policies |
 | `src/backends/cpu/` | CPU carrier loops and the shared expansion + contraction engine |
 | `src/backends/cuda/` | Optional `kan::cuda` target: resident executor, device query, deprecated M1 adapter |

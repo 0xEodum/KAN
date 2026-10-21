@@ -1,0 +1,34 @@
+== build-cuda memcheck --leak-check full
+10/10 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda racecheck
+10/10 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+exit 0
+== build-cuda synccheck
+10/10 passed
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda initcheck
+10/10 passed
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda-fma memcheck --leak-check full
+10/10 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda-fma racecheck
+10/10 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+exit 0
+== build-cuda-fma synccheck
+10/10 passed
+========= ERROR SUMMARY: 0 errors
+exit 0
+== build-cuda-fma initcheck
+10/10 passed
+========= ERROR SUMMARY: 0 errors
+exit 0

@@ -1,0 +1,6 @@
+kernel,grid,launches,median_us
+"wavelet_backward_kernel<",256x1x1,608,54.2
+"wavelet_backward_kernel<",256x1x2,1216,582.4
+"wavelet_forward_finish_kernel<float>",80x1x1,608,1.6
+"wavelet_forward_kernel<",10x1x9,608,20.8
+"wavelet_forward_kernel<",256x1x1,1216,286.7

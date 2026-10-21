@@ -1,0 +1,5 @@
+rule        kernel    mean regret  max regret  excess time
+model       forward         1.070        1.73         1.1%
+model       backward        1.068        1.44         3.1%
+previous    forward         2.945       21.99        10.8%
+previous    backward        1.179        2.42        13.9%

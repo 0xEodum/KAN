@@ -1,0 +1,35 @@
+# ptxas -v of every wavelet kernel/function (CUDA 13.0, Release, parity build flags), M7 review.
+# columns: name | sm_86 registers, stack/spill-store/spill-load bytes | sm_121 the same
+wavelet_backward_kernel<S=1,dx=0,double>                | sm_86  80 regs, spill 0/0/0 | sm_121  90 regs, spill 0/0/0
+wavelet_backward_kernel<S=1,dx=0,float>                 | sm_86  59 regs, spill 0/0/0 | sm_121  62 regs, spill 0/0/0
+wavelet_backward_kernel<S=1,dx=1,double>                | sm_86  78 regs, spill 0/0/0 | sm_121  96 regs, spill 0/0/0
+wavelet_backward_kernel<S=1,dx=1,float>                 | sm_86  55 regs, spill 0/0/0 | sm_121  62 regs, spill 0/0/0
+wavelet_backward_kernel<S=2,dx=0,double>                | sm_86 102 regs, spill 0/0/0 | sm_121 116 regs, spill 0/0/0
+wavelet_backward_kernel<S=2,dx=0,float>                 | sm_86  72 regs, spill 0/0/0 | sm_121  68 regs, spill 0/0/0
+wavelet_backward_kernel<S=2,dx=1,double>                | sm_86 104 regs, spill 0/0/0 | sm_121 124 regs, spill 0/0/0
+wavelet_backward_kernel<S=2,dx=1,float>                 | sm_86  66 regs, spill 0/0/0 | sm_121  68 regs, spill 0/0/0
+wavelet_backward_kernel<S=4,dx=0,double>                | sm_86 132 regs, spill 0/0/0 | sm_121 160 regs, spill 0/0/0
+wavelet_backward_kernel<S=4,dx=0,float>                 | sm_86  80 regs, spill 0/0/0 | sm_121  76 regs, spill 0/0/0
+wavelet_backward_kernel<S=4,dx=1,double>                | sm_86 138 regs, spill 0/0/0 | sm_121 174 regs, spill 0/0/0
+wavelet_backward_kernel<S=4,dx=1,float>                 | sm_86  80 regs, spill 0/0/0 | sm_121  77 regs, spill 0/0/0
+wavelet_backward_kernel<S=8,dx=0,float>                 | sm_86  77 regs, spill 0/0/0 | sm_121  77 regs, spill 0/0/0
+wavelet_backward_kernel<S=8,dx=1,float>                 | sm_86  80 regs, spill 0/0/0 | sm_121  80 regs, spill 0/0/0
+wavelet_bias_kernel<double>                             | sm_86  24 regs, spill 0/0/0 | sm_121  38 regs, spill 0/0/0
+wavelet_bias_kernel<float>                              | sm_86  20 regs, spill 0/0/0 | sm_121  37 regs, spill 0/0/0
+wavelet_finish_kernel<double>                           | sm_86  40 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_finish_kernel<float>                            | sm_86  42 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_forward_finish_kernel<double>                   | sm_86  36 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_forward_finish_kernel<float>                    | sm_86  36 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_forward_kernel<S=1,double>                      | sm_86  36 regs, spill 0/0/0 | sm_121  46 regs, spill 0/0/0
+wavelet_forward_kernel<S=1,float>                       | sm_86  46 regs, spill 0/0/0 | sm_121  38 regs, spill 0/0/0
+wavelet_forward_kernel<S=2,float>                       | sm_86  31 regs, spill 0/0/0 | sm_121  44 regs, spill 0/0/0
+wavelet_forward_kernel<S=4,float>                       | sm_86  37 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_forward_kernel<S=8,float>                       | sm_86  59 regs, spill 0/0/0 | sm_121  74 regs, spill 0/0/0
+wavelet_input_finish_kernel<double>                     | sm_86  37 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_input_finish_kernel<float>                      | sm_86  36 regs, spill 0/0/0 | sm_121  40 regs, spill 0/0/0
+wavelet_scales_kernel<double>                           | sm_86  23 regs, spill 0/0/0 | sm_121  24 regs, spill 0/0/0
+wavelet_scales_kernel<float>                            | sm_86  16 regs, spill 0/0/0 | sm_121  16 regs, spill 0/0/0
+wavelet_tail_terms<derivatives=0,double>                        | sm_86   - regs, spill 0/0/0 | sm_121   - regs, spill 0/0/0
+wavelet_tail_terms<derivatives=0,float>                        | sm_86   - regs, spill 0/0/0 | sm_121   - regs, spill 0/0/0
+wavelet_tail_terms<derivatives=1,double>                        | sm_86   - regs, spill 0/0/0 | sm_121   - regs, spill 0/0/0
+wavelet_tail_terms<derivatives=1,float>                        | sm_86   - regs, spill 0/0/0 | sm_121   - regs, spill 0/0/0

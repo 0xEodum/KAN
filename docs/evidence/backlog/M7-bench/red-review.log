@@ -1,0 +1,23 @@
+== L4 (RED: before the status bit)
+PASS wavelet_resident_matches_cpu_in_every_precision
+PASS wavelet_resident_large_layers_match_cpu
+PASS wavelet_resident_every_launch_geometry_matches_cpu
+PASS wavelet_resident_test_hook_rejects_unsupported_launches
+PASS wavelet_resident_zero_batch_and_l2
+PASS wavelet_resident_training_steps_match_eager_and_roll_back
+FAIL wavelet_resident_out_of_range_log_scale_candidate_names_its_cause: eager_text.find("log-scale candidate leaves the valid range") != std::string::npos
+PASS wavelet_resident_upload_parameters_checks_structure_and_values
+PASS wavelet_resident_tails_and_nonfinite_status
+8/9 passed
+== L3 (RED: input splits disabled, the split launch cost set to 1e300)
+PASS wavelet_resident_matches_cpu_in_every_precision
+PASS wavelet_resident_large_layers_match_cpu
+PASS wavelet_resident_every_launch_geometry_matches_cpu
+FAIL wavelet_resident_narrow_layers_split_their_inputs: layout.wavelet_forward[0].input_splits > 1
+PASS wavelet_resident_test_hook_rejects_unsupported_launches
+PASS wavelet_resident_zero_batch_and_l2
+PASS wavelet_resident_training_steps_match_eager_and_roll_back
+PASS wavelet_resident_out_of_range_log_scale_candidate_names_its_cause
+PASS wavelet_resident_upload_parameters_checks_structure_and_values
+PASS wavelet_resident_tails_and_nonfinite_status
+9/10 passed
