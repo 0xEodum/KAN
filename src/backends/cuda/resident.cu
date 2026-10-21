@@ -97,6 +97,10 @@ __device__ __forceinline__ bool finite_value(double value) {
 }
 __device__ __forceinline__ bool finite_value(float value) { return isfinite(value); }
 template<class T> __device__ void report(T value, int* status) { if (!finite_value(value)) atomicOr(status, 1); }
+// Status bits: 1 a nonfinite result, 2 an unsafe rational denominator (domain
+// error), status_parameter_range a finite SGD candidate outside its parameter's
+// valid range (wavelet log scales, backlog M7; RBF log widths still report bit 1).
+constexpr int status_parameter_range = 4;
 // Device guard for the shared formulas: record a nonfinite status bit and
 // continue; the host raises after the launch sequence completes.
 struct StatusGuard {
@@ -1075,6 +1079,8 @@ __global__ void commit_kernel(const T* parameters, T* candidates, std::size_t co
         candidates[i] = parameters[i];
 }
 constexpr unsigned commit_max_blocks = 160;
+// Host message of status_parameter_range (the CPU's wording).
+constexpr const char* parameter_range_message = "resident wavelet log-scale candidate leaves the valid range";
 // Host threads converting a staged batch: at most 8, at least 2^18 values each.
 constexpr std::size_t stage_threads_max = 8, stage_chunk = std::size_t{1} << 18;
 
@@ -1579,12 +1585,16 @@ __global__ void wavelet_bias_kernel(const T* ut, T* gradient, std::size_t batch,
     }
 }
 // SGD candidates of the log scales: exp(l) and exp(-l) finite and nonzero.
+// A nonfinite candidate is reported by the candidate kernel (status bit 1);
+// a finite one outside the range sets status_parameter_range, so that the
+// host names the cause as the CPU does.
 template<class T>
 __global__ void validate_log_scale_kernel(const T* next, std::size_t count, int* status) {
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto j = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; j < count; j += stride) {
         const T l = next[j], scale = detail::math::exp(l), inverse = detail::math::exp(-l);
-        if (!isfinite(scale) || !(scale > 0) || !isfinite(inverse) || !(inverse > 0)) atomicOr(status, 1);
+        if (!isfinite(scale) || !(scale > 0) || !isfinite(inverse) || !(inverse > 0))
+            atomicOr(status, isfinite(l) ? status_parameter_range : 1);
     }
 }
 
@@ -3681,6 +3691,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         sync();
         if (value) reset_status();
         if (value&1) throw std::overflow_error("nonfinite resident numerical result");
+        if (value&status_parameter_range) throw std::overflow_error(parameter_range_message);
         if (value&2) throw std::domain_error("unsafe resident rational denominator");
     }
 
@@ -3735,6 +3746,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             " (deferred status check; that step and the " + std::to_string(skipped) +
             " later steps of the interval committed no update)";
         if (c.first_bits&1) throw std::overflow_error("nonfinite resident numerical result" + where);
+        if (c.first_bits&status_parameter_range) throw std::overflow_error(parameter_range_message + where);
         throw std::domain_error("unsafe resident rational denominator" + where);
     }
     static std::pair<T, T> step_scalars(double learning_rate, double coefficient_l2) {
