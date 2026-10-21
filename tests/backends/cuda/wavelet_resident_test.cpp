@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
+#include <tuple>
 
 namespace {
 using kan::cuda::Precision;
@@ -189,10 +190,10 @@ TEST(wavelet_resident_every_launch_geometry_matches_cpu) {
     const auto expected = cpu.backward(x, batch, dy);
     for (auto precision : {Precision::Float64, Precision::Float32}) {
         for (unsigned samples : {1u, 2u, 4u, 8u})
-            for (const auto [slots, splits] : {std::pair{1u, 1u}, std::pair{2u, 3u}, std::pair{3u, 7u}}) {
+            for (const auto [slots, splits, input_splits] : {std::tuple{1u, 1u, 1u}, std::tuple{2u, 3u, 2u}, std::tuple{3u, 7u, 5u}}) {
                 // FP64 instantiates forward S = 1 and backward S <= 4 only.
                 const bool fp64 = precision == Precision::Float64;
-                const WaveletLaunch launch{fp64 ? 1u : samples, fp64 ? std::min(samples, 4u) : samples, slots, splits};
+                const WaveletLaunch launch{fp64 ? 1u : samples, fp64 ? std::min(samples, 4u) : samples, slots, splits, input_splits};
                 std::unique_ptr<ResidentNetwork> gpu;
                 {
                     ResidentTestScope scope(launch);
@@ -208,11 +209,47 @@ TEST(wavelet_resident_every_launch_geometry_matches_cpu) {
     }
 }
 
+TEST(wavelet_resident_narrow_layers_split_their_inputs) {
+    // A forward of few outputs has few (output, chunk) blocks: the executor
+    // splits the inputs over more blocks (how many is the cost model's choice
+    // for the device) and adds the partial sums in a fixed order
+    // (deterministic, close to the CPU). Wide layers keep one block per
+    // (output, chunk).
+    using kan::cuda::testing::ResidentLayout;
+    using kan::cuda::testing::ResidentTestScope;
+    using kan::cuda::testing::WaveletLaunch;
+    const std::size_t batch = 2048;
+    const kan::Network narrow({wavelet(256, 1, 1)}), wide({wavelet(4, 2048, 1)});
+    for (auto precision : {Precision::Float64, Precision::Float32}) {
+        ResidentLayout layout;
+        std::unique_ptr<ResidentNetwork> gpu;
+        {
+            ResidentTestScope scope(WaveletLaunch{}, &layout);
+            gpu = std::make_unique<ResidentNetwork>(narrow, batch, precision);
+        }
+        REQUIRE(layout.wavelet_forward.size() == 1 && layout.multiprocessors > 0);
+        REQUIRE(layout.wavelet_forward[0].input_splits > 1);
+        const auto x = wave(batch * 256, 1.1, 0.013, 0.3);
+        gpu->upload_input(x, batch);
+        gpu->forward();
+        const auto first = gpu->download_output();
+        close(first, narrow.forward(x, batch), tolerance(precision), "split output");
+        gpu->forward();
+        REQUIRE(gpu->download_output() == first);
+        {
+            ResidentTestScope scope(WaveletLaunch{}, &layout);
+            ResidentNetwork single(wide, batch, precision);
+        }
+        REQUIRE(layout.wavelet_forward[0].input_splits == 1);
+    }
+}
+
 TEST(wavelet_resident_test_hook_rejects_unsupported_launches) {
     using kan::cuda::testing::ResidentTestScope;
     using kan::cuda::testing::WaveletLaunch;
     const kan::Network net({wavelet(2, 2, 1)});
-    for (const auto& launch : {WaveletLaunch{2, 0, 0, 0}, WaveletLaunch{0, 8, 0, 0}, WaveletLaunch{3, 0, 0, 0}}) {
+    for (const auto& launch : {WaveletLaunch{2, 0, 0, 0}, WaveletLaunch{0, 8, 0, 0}, WaveletLaunch{3, 0, 0, 0},
+                               WaveletLaunch{0, 0, 0, 0, 70000}, WaveletLaunch{0, 0, 70000, 0}}) {
         ResidentTestScope scope(launch);
         test::throws<std::invalid_argument>([&] { ResidentNetwork(net, 4, Precision::Float64); });
     }
@@ -271,6 +308,38 @@ TEST(wavelet_resident_training_steps_match_eager_and_roll_back) {
         graph.upload_output_gradient(dy);
         graph.train_step(0.03);
         REQUIRE(graph.trained_steps() == 5);
+    }
+}
+
+TEST(wavelet_resident_out_of_range_log_scale_candidate_names_its_cause) {
+    // A finite gradient that moves a log scale outside the valid range (exp(-l)
+    // overflows) is not a nonfinite result: the eager SGD and the captured
+    // step both report the cause the CPU names, and roll back.
+    for (auto precision : {Precision::Float64, Precision::Float32}) {
+        const auto net = mixed();
+        const std::size_t batch = 19;
+        const auto x = wave(batch * 3, 1.0, 0.41);
+        const std::vector<double> large(batch * 2, 1e6);
+        ResidentNetwork eager(net, batch, precision), graph(net, batch, precision);
+        for (auto* r : {&eager, &graph}) { r->upload_input(x, batch); r->upload_output_gradient(large); }
+        eager.forward();
+        eager.backward();
+        const auto g = eager.download_gradients();
+        for (std::size_t j = 0; j < net.layers().size(); ++j)
+            for (double v : log_scales(test::grad(g, j))) REQUIRE(std::isfinite(v));
+        const auto before = eager.download_parameters();
+        const auto what = [](auto fn) -> std::string {
+            try { fn(); } catch (const std::overflow_error& e) { return e.what(); }
+            return "no overflow_error";
+        };
+        const auto eager_text = what([&] { eager.sgd(1.0); });
+        REQUIRE(eager_text.find("log-scale candidate leaves the valid range") != std::string::npos);
+        const auto kept = eager.download_parameters();
+        for (std::size_t j = 0; j < net.layers().size(); ++j) REQUIRE(test::layer(kept, j).carrier() == test::layer(before, j).carrier());
+        const auto graph_text = what([&] { graph.train_step(1.0); });
+        REQUIRE(graph_text.find("log-scale candidate leaves the valid range") != std::string::npos);
+        REQUIRE(graph_text.find("training step 0") != std::string::npos);
+        REQUIRE(graph.trained_steps() == 0);
     }
 }
 

@@ -27,12 +27,13 @@ enum class NonlinearReduction { Automatic, Column, Tile };
 
 // Launch geometry of every WaveletEdges layer (backlog M7): samples per thread
 // of the forward and backward kernels (1, 2, 4 or 8; FP64 forward 1 and
-// backward at most 4), the backward partial slots and the output splits. Zero
-// keeps the executor's choice (docs/CONTRACT.md); a forced value is used as
-// given (slots and splits bound the workspace, so they are maxima as usual).
+// backward at most 4), the backward partial slots and output splits, and the
+// forward input splits. Zero keeps the executor's choice (docs/CONTRACT.md);
+// a forced value is used as given (slots and both splits bound the workspace,
+// so they are maxima as usual; splits never exceed the outputs or inputs).
 // Results change only in summation order.
 struct WaveletLaunch {
-    unsigned forward_samples = 0, backward_samples = 0, slots = 0, splits = 0;
+    unsigned forward_samples = 0, backward_samples = 0, slots = 0, splits = 0, input_splits = 0;
 };
 
 // What an executor reserved at construction: per network layer whether it runs
@@ -43,6 +44,15 @@ struct ResidentLayout {
     // Per network layer: terms per nonlinear_tile_kernel block of a trainable-RBF
     // layer (backlog C12), 0 when the tile kernel is unavailable or for other layers.
     std::vector<unsigned> reduction_groups;
+    // Per network layer: the forward launch of a WaveletEdges layer for a full
+    // batch (the capacity), all zero for other layers (backlog M7); and the
+    // device's multiprocessors.
+    struct WaveletForward {
+        unsigned samples = 0, input_splits = 0;
+        std::size_t blocks = 0;
+    };
+    std::vector<WaveletForward> wavelet_forward;
+    unsigned multiprocessors = 0;
 };
 
 // While alive, every ResidentNetwork constructed on this thread uses `path`
