@@ -1439,12 +1439,19 @@ wavelet_backward_kernel(WaveletArgs<T> a, const T* ut, T* partial, std::size_t p
     const CheckedEarlier unchecked;
     constexpr unsigned warps = wavelet_threads/32, values = 3*wavelet_round;
     __shared__ T sums[2][warps][values];
+    // Partial of each pair of the round (thread 0 writes slot_partial + j);
+    // in shared memory, as the plane stride, so that the reduction keeps no
+    // 64-bit addresses live in registers across the evaluation loop.
+    __shared__ T* partial_of[2][wavelet_round];
+    __shared__ std::size_t plane_stride, dx_offset;
     const auto i = static_cast<std::size_t>(blockIdx.x), slot = static_cast<std::size_t>(blockIdx.y);
     const auto o_begin = static_cast<std::size_t>(blockIdx.z)*per;
     const auto o_end = o_begin+per < a.outputs ? o_begin+per : a.outputs;
     const auto pairs = o_end > o_begin ? (o_end-o_begin)*a.size : 0;
     const auto count = a.outputs*a.inputs*a.size;          // wavelets: partial planes are `count` apart
     T* slot_partial = partial+slot*3*count;
+    if (threadIdx.x == 0) { plane_stride = count; dx_offset = static_cast<std::size_t>(blockIdx.z)*dx_stride+i; }
+    __syncthreads();
     const unsigned lane = threadIdx.x%32, warp = threadIdx.x/32;
     constexpr auto span = static_cast<std::size_t>(wavelet_threads)*S;
     unsigned round = 0;
@@ -1468,46 +1475,55 @@ wavelet_backward_kernel(WaveletArgs<T> a, const T* ut, T* partial, std::size_t p
             x[s] = valid[s] ? a.xt[i*a.capacity+first+s*wavelet_threads] : T(0);
             dx[s] = 0;
         }
+        // Pair p = (o - o_begin)*size + k of wavelet j = (o*inputs + i)*size + k,
+        // carried from pair to pair (no 64-bit division per wavelet).
+        std::size_t o = o_begin, k = 0, j = (o_begin*a.inputs+i)*a.size;
+        const auto next_output = (a.inputs-1)*a.size;
         for (std::size_t p0 = 0; p0 < pairs; p0 += wavelet_round, ++round) {
             T* buffer = sums[round&1][warp];
             // Each wavelet's three sample sums are reduced over the warp as soon
             // as they are complete, so only three of them are live at a time.
-#pragma unroll
+            // Not unrolled: the body is already S evaluations; unrolled 8 times it
+            // multiplied the kernel's code (FP32 S = 8: about 192 KB of SASS
+            // against 38 KB) for no measured gain (instruction-cache footprint).
+#pragma unroll 1
             for (unsigned v = 0; v < wavelet_round; ++v) {
                 T psum = 0, tsum = 0, lsum = 0;
-                const auto p = p0+v;
-                if (p < pairs) {
-                    const auto o = o_begin+p/a.size, k = p%a.size;
-                    const auto j = (o*a.inputs+i)*a.size+k;
+                if (p0+v < pairs) {
+                    if (threadIdx.x == 0) partial_of[round&1][v] = slot_partial+j;
                     const T w = a.w[j], tau = a.tau[j];
                     const detail::WaveletScales<T> scales{a.inverse[j], a.amplitude[j]};
-                    T u[S], step[S];
+                    T step[S];
                     bool rare = false;
 #pragma unroll
                     for (unsigned s = 0; s < S; ++s) {
-                        u[s] = valid[s] ? ut[o*a.capacity+first+s*wavelet_threads] : T(0);
+                        const T u = valid[s] ? ut[o*a.capacity+first+s*wavelet_threads] : T(0);
                         step[s] = 0;
                         if (!active[s]) continue;
                         const auto r = wavelet_fast_terms<true>(valid[s] ? x[s] : tau, tau, scales, rare);
                         const T t = w*r.input_derivative;
-                        step[s] = u[s]*t;
-                        psum += u[s]*r.value; tsum += u[s]*t; lsum += u[s]*(w*r.log_scale_derivative);
+                        step[s] = u*t;
+                        psum += u*r.value; tsum += u*t; lsum += u*(w*r.log_scale_derivative);
                     }
                     if (__any_sync(0xffffffffU, rare)) {
                         psum = tsum = lsum = 0;
 #pragma unroll
                         for (unsigned s = 0; s < S; ++s) {
                             if (!active[s]) continue;
+                            // u read again (not kept live across the vote: register pressure).
+                            const T us = valid[s] ? ut[o*a.capacity+first+s*wavelet_threads] : T(0);
                             const auto r = detail::wavelet_terms<true>(valid[s] ? x[s] : tau, tau, scales, unchecked);
                             const T t = w*r.input_derivative;
-                            step[s] = u[s]*t;
-                            psum += u[s]*r.value; tsum += u[s]*t; lsum += u[s]*(w*r.log_scale_derivative);
+                            step[s] = us*t;
+                            psum += us*r.value; tsum += us*t; lsum += us*(w*r.log_scale_derivative);
                         }
                     }
                     if constexpr (WithDx) {
 #pragma unroll
                         for (unsigned s = 0; s < S; ++s) dx[s] += step[s];
                     }
+                    ++j;
+                    if (++k == a.size) { k = 0; ++o; j += next_output; }
                 }
 #pragma unroll
                 for (unsigned offset = 16; offset; offset /= 2) {
@@ -1520,12 +1536,10 @@ wavelet_backward_kernel(WaveletArgs<T> a, const T* ut, T* partial, std::size_t p
             __syncthreads();
             if (threadIdx.x < values) {
                 const auto v = threadIdx.x%wavelet_round, plane = threadIdx.x/wavelet_round;
-                const auto p = p0+v;
-                if (p < pairs) {
+                if (p0+v < pairs) {
                     T total = 0;
                     for (unsigned w = 0; w < warps; ++w) total += sums[round&1][w][threadIdx.x];
-                    const auto o = o_begin+p/a.size, k = p%a.size;
-                    T* at = slot_partial+plane*count+(o*a.inputs+i)*a.size+k;
+                    T* at = partial_of[round&1][v]+plane*plane_stride;
                     *at = assign ? total : *at+total;
                 }
             }
@@ -1536,7 +1550,7 @@ wavelet_backward_kernel(WaveletArgs<T> a, const T* ut, T* partial, std::size_t p
             for (unsigned s = 0; s < S; ++s)
                 if (valid[s]) {
                     const T value = dx[s];
-                    dx_out[static_cast<std::size_t>(blockIdx.z)*dx_stride+(first+s*wavelet_threads)*a.inputs+i] = value;
+                    dx_out[dx_offset+(first+s*wavelet_threads)*a.inputs] = value;
                     if (gridDim.z == 1) report(value, status);
                 }
         }
