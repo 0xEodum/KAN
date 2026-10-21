@@ -535,8 +535,9 @@ TEST(seeds_are_deterministic_and_pinned_across_platforms) {
         // Backlog M5; pinned with GCC on aarch64 (no MSVC run on that machine).
         {kan::Layer(5, 4, kan::HermiteConfig{7, kan::HermiteNormalization::Function}),
          kan::VarianceScaling{1, kan::Distribution::Uniform, 10, {}}, "e77ab1b759107f4f"},
-        // Backlog M7 (per-term moments under the lobe span); pinned with GCC on aarch64.
-        {wavelet_layer(), kan::VarianceScaling{1, kan::Distribution::Uniform, 11, {}}, "ebfe9f8b648306d3"},
+        // Backlog M7 (per-term moments under the lobe span, closed form since the
+        // M7 review; the quadrature's digest was ebfe9f8b648306d3); pinned with GCC on aarch64.
+        {wavelet_layer(), kan::VarianceScaling{1, kan::Distribution::Uniform, 11, {}}, "b36eaec5aa0cc030"},
     };
     std::string failures;
     for (auto& c : cases) {

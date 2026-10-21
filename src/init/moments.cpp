@@ -5,7 +5,6 @@
 #include "init/portable_math.hpp"
 #include <algorithm>
 #include <cmath>
-#include <map>
 #include <numbers>
 #include <stdexcept>
 #include <variant>
@@ -117,7 +116,8 @@ BasisMoments moments(const TrainableRbfConfig& c) {
     return gaussian_moments(c.centers, widths);
 }
 // E[psi^2] of the L2-normalized Mexican hat with this center and scale, x
-// uniform on [lo, hi] (also the per-edge wavelets of backlog M7).
+// uniform on [lo, hi] (the MexicanHatConfig dictionary; the per-edge wavelets
+// of backlog M7 use the closed form hat_mass).
 double mexican_hat_moment(double center, double s, double lo, double hi) {
     const double sqrt_pi = std::sqrt(std::numbers::pi);
     const double amplitude2 = 4 / (3 * sqrt_pi * s);
@@ -155,6 +155,28 @@ BasisMoments moments(const BSplineConfig& c) {
 }
 } // namespace
 
+namespace {
+// Mass of the L2-normalized Mexican hat's square below q (in units of its
+// scale), minus 1/2: G(q) = integral_{-inf}^{q} (4/(3 sqrt(pi))) (1 - t^2)^2
+// exp(-t^2) dt - 1/2 = erf(q)/2 + (q - 2 q^3) exp(-q^2)/(3 sqrt(pi)), odd in q,
+// with erf(q) = (2/sqrt(pi)) q exp(-q^2) sum_n (2 q^2)^n/(2n+1)!! (positive
+// terms: no cancellation in the series). Beyond |q| = 7 G is +-1/2 within
+// 1e-19. Basic operations and portable_exp only, so the value is bitwise
+// the same on every platform (backlog M7 review: replaces a 288-node
+// quadrature per wavelet, about 3.6 us, by about 0.1 us).
+double hat_mass(double q) {
+    if (!(q > -7)) return -0.5;
+    if (!(q < 7)) return 0.5;
+    const double q2 = q * q, ratio = 2 * q2;
+    double term = 1, sum = 1;
+    for (int n = 1; term > 0x1p-60 * sum; ++n) {
+        term *= ratio / double(2 * n + 1);
+        sum += term;
+    }
+    return portable_exp(-q2) * (q * sum + (q - 2 * q * q2) / 3) / std::sqrt(std::numbers::pi);
+}
+} // namespace
+
 BasisMoments init::wavelet_moments(std::span<const double> translations, std::span<const double> log_scales) {
     std::vector<double> scales(log_scales.size());
     std::transform(log_scales.begin(), log_scales.end(), scales.begin(), portable_exp);
@@ -164,11 +186,12 @@ BasisMoments init::wavelet_moments(std::span<const double> translations, std::sp
         hi = std::max(hi, translations[j] + scales[j]);
     }
     BasisMoments m{uniform_variance(lo, hi), std::vector<double>(scales.size())};
-    std::map<std::pair<double, double>, double> known; // equal wavelets share one quadrature
+    // E[psi_j^2] = (G(q_hi) - G(q_lo)) / (hi - lo), q = (x - tau_j)/s_j; the
+    // span holds the wavelet's lobe, so q_lo <= -1 < 1 <= q_hi (no cancellation).
+    const double length = 2 * (hi / 2 - lo / 2);
     for (std::size_t j = 0; j < scales.size(); ++j) {
-        const auto [entry, inserted] = known.try_emplace({translations[j], log_scales[j]}, 0.0);
-        if (inserted) entry->second = mexican_hat_moment(translations[j], scales[j], lo, hi);
-        m.second_moments[j] = entry->second;
+        const double tau = translations[j], s = scales[j];
+        m.second_moments[j] = (hat_mass((hi - tau) / s) - hat_mass((lo - tau) / s)) / length;
     }
     bool finite = std::isfinite(m.variance) && m.variance > 0;
     for (double v : m.second_moments) finite = finite && std::isfinite(v) && v > 0;
