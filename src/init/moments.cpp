@@ -5,6 +5,7 @@
 #include "init/portable_math.hpp"
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <numbers>
 #include <stdexcept>
 #include <variant>
@@ -115,18 +116,21 @@ BasisMoments moments(const TrainableRbfConfig& c) {
     std::transform(c.log_widths.begin(), c.log_widths.end(), widths.begin(), portable_exp);
     return gaussian_moments(c.centers, widths);
 }
+// E[psi^2] of the L2-normalized Mexican hat with this center and scale, x
+// uniform on [lo, hi] (also the per-edge wavelets of backlog M7).
+double mexican_hat_moment(double center, double s, double lo, double hi) {
+    const double sqrt_pi = std::sqrt(std::numbers::pi);
+    const double amplitude2 = 4 / (3 * sqrt_pi * s);
+    const double a = std::max(lo, center - hat_window * s), b = std::min(hi, center + hat_window * s);
+    return uniform_mean([&](double x) {
+        const double q = (x - center) / s, r = 1 - q * q;
+        return amplitude2 * r * r * portable_exp(-q * q);
+    }, lo, hi, a, b, panels);
+}
 BasisMoments moments(const MexicanHatConfig& c) {
     const auto [lo, hi] = center_range(c.centers, *std::max_element(c.scales.begin(), c.scales.end()));
     BasisMoments m{uniform_variance(lo, hi), std::vector<double>(c.centers.size())};
-    const double sqrt_pi = std::sqrt(std::numbers::pi);
-    for (std::size_t k = 0; k < c.centers.size(); ++k) {
-        const double center = c.centers[k], s = c.scales[k], amplitude2 = 4 / (3 * sqrt_pi * s);
-        const double a = std::max(lo, center - hat_window * s), b = std::min(hi, center + hat_window * s);
-        m.second_moments[k] = uniform_mean([&](double x) {
-            const double q = (x - center) / s, r = 1 - q * q;
-            return amplitude2 * r * r * portable_exp(-q * q);
-        }, lo, hi, a, b, panels);
-    }
+    for (std::size_t k = 0; k < c.centers.size(); ++k) m.second_moments[k] = mexican_hat_moment(c.centers[k], c.scales[k], lo, hi);
     return m;
 }
 // Uniform on the domain [t_p, t_K]: the (p+1)-point rule is exact on each span.
@@ -150,6 +154,27 @@ BasisMoments moments(const BSplineConfig& c) {
     return m;
 }
 } // namespace
+
+BasisMoments init::wavelet_moments(std::span<const double> translations, std::span<const double> log_scales) {
+    std::vector<double> scales(log_scales.size());
+    std::transform(log_scales.begin(), log_scales.end(), scales.begin(), portable_exp);
+    double lo = translations[0] - scales[0], hi = translations[0] + scales[0];
+    for (std::size_t j = 1; j < scales.size(); ++j) {
+        lo = std::min(lo, translations[j] - scales[j]);
+        hi = std::max(hi, translations[j] + scales[j]);
+    }
+    BasisMoments m{uniform_variance(lo, hi), std::vector<double>(scales.size())};
+    std::map<std::pair<double, double>, double> known; // equal wavelets share one quadrature
+    for (std::size_t j = 0; j < scales.size(); ++j) {
+        const auto [entry, inserted] = known.try_emplace({translations[j], log_scales[j]}, 0.0);
+        if (inserted) entry->second = mexican_hat_moment(translations[j], scales[j], lo, hi);
+        m.second_moments[j] = entry->second;
+    }
+    bool finite = std::isfinite(m.variance) && m.variance > 0;
+    for (double v : m.second_moments) finite = finite && std::isfinite(v) && v > 0;
+    if (!finite) throw std::overflow_error("wavelet reference moments are not finite");
+    return m;
+}
 
 BasisMoments reference_moments(const BasisConfig& config) {
     validate_basis(config);

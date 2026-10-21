@@ -247,6 +247,10 @@ PYBIND11_MODULE(_kan, module) {
         .def_readwrite("scale", &kan::RationalConfig::scale)
         .def_readwrite("epsilon", &kan::RationalConfig::epsilon)
         .def_readwrite("denominator_policy", &kan::RationalConfig::denominator_policy);
+    // Backlog M7: per-edge trainable Mexican-hat wavelets.
+    config_class<kan::WaveletConfig>(module, "WaveletConfig")
+        .def(py::init([](std::size_t size) { return kan::WaveletConfig{size}; }), py::arg("size") = 1)
+        .def_readwrite("size", &kan::WaveletConfig::size);
     py::native_enum<kan::cuda::Precision>(module, "Precision", "enum.Enum",
                                           "Resident executor storage and arithmetic precision")
         .value("FLOAT64", kan::cuda::Precision::Float64, "double precision, the parity reference (default)")
@@ -353,6 +357,12 @@ PYBIND11_MODULE(_kan, module) {
             owned(r.numerator_derivatives,{axis(r.numerator_derivatives.size())}),
             owned(r.denominator_derivatives,{axis(r.denominator_derivatives.size())}));
     }, py::arg("config"), py::arg("x"), py::arg("numerator").noconvert(), py::arg("denominator").noconvert());
+    module.def("evaluate_wavelet", [](double x, double translation, double log_scale) {
+        const auto r = kan::evaluate_wavelet(x, translation, log_scale);
+        return py::make_tuple(r.value, r.input_derivative, r.translation_derivative, r.log_scale_derivative);
+    }, py::arg("x"), py::arg("translation"), py::arg("log_scale"),
+       "(value, d/dx, d/dtranslation, d/dlog_scale) of one wavelet with unit coefficient");
+    module.def("valid_log_scale", &kan::valid_log_scale, py::arg("log_scale"));
 
     // Read-only carrier snapshots returned by Layer.carrier, one class per carrier.
     py::class_<CarrierView<kan::BasisEdges>>(module, "BasisEdges")
@@ -366,6 +376,15 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("coefficients", &CarrierView<kan::RationalEdges>::coefficients)
         .def_property_readonly("denominators", [](const CarrierView<kan::RationalEdges>& c) {
             return owned(c.value.denominators, {axis(c.outputs), axis(c.inputs), axis(c.value.config.denominator_degree)});
+        });
+    py::class_<CarrierView<kan::WaveletEdges>>(module, "WaveletEdges")
+        .def_property_readonly("config", [](const CarrierView<kan::WaveletEdges>& c) { return c.value.config; })
+        .def_property_readonly("coefficients", &CarrierView<kan::WaveletEdges>::coefficients)
+        .def_property_readonly("translations", [](const CarrierView<kan::WaveletEdges>& c) {
+            return owned(c.value.translations, {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
+        })
+        .def_property_readonly("log_scales", [](const CarrierView<kan::WaveletEdges>& c) {
+            return owned(c.value.log_scales, {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
         });
     // Family-specific operations (kan/families.hpp).
     module.def("insert_knot", &kan::insert_knot, py::arg("layer"), py::arg("x"),
@@ -394,6 +413,19 @@ PYBIND11_MODULE(_kan, module) {
         kan::set_rational_parameters(layer, c, d, b);
     }, py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("denominators").noconvert(),
        py::arg("bias").noconvert());
+    module.def("set_wavelet_parameters", [](kan::Layer& layer, py::array coefficients, py::array translations,
+                                            py::array log_scales, py::array bias) {
+        if (!std::holds_alternative<kan::WaveletEdges>(layer.carrier()))
+            throw std::invalid_argument("wavelet parameters require a wavelet layer");
+        const auto shape = coefficient_shape(layer);
+        const auto c = shaped(coefficients, shape);
+        const auto t = shaped(translations, shape);
+        const auto l = shaped(log_scales, shape);
+        const auto b = shaped(bias, {axis(layer.outputs())});
+        py::gil_scoped_release release;
+        kan::set_wavelet_parameters(layer, c, t, l, b);
+    }, py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("translations").noconvert(),
+       py::arg("log_scales").noconvert(), py::arg("bias").noconvert());
 
     py::class_<LayerGradient>(module, "LayerGradients")
         .def_property_readonly("input", [](const LayerGradient& g) {
@@ -420,6 +452,18 @@ PYBIND11_MODULE(_kan, module) {
             return owned(v, std::holds_alternative<kan::RationalGradients>(g.value.nonlinear) ?
                 Shape{axis(t.outputs), axis(t.inputs), axis(t.denominator_size)} : Shape{0});
         })
+        .def_property_readonly("translations", [](const LayerGradient& g) {
+            const auto& t = g.topology;
+            const auto v = nonlinear_field(g, &kan::WaveletGradients::translations);
+            return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear) ?
+                Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)} : Shape{0});
+        }, "Wavelet translation gradient (outputs, inputs, terms); shape (0,) for other carriers.")
+        .def_property_readonly("log_scales", [](const LayerGradient& g) {
+            const auto& t = g.topology;
+            const auto v = nonlinear_field(g, &kan::WaveletGradients::log_scales);
+            return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear) ?
+                Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)} : Shape{0});
+        }, "Wavelet log-scale gradient (outputs, inputs, terms); shape (0,) for other carriers.")
         .def_property_readonly("residual", [](const LayerGradient& g) {
             const auto& t = g.topology;
             return owned(g.value.residual, t.residual ? Shape{axis(t.outputs), axis(t.inputs)} : Shape{0});
@@ -450,11 +494,13 @@ PYBIND11_MODULE(_kan, module) {
              py::arg("inputs"), py::arg("outputs"), py::arg("basis"))
         .def(py::init<std::size_t, std::size_t, kan::RationalConfig>(),
              py::arg("inputs"), py::arg("outputs"), py::arg("rational"))
+        .def(py::init<std::size_t, std::size_t, kan::WaveletConfig>(),
+             py::arg("inputs"), py::arg("outputs"), py::arg("wavelet"))
         .def_property_readonly("inputs", &kan::Layer::inputs)
         .def_property_readonly("outputs", &kan::Layer::outputs)
         .def_property_readonly("carrier", &carrier_view,
-            "Owned read-only snapshot of the layer's carrier (BasisEdges, TrainableRbfEdges or "
-            "RationalEdges); every access copies the parameters.")
+            "Owned read-only snapshot of the layer's carrier (BasisEdges, TrainableRbfEdges, "
+            "RationalEdges or WaveletEdges); every access copies the parameters.")
         .def_property_readonly("terms", &kan::Layer::terms)
         .def_property_readonly("coefficients", [](const kan::Layer& layer) {
             return owned(layer.coefficients(), coefficient_shape(layer));

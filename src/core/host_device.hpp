@@ -22,6 +22,16 @@
 #define KAN_FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
+// Rare branches kept out of line (backlog M7): device code calls them, so
+// unrolled loops stay compact in the instruction cache.
+#if defined(__CUDACC__)
+#define KAN_NOINLINE __noinline__
+#elif defined(_MSC_VER)
+#define KAN_NOINLINE __declspec(noinline)
+#else
+#define KAN_NOINLINE __attribute__((noinline))
+#endif
+
 #if defined(__CUDA_ARCH__)
 #define KAN_MATH_NAMESPACE
 #else
@@ -103,6 +113,22 @@ KAN_HOST_DEVICE inline float copysign(float magnitude, float sign) {
 KAN_HOST_DEVICE inline float ldexp(float v, int exponent) { return KAN_FLOAT_MATH(ldexp)(v, exponent); }
 KAN_HOST_DEVICE inline float fma(float a, float b, float c) { return KAN_FLOAT_MATH(fma)(a, b, c); }
 KAN_HOST_DEVICE inline float nearbyint(float v) { return KAN_FLOAT_MATH(nearbyint)(v); }
+// 2^v for results in the normal range, zero (flushed) below it (backlog M7).
+// Device: one MUFU.EX2 (ex2.approx.ftz.f32, relative error below 2^-22 per
+// the PTX ISA) instead of exp2f's subnormal handling or expf's argument
+// reduction; host: std::exp2 with the same flush.
+#if defined(__CUDA_ARCH__)
+KAN_HOST_DEVICE inline float exp2_flush(float v) {
+    float r;
+    asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(r) : "f"(v));
+    return r;
+}
+#else
+KAN_HOST_DEVICE inline float exp2_flush(float v) {
+    const float r = std::exp2(v);
+    return r < constants<float>::min_normal ? 0.0f : r;
+}
+#endif
 #undef KAN_FLOAT_MATH
 
 } // namespace kan::detail::math

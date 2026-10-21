@@ -2,6 +2,7 @@
 
 #include "kan/basis.hpp"
 #include "kan/rational.hpp"
+#include "kan/wavelet.hpp"
 #include <variant>
 #include <vector>
 
@@ -39,7 +40,17 @@ struct RationalEdges {
     bool operator==(const RationalEdges&) const = default;
 };
 
-using Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges>;
+// Per-edge trainable Mexican-hat wavelets (backlog M7, kan/wavelet.hpp),
+// nonlinear in the per-edge-term translations and log scales.
+struct WaveletEdges {
+    WaveletConfig config;
+    std::vector<double> coefficients; // w, (outputs, inputs, size)
+    std::vector<double> translations; // tau, (outputs, inputs, size)
+    std::vector<double> log_scales;   // l = log s, (outputs, inputs, size)
+    bool operator==(const WaveletEdges&) const = default;
+};
+
+using Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges, WaveletEdges>;
 
 // Vector-Jacobian products of a carrier's nonlinear parameters. The active
 // alternative corresponds to the carrier: std::monostate for BasisEdges.
@@ -54,6 +65,12 @@ struct RationalGradients {
     bool operator==(const RationalGradients&) const = default;
 };
 
-using NonlinearGradients = std::variant<std::monostate, TrainableRbfGradients, RationalGradients>;
+struct WaveletGradients {
+    std::vector<double> translations; // (outputs, inputs, size)
+    std::vector<double> log_scales;   // (outputs, inputs, size)
+    bool operator==(const WaveletGradients&) const = default;
+};
+
+using NonlinearGradients = std::variant<std::monostate, TrainableRbfGradients, RationalGradients, WaveletGradients>;
 
 } // namespace kan

@@ -5,6 +5,7 @@
 #include "backends/cpu/edge_ops.hpp"
 #include "core/checks.hpp"
 #include "core/residual_formulas.hpp"
+#include "init/portable_math.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -94,6 +95,26 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, Rat
     auto& rational = std::get<RationalEdges>(carrier_);
     rational.coefficients.resize(checked_size(edges, config.numerator_degree + 1));
     rational.denominators.resize(checked_size(edges, config.denominator_degree));
+    bias_.resize(checked_size(outputs, 1));
+}
+
+Layer::Layer(std::size_t inputs, std::size_t outputs, WaveletConfig config, WaveletTag)
+    : inputs_(inputs), outputs_(outputs), carrier_(WaveletEdges{config, {}, {}, {}}) {
+    if (inputs == 0 || outputs == 0) throw std::invalid_argument("layer dimensions must be positive");
+    validate_wavelet(config);
+    const auto size = config.size, count = checked_size(checked_size(inputs, outputs), size);
+    auto& wavelet = std::get<WaveletEdges>(carrier_);
+    wavelet.coefficients.resize(count);
+    wavelet.translations.resize(count);
+    wavelet.log_scales.resize(count);
+    // Equispaced on [-1, 1]: term k at -1 + (2k+1)/size, scale 1/size. The
+    // portable logarithm (IEEE basic operations) keeps the placement, and the
+    // initializers' results from it, bitwise equal across compilers (backlog M4).
+    const double log_scale = -init::portable_log(static_cast<double>(size));
+    for (std::size_t j = 0; j < count; ++j) {
+        wavelet.translations[j] = -1.0 + static_cast<double>(2 * (j % size) + 1) / static_cast<double>(size);
+        wavelet.log_scales[j] = log_scale;
+    }
     bias_.resize(checked_size(outputs, 1));
 }
 

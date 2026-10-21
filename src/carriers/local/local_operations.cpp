@@ -1,5 +1,6 @@
 // Operations specific to the local families (B-spline knot insertion and grid
-// adaptation, trainable RBF centers and widths). Each one reads the carrier it
+// adaptation, trainable RBF centers and widths, per-edge wavelet parameters).
+// Each one reads the carrier it
 // requires, builds the replacement carrier and commits it through
 // Layer::set_carrier, which revalidates the whole layer; a failure leaves the
 // layer unchanged. Rational operations are in carriers/rational.
@@ -106,6 +107,16 @@ void set_rbf_parameters(Layer& layer, std::span<const double> centers, std::span
         throw std::invalid_argument("RBF parameter count must match the layer's basis size");
     layer.set_carrier(TrainableRbfEdges{{{centers.begin(), centers.end()}, {log_widths.begin(), log_widths.end()}},
                                         edges->coefficients});
+}
+
+void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients, std::span<const double> translations,
+                            std::span<const double> log_scales, std::span<const double> bias) {
+    const auto* edges = std::get_if<WaveletEdges>(&layer.carrier());
+    if (!edges) throw std::invalid_argument("wavelet parameters require a wavelet layer");
+    // set_carrier validates the shapes for the layer, finiteness and the log scales.
+    layer.set_carrier(WaveletEdges{edges->config, {coefficients.begin(), coefficients.end()},
+                                   {translations.begin(), translations.end()}, {log_scales.begin(), log_scales.end()}},
+                      bias);
 }
 
 } // namespace kan

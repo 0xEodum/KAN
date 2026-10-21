@@ -12,4 +12,11 @@ namespace kan::init {
 std::vector<double> rational_moments(DenominatorPolicy policy, std::size_t numerator_degree,
                                      std::span<const double> beta);
 
+// Per-edge wavelets (backlog M7, WaveletEdges): x uniform on
+// [min(tau - s), max(tau + s)], s = exp(l) (portable_exp), the span of every
+// wavelet's central lobe, and m_j = E[psi_j(x)^2] per wavelet (the
+// L2-normalized Mexican hat with center tau_j and scale s_j, the quadrature of
+// MexicanHatConfig). Nonempty spans of equal length.
+BasisMoments wavelet_moments(std::span<const double> translations, std::span<const double> log_scales);
+
 } // namespace kan::init

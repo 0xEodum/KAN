@@ -34,11 +34,15 @@ struct TestScopeState {
     SplinePath path = SplinePath::Automatic;
     ResidentLayout* layout = nullptr;
     NonlinearReduction reduction = NonlinearReduction::Automatic;
+    WaveletLaunch wavelet{};
 };
 thread_local TestScopeState test_scope;
 } // namespace
 ResidentTestScope::ResidentTestScope(SplinePath path, ResidentLayout* layout) { test_scope = {path, layout}; }
 ResidentTestScope::ResidentTestScope(NonlinearReduction reduction, ResidentLayout* layout) { test_scope = {SplinePath::Automatic, layout, reduction}; }
+ResidentTestScope::ResidentTestScope(WaveletLaunch launch, ResidentLayout* layout) {
+    test_scope = {SplinePath::Automatic, layout, NonlinearReduction::Automatic, launch};
+}
 ResidentTestScope::~ResidentTestScope() { test_scope = {}; }
 } // namespace testing
 namespace {
@@ -1273,6 +1277,317 @@ __global__ void rational_parameter_kernel(const T* arguments, const T* values, c
     }
 }
 
+// Per-edge trainable Mexican-hat wavelets (backlog M7). Every edge (o,i) has
+// its own wavelets j = (o*inputs + i)*size + k, so no expansion is shared
+// between edges and no contraction maps to a GEMM: y[b,o] = bias[o] +
+// sum_i sum_k w_j psi_j(x[b,i]) is O(batch*outputs*inputs*size) evaluations,
+// one exp each, and the backward pass recomputes them (caching any per-sample
+// row would cost capacity*outputs*inputs*size values). Layouts: the layer
+// input is transposed once per forward into xt [i*capacity + sample] and the
+// upstream once per backward into ut [o*capacity + sample], so that lanes =
+// consecutive samples read both coalesced; parameters are read at block-
+// uniform addresses (one broadcast transaction per warp). The per-wavelet
+// scales r = exp(-l), a = A sqrt(r) are formed once per forward
+// (wavelet_scales_kernel) and reused by the backward pass. Intermediates are
+// not checked one by one (CheckedEarlier): the CPU's guarded intermediates
+// are all summed into a result (a nonfinite one makes the sum nonfinite), so
+// reporting the finished sums gives the same status.
+constexpr unsigned wavelet_threads = 256;
+template<class T> struct WaveletArgs {
+    const T* xt;                                     // (inputs, capacity)
+    const T* w; const T* tau; const T* inverse; const T* amplitude; // (outputs, inputs, size)
+    std::size_t batch, capacity, inputs, outputs, size;
+};
+// Branch-free direct path for the kernels: E and the direct terms of x, and
+// in `rare` whether wavelet_terms would take its out-of-line branches for x
+// (the terms are then zero here). The kernels evaluate a group of samples
+// this way and, when any lane of the warp has a rare sample (warp vote),
+// recompute the group with wavelet_terms before using it, so every lane gets
+// exactly wavelet_terms' result while the common case has no branch per
+// evaluation (a per-evaluation branch around the out-of-line call cost the
+// backward kernel about a quarter of its time on GB10).
+template<bool Derivatives, class T>
+__device__ __forceinline__ detail::WaveletTerms<T> wavelet_fast_terms(T x, T tau, detail::WaveletScales<T> scales, bool& rare) {
+    const CheckedEarlier unchecked;
+    const T q = (x-tau)*scales.inverse, q2 = q*q, e = detail::wavelet_envelope(q2);
+    const bool direct = e >= detail::math::constants<T>::min_normal;
+    rare |= !direct;
+    auto r = detail::wavelet_direct_terms<Derivatives>(q, q2, e, scales, unchecked);
+    if (!direct) r = {T(0), T(0), T(0)};
+    return r;
+}
+template<class T>
+__global__ void wavelet_scales_kernel(const T* log_scales, T* inverse, T* amplitude, std::size_t count) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto j = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; j < count; j += stride) {
+        const auto s = detail::wavelet_scales(log_scales[j]);
+        inverse[j] = s.inverse; amplitude[j] = s.amplitude;
+    }
+}
+// rows x columns row-major -> columns x pitch (out[c*pitch + r]), 32x32 tiles.
+template<class T>
+__global__ void transpose_kernel(const T* in, T* out, std::size_t rows, std::size_t columns, std::size_t pitch) {
+    __shared__ T tile[32][33];
+    const auto c0 = static_cast<std::size_t>(blockIdx.x)*32;
+    // Row tiles stride over grid y (any batch fits the 65535 limit).
+    for (auto r0 = static_cast<std::size_t>(blockIdx.y)*32; r0 < rows; r0 += static_cast<std::size_t>(gridDim.y)*32) {
+        for (unsigned y = threadIdx.y; y < 32; y += blockDim.y) {
+            const auto r = r0+y, c = c0+threadIdx.x;
+            if (r < rows && c < columns) tile[y][threadIdx.x] = in[r*columns+c];
+        }
+        __syncthreads();
+        for (unsigned y = threadIdx.y; y < 32; y += blockDim.y) {
+            const auto c = c0+y, r = r0+threadIdx.x;
+            if (r < rows && c < columns) out[c*pitch+r] = tile[threadIdx.x][y];
+        }
+        __syncthreads();
+    }
+}
+// Forward: block (o, chunk slot); thread t owns samples chunk*256*S + t +
+// 256*s, s < S, and sums each over (i, k) in ascending order starting from
+// bias[o], the CPU's order. Chunks beyond gridDim.y stride.
+template<unsigned S, class T>
+__global__ void __launch_bounds__(wavelet_threads)
+wavelet_forward_kernel(WaveletArgs<T> a, const T* bias, T* y, int* status) {
+    const CheckedEarlier unchecked;
+    const auto o = static_cast<std::size_t>(blockIdx.x);
+    constexpr auto span = static_cast<std::size_t>(wavelet_threads)*S;
+    for (auto first = static_cast<std::size_t>(blockIdx.y)*span; first < a.batch; first += static_cast<std::size_t>(gridDim.y)*span) {
+      // Full chunks compile without any test of the batch end. In the last,
+      // partial chunk a warp whose lanes are all beyond the batch skips that
+      // sample slot (warp-uniform); other lanes beyond it evaluate at x = tau
+      // (q = 0, the direct path) and their sums are not written.
+      const auto end = a.batch-first < span ? a.batch : first+span;
+      const auto chunk = [&](auto partial) {
+        constexpr bool Partial = decltype(partial)::value;
+        T sum[S];
+        bool valid[S], active[S];
+#pragma unroll
+        for (unsigned s = 0; s < S; ++s) {
+            sum[s] = bias[o]; valid[s] = !Partial || first+threadIdx.x+s*wavelet_threads < end;
+            active[s] = !Partial || __any_sync(0xffffffffU, valid[s]);
+        }
+        for (std::size_t i = 0; i < a.inputs; ++i) {
+            T x[S];
+#pragma unroll
+            for (unsigned s = 0; s < S; ++s) x[s] = valid[s] ? a.xt[i*a.capacity+first+threadIdx.x+s*wavelet_threads] : T(0);
+            const auto base = (o*a.inputs+i)*a.size;
+            for (std::size_t k = 0; k < a.size; ++k) {
+                const auto j = base+k;
+                const T w = a.w[j], tau = a.tau[j];
+                const detail::WaveletScales<T> scales{a.inverse[j], a.amplitude[j]};
+                T value[S];
+                bool rare = false;
+#pragma unroll
+                for (unsigned s = 0; s < S; ++s)
+                    if (active[s]) value[s] = wavelet_fast_terms<false>(valid[s] ? x[s] : tau, tau, scales, rare).value;
+                if (__any_sync(0xffffffffU, rare)) {
+#pragma unroll
+                    for (unsigned s = 0; s < S; ++s)
+                        if (active[s]) value[s] = detail::wavelet_terms<false>(valid[s] ? x[s] : tau, tau, scales, unchecked).value;
+                }
+#pragma unroll
+                for (unsigned s = 0; s < S; ++s)
+                    if (active[s]) sum[s] += w*value[s];
+            }
+        }
+#pragma unroll
+        for (unsigned s = 0; s < S; ++s)
+            if (valid[s]) { y[(first+threadIdx.x+s*wavelet_threads)*a.outputs+o] = sum[s]; report(sum[s], status); }
+      };
+      if (end-first == span) chunk(std::false_type{}); else chunk(std::true_type{});
+    }
+}
+// Largest samples per thread S of the forward and backward kernels.
+template<class T> constexpr unsigned wavelet_forward_samples = std::is_same_v<T, double> ? 1 : 8;
+template<class T> constexpr unsigned wavelet_backward_samples = std::is_same_v<T, double> ? 4 : 8;
+// Sample chunks of a batch with S samples per thread.
+inline std::size_t wavelet_chunks(std::size_t batch, unsigned samples) {
+    const auto span = static_cast<std::size_t>(wavelet_threads)*samples;
+    return (batch+span-1)/span;
+}
+
+// Resident blocks per multiprocessor the backward kernel is compiled for
+// (__launch_bounds__ minimum; register cap 65536/(256*blocks)). FP32 3: the
+// warp-vote recompute path of every unrolled sample otherwise doubles the
+// registers (64 -> 128, two blocks); on GB10 a cap of 85 registers ran the
+// 256-wide step in 2.21 ms against 2.29 (64 registers) and 3.36 (51, with
+// spills). FP64 1 (no cap): 2 and 3 were 2-4% slower.
+template<class T> constexpr int wavelet_backward_blocks = 3;
+template<> constexpr int wavelet_backward_blocks<double> = 1;
+// Wavelets per reduction round of the backward kernel.
+constexpr unsigned wavelet_round = 8;
+// Backward: block (i, slot, split) runs the chunks slot, slot + gridDim.y, ...
+// of its input's samples (thread t owns S samples of a chunk, as forward) over
+// the outputs [split*per, ...) of the split: for every wavelet j of those
+// edges and owned sample, with t = w dpsi/dx,
+//   dx[b,i] += u t (ascending o, then k), and the sample sums
+//   sum u psi, sum u t, sum u w dpsi/dl over the chunk,
+// the latter reduced per round of wavelet_round wavelets by a fixed lane
+// butterfly, then over the 8 warps in order, into this slot's partials
+// (assigned by its first chunk, accumulated by the next ones, in order).
+// dx goes to dx_out[split*dx_stride + b*inputs + i]; WithDx = false skips it.
+template<unsigned S, bool WithDx, class T>
+__global__ void __launch_bounds__(wavelet_threads, wavelet_backward_blocks<T>)
+wavelet_backward_kernel(WaveletArgs<T> a, const T* ut, T* partial, std::size_t per, T* dx_out, std::size_t dx_stride, int* status) {
+    const CheckedEarlier unchecked;
+    constexpr unsigned warps = wavelet_threads/32, values = 3*wavelet_round;
+    __shared__ T sums[2][warps][values];
+    const auto i = static_cast<std::size_t>(blockIdx.x), slot = static_cast<std::size_t>(blockIdx.y);
+    const auto o_begin = static_cast<std::size_t>(blockIdx.z)*per;
+    const auto o_end = o_begin+per < a.outputs ? o_begin+per : a.outputs;
+    const auto pairs = o_end > o_begin ? (o_end-o_begin)*a.size : 0;
+    const auto count = a.outputs*a.inputs*a.size;          // wavelets: partial planes are `count` apart
+    T* slot_partial = partial+slot*3*count;
+    const unsigned lane = threadIdx.x%32, warp = threadIdx.x/32;
+    constexpr auto span = static_cast<std::size_t>(wavelet_threads)*S;
+    unsigned round = 0;
+    for (auto chunk = slot; chunk*span < a.batch; chunk += gridDim.y) {
+      // Full chunks compile without any test of the batch end (see the forward).
+      const auto begin = chunk*span, end = a.batch-begin < span ? a.batch : begin+span;
+      const auto run = [&](auto partial) {
+        constexpr bool Partial = decltype(partial)::value;
+        const auto first = begin+threadIdx.x;
+        const bool assign = chunk == slot;
+        // Samples beyond the batch: a warp whose lanes are all beyond it skips
+        // that sample slot (warp-uniform); otherwise they evaluate at x = tau
+        // (q = 0: the direct path, finite terms) with u = 0, contributing
+        // exact zeros.
+        T x[S], dx[S];
+        bool valid[S], active[S];
+#pragma unroll
+        for (unsigned s = 0; s < S; ++s) {
+            valid[s] = !Partial || first+s*wavelet_threads < end;
+            active[s] = !Partial || __any_sync(0xffffffffU, valid[s]);
+            x[s] = valid[s] ? a.xt[i*a.capacity+first+s*wavelet_threads] : T(0);
+            dx[s] = 0;
+        }
+        for (std::size_t p0 = 0; p0 < pairs; p0 += wavelet_round, ++round) {
+            T* buffer = sums[round&1][warp];
+            // Each wavelet's three sample sums are reduced over the warp as soon
+            // as they are complete, so only three of them are live at a time.
+#pragma unroll
+            for (unsigned v = 0; v < wavelet_round; ++v) {
+                T psum = 0, tsum = 0, lsum = 0;
+                const auto p = p0+v;
+                if (p < pairs) {
+                    const auto o = o_begin+p/a.size, k = p%a.size;
+                    const auto j = (o*a.inputs+i)*a.size+k;
+                    const T w = a.w[j], tau = a.tau[j];
+                    const detail::WaveletScales<T> scales{a.inverse[j], a.amplitude[j]};
+                    T u[S], step[S];
+                    bool rare = false;
+#pragma unroll
+                    for (unsigned s = 0; s < S; ++s) {
+                        u[s] = valid[s] ? ut[o*a.capacity+first+s*wavelet_threads] : T(0);
+                        step[s] = 0;
+                        if (!active[s]) continue;
+                        const auto r = wavelet_fast_terms<true>(valid[s] ? x[s] : tau, tau, scales, rare);
+                        const T t = w*r.input_derivative;
+                        step[s] = u[s]*t;
+                        psum += u[s]*r.value; tsum += u[s]*t; lsum += u[s]*(w*r.log_scale_derivative);
+                    }
+                    if (__any_sync(0xffffffffU, rare)) {
+                        psum = tsum = lsum = 0;
+#pragma unroll
+                        for (unsigned s = 0; s < S; ++s) {
+                            if (!active[s]) continue;
+                            const auto r = detail::wavelet_terms<true>(valid[s] ? x[s] : tau, tau, scales, unchecked);
+                            const T t = w*r.input_derivative;
+                            step[s] = u[s]*t;
+                            psum += u[s]*r.value; tsum += u[s]*t; lsum += u[s]*(w*r.log_scale_derivative);
+                        }
+                    }
+                    if constexpr (WithDx) {
+#pragma unroll
+                        for (unsigned s = 0; s < S; ++s) dx[s] += step[s];
+                    }
+                }
+#pragma unroll
+                for (unsigned offset = 16; offset; offset /= 2) {
+                    psum += __shfl_xor_sync(0xffffffffU, psum, offset);
+                    tsum += __shfl_xor_sync(0xffffffffU, tsum, offset);
+                    lsum += __shfl_xor_sync(0xffffffffU, lsum, offset);
+                }
+                if (lane == 0) { buffer[v] = psum; buffer[wavelet_round+v] = tsum; buffer[2*wavelet_round+v] = lsum; }
+            }
+            __syncthreads();
+            if (threadIdx.x < values) {
+                const auto v = threadIdx.x%wavelet_round, plane = threadIdx.x/wavelet_round;
+                const auto p = p0+v;
+                if (p < pairs) {
+                    T total = 0;
+                    for (unsigned w = 0; w < warps; ++w) total += sums[round&1][w][threadIdx.x];
+                    const auto o = o_begin+p/a.size, k = p%a.size;
+                    T* at = slot_partial+plane*count+(o*a.inputs+i)*a.size+k;
+                    *at = assign ? total : *at+total;
+                }
+            }
+            // The other buffer is written next round; no second barrier needed.
+        }
+        if constexpr (WithDx) {
+#pragma unroll
+            for (unsigned s = 0; s < S; ++s)
+                if (valid[s]) {
+                    const T value = dx[s];
+                    dx_out[static_cast<std::size_t>(blockIdx.z)*dx_stride+(first+s*wavelet_threads)*a.inputs+i] = value;
+                    if (gridDim.z == 1) report(value, status);
+                }
+        }
+      };
+      if (end-begin == span) run(std::false_type{}); else run(std::true_type{});
+    }
+}
+// Parameter VJPs from `slots` partial planes (fixed order): dw = sum + lambda*w,
+// dtau = -sum, dl = sum; zero (plus lambda*w) for an empty batch (slots = 0).
+template<class T>
+__global__ void wavelet_finish_kernel(const T* partial, unsigned slots, const T* w, T lambda, T* dw, T* dtau, T* dl,
+                                      std::size_t count, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto j = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; j < count; j += stride) {
+        T p = 0, t = 0, l = 0;
+        for (unsigned slot = 0; slot < slots; ++slot) {
+            const T* at = partial+static_cast<std::size_t>(slot)*3*count+j;
+            p += at[0]; t += at[count]; l += at[2*count];
+        }
+        p += lambda*w[j];
+        dw[j] = p; dtau[j] = -t; dl[j] = l;
+        report(p, status); report(t, status); report(l, status);
+    }
+}
+// dx of a split backward: the `splits` partial rows summed in order.
+template<class T>
+__global__ void wavelet_input_finish_kernel(const T* partial, unsigned splits, std::size_t stride_split, T* dx, std::size_t count, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto r = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; r < count; r += stride) {
+        T sum = 0;
+        for (unsigned p = 0; p < splits; ++p) sum += partial[p*stride_split+r];
+        dx[r] = sum; report(sum, status);
+    }
+}
+// Bias VJP: one warp per output sums its transposed upstream row (lane l
+// samples l, l+32, ..., then the shuffle tree).
+template<class T>
+__global__ void wavelet_bias_kernel(const T* ut, T* gradient, std::size_t batch, std::size_t capacity, std::size_t outputs, int* status) {
+    const auto lane = threadIdx.x%32;
+    const auto stride = static_cast<std::size_t>(gridDim.x)*(blockDim.x/32);
+    for (auto o = (static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x)/32; o < outputs; o += stride) {
+        T sum = 0;
+        for (auto b = static_cast<std::size_t>(lane); b < batch; b += 32) sum += ut[o*capacity+b];
+        for (unsigned offset = 16; offset; offset /= 2) sum += __shfl_down_sync(0xffffffffU, sum, offset);
+        if (lane == 0) { gradient[o] = sum; report(sum, status); }
+    }
+}
+// SGD candidates of the log scales: exp(l) and exp(-l) finite and nonzero.
+template<class T>
+__global__ void validate_log_scale_kernel(const T* next, std::size_t count, int* status) {
+    const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
+    for (auto j = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; j < count; j += stride) {
+        const T l = next[j], scale = detail::math::exp(l), inverse = detail::math::exp(-l);
+        if (!isfinite(scale) || !(scale > 0) || !isfinite(inverse) || !(inverse > 0)) atomicOr(status, 1);
+    }
+}
+
 // Input maps (backlog M1). Affine and tanh are elementwise. LayerNorm uses one
 // warp per row for the row moments and the input VJP, and a tiled column
 // reduction with a fixed-order finish for the gain/bias VJPs: no
@@ -1687,6 +2002,23 @@ struct RationalPlan {
     bool safe() const { return config.denominator_policy != DenominatorPolicy::Guarded; }
 };
 
+// Per-edge wavelets (backlog M7; nonlinear block: translations, then log
+// scales, `count` = outputs*inputs*size each). Workspace: the transposed layer
+// input xt (inputs, capacity) and upstream ut (outputs, capacity), the
+// per-wavelet scales r and a, the backward kernel's partial sums (`slots`
+// planes of 3*count) and, with output splits, the dx partials (`splits` rows of
+// capacity*inputs). Launch geometry (select_wavelet_launch): `wave` blocks fill
+// the device once; slots and splits are their maxima at capacity.
+template<class T>
+struct WaveletPlan {
+    using edges_type = WaveletEdges;
+    ParameterBlock block;
+    std::size_t count = 0;
+    std::size_t xt = 0, ut = 0, inverse = 0, amplitude = 0, partials = 0, dx_partials = 0;
+    unsigned wave = 1, slots = 1, splits = 1;
+    testing::WaveletLaunch forced{}; // test hook: nonzero values replace the choice
+};
+
 // Input-map plans (backlog M1), one per map kind. Trainable LayerNorm gain and
 // bias occupy [gain | bias] at `offset` in the parameter, gradient and
 // candidate regions, so the shared candidate kernel updates them; fixed map
@@ -1718,7 +2050,8 @@ struct LayerNormPlan {
 };
 
 template<class T>
-using Plan = std::variant<BasisPlan<T>, TrainableRbfPlan<T>, RationalPlan<T>, AffinePlan<T>, TanhPlan<T>, LayerNormPlan<T>>;
+using Plan = std::variant<BasisPlan<T>, TrainableRbfPlan<T>, RationalPlan<T>, AffinePlan<T>, TanhPlan<T>, LayerNormPlan<T>,
+                          WaveletPlan<T>>;
 
 template<class T> const ParameterBlock& block_of(const BasisPlan<T>& p) { return p.expansion.block; }
 template<class T> const ParameterBlock& block_of(const TrainableRbfPlan<T>& p) { return p.expansion.block; }
@@ -1726,6 +2059,8 @@ template<class T> const ParameterBlock& block_of(const RationalPlan<T>& p) { ret
 template<class T> ParameterBlock& block_of(BasisPlan<T>& p) { return p.expansion.block; }
 template<class T> ParameterBlock& block_of(TrainableRbfPlan<T>& p) { return p.expansion.block; }
 template<class T> ParameterBlock& block_of(RationalPlan<T>& p) { return p.block; }
+template<class T> const ParameterBlock& block_of(const WaveletPlan<T>& p) { return p.block; }
+template<class T> ParameterBlock& block_of(WaveletPlan<T>& p) { return p.block; }
 
 // Dimensions and parameter count of any plan.
 struct Extent {
@@ -1802,6 +2137,24 @@ template<class T> Plan<T> make_plan(const Layer& layer, const TrainableRbfEdges&
 template<class T> Plan<T> make_plan(const Layer& layer, const RationalEdges& edges, std::size_t offset) {
     representable<T>(edges.denominators);
     return RationalPlan<T>{parameter_block(layer, edges.denominators.size(), offset), edges.config, device_scalars<T>(edges.config)};
+}
+// FP32: translations representable, exp(+-l) finite and nonzero in float
+// (FP64: the CPU validation). std::invalid_argument.
+template<class T> void check_wavelet(const WaveletEdges& edges) {
+    if constexpr (!std::is_same_v<T, double>) {
+        representable<T>(edges.translations);
+        for (double l : edges.log_scales) {
+            const T value = narrow<T>(l), scale = std::exp(value), inverse = std::exp(-value);
+            if (!std::isfinite(scale) || !(scale > 0) || !std::isfinite(inverse) || !(inverse > 0))
+                throw std::invalid_argument("resident float32 wavelet log scale is not representable");
+        }
+    }
+}
+template<class T> Plan<T> make_plan(const Layer& layer, const WaveletEdges& edges, std::size_t offset) {
+    check_wavelet<T>(edges);
+    WaveletPlan<T> plan{parameter_block(layer, product(edges.translations.size(), 2), offset)};
+    plan.count = edges.translations.size();
+    return plan;
 }
 MapBlock map_block(const InputMap& map, std::size_t parameters, std::size_t offset) {
     if (parameters > std::vector<double>().max_size()-offset) throw std::overflow_error("resident parameter size overflow");
@@ -1886,6 +2239,13 @@ template<class T> void reserve_workspace(RationalPlan<T>& plan, std::size_t capa
     plan.arguments = reserve(product(capacity, plan.block.inputs));
     plan.values = reserve(count); plan.derivatives = reserve(count); plan.denominator_values = reserve(count);
     if (plan.safe()) plan.gains = reserve(count);
+}
+template<class T> void reserve_workspace(WaveletPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
+    const auto& b = plan.block;
+    plan.xt = reserve(product(capacity, b.inputs)); plan.ut = reserve(product(capacity, b.outputs));
+    plan.inverse = reserve(plan.count); plan.amplitude = reserve(plan.count);
+    plan.partials = reserve(product(product(plan.count, 3), plan.slots));
+    if (plan.splits > 1) plan.dx_partials = reserve(product(product(capacity, b.inputs), plan.splits));
 }
 template<class T> void reserve_workspace(AffinePlan<T>& plan, std::size_t, Reservation<T>& reserve) {
     plan.scale = reserve(plan.block.features); plan.shift = reserve(plan.block.features);
@@ -2108,6 +2468,36 @@ bool tiled_reduction(const TrainableRbfPlan<T>& plan, unsigned tiles, unsigned s
     return staged_rows == 0 && groups*tiles >= plan.tile_min_blocks;
 }
 
+// Launch geometry of a wavelet layer (backlog M7), at construction: `wave`
+// = multiprocessors x resident backward blocks per multiprocessor (occupancy
+// API); `slots` = the chunks of a full batch at 4 samples per thread (FP64:
+// 2), at least enough for inputs*slots >= wave, so a block runs about one
+// chunk, but partial planes of at most the layer's xt + ut workspace; `splits`
+// the output splits that fill one wave when inputs*slots does not (at most
+// min(outputs, 16)).
+template<class T> void select_wavelet_launch(WaveletPlan<T>& plan, std::size_t capacity, const ExecutorDevice& device,
+                                             testing::WaveletLaunch forced) {
+    const auto supported = [](unsigned v, unsigned most) { return v == 0 || ((v & (v-1)) == 0 && v <= most); };
+    if (!supported(forced.forward_samples, wavelet_forward_samples<T>) || !supported(forced.backward_samples, wavelet_backward_samples<T>))
+        throw std::invalid_argument("resident wavelet test launch: unsupported samples per thread");
+    // Occupancy of the instantiation the full-batch backward launches (largest S).
+    int resident = 0;
+    if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&resident, wavelet_backward_kernel<wavelet_backward_samples<T>, true, T>,
+                                                      wavelet_threads, 0) != cudaSuccess)
+        resident = 1;
+    const auto wave = std::max<std::size_t>(1, static_cast<std::size_t>(device.multiprocessors)*static_cast<std::size_t>(std::max(resident, 1)));
+    const auto& b = plan.block;
+    const auto most = std::max<std::size_t>(1, wavelet_chunks(capacity, 1));
+    const auto budget = std::max<std::size_t>(1, product(capacity, b.inputs+b.outputs)/std::max<std::size_t>(1, product(plan.count, 3)));
+    auto slots = std::max(wavelet_chunks(capacity, std::is_same_v<T, double> ? 2 : 4), (wave-1)/b.inputs+1);
+    slots = std::max<std::size_t>(1, std::min({slots, most, budget, std::size_t{65535}}));
+    const auto splits = b.inputs*slots >= wave ? 1 : std::min<std::size_t>({(wave-1)/(b.inputs*slots)+1, b.outputs, 16});
+    plan.wave = static_cast<unsigned>(std::min<std::size_t>(wave, 1u << 30));
+    plan.slots = forced.slots ? forced.slots : static_cast<unsigned>(slots);
+    plan.splits = forced.splits ? forced.splits : static_cast<unsigned>(splits);
+    plan.forced = forced;
+}
+
 // Parameter upload at construction (coefficients and bias are uploaded by the executor).
 template<class T> void upload_carrier(Context<T>& s, const BasisPlan<T>& plan, const BasisEdges& edges) {
     const auto& p = plan.expansion;
@@ -2137,6 +2527,10 @@ template<class T> void upload_carrier(Context<T>& s, const TrainableRbfPlan<T>& 
 }
 template<class T> void upload_carrier(Context<T>& s, const RationalPlan<T>& plan, const RationalEdges& edges) {
     s.upload(s.ptr(s.parameters+plan.block.nonlinear()), edges.denominators);
+}
+template<class T> void upload_carrier(Context<T>& s, const WaveletPlan<T>& plan, const WaveletEdges& edges) {
+    s.upload(s.ptr(s.parameters+plan.block.nonlinear()), edges.translations);
+    s.upload(s.ptr(s.parameters+plan.block.nonlinear()+plan.count), edges.log_scales);
 }
 
 // Construction upload of one network layer: a KAN layer's coefficients, bias
@@ -2389,6 +2783,59 @@ template<class T> void run_forward(Context<T>& s, const RationalPlan<T>& plan, s
     });
     check(cudaGetLastError(),"resident rational forward launch");
 }
+// Per-edge wavelets (backlog M7, kernels above). Samples per thread S
+// (rules fitted to a GB10 sweep of complete training steps, M7 evidence;
+// `wave` is derived from the device): the batch's S, the largest power of two
+// with 256*S*15/16 <= batch (a larger S lets most lanes of a chunk evaluate
+// beyond the batch), at most 8; FP64 forward 1 (FP64-ALU bound: occupancy beats amortization)
+// and backward at most 4 (8 doubles the registers). When the grid would be
+// short of the device, FP32 forward S = 8 drops to 4 (outputs * chunks below
+// one wave) and the backward S halves, down to 2, while inputs * chunks is
+// below half a wave (the backward gains more from large S: its reductions
+// are per S samples).
+inline unsigned wavelet_batch_samples(std::size_t batch, unsigned most) {
+    unsigned samples = 1;
+    // 2S samples per thread when their chunk is at least 15/16 filled.
+    while (samples < most && static_cast<std::size_t>(samples)*2*wavelet_threads*15 <= 16*batch) samples *= 2;
+    return samples;
+}
+// Instantiates only S <= Most (FP64: forward 1, backward 4).
+template<unsigned Most, class F> void with_wavelet_samples(unsigned samples, F&& f) {
+    if constexpr (Most >= 8) if (samples == 8) { f(std::integral_constant<unsigned, 8>{}); return; }
+    if constexpr (Most >= 4) if (samples == 4) { f(std::integral_constant<unsigned, 4>{}); return; }
+    if constexpr (Most >= 2) if (samples == 2) { f(std::integral_constant<unsigned, 2>{}); return; }
+    f(std::integral_constant<unsigned, 1>{});
+}
+// rows x columns (row-major, at in) -> columns x pitch at out.
+template<class T> void transpose(Context<T>& s, const T* in, T* out, std::size_t rows, std::size_t columns, std::size_t pitch) {
+    if (!rows || !columns) return;
+    const auto x = (columns+31)/32, y = std::min<std::size_t>((rows+31)/32, 65535);
+    if (x > 2147483647U) throw std::overflow_error("resident transpose launch size overflow");
+    transpose_kernel<<<dim3(static_cast<unsigned>(x), static_cast<unsigned>(y)), dim3(32, 8), 0, s.stream>>>(in, out, rows, columns, pitch);
+    check(cudaGetLastError(), "resident transpose launch");
+}
+template<class T> WaveletArgs<T> wavelet_args(const Context<T>& s, const WaveletPlan<T>& plan) {
+    const auto& b = plan.block;
+    return {s.ptr(plan.xt), s.ptr(s.parameters+b.offset), s.ptr(s.parameters+b.nonlinear()), s.ptr(plan.inverse),
+            s.ptr(plan.amplitude), s.batch, s.capacity, b.inputs, b.outputs, b.terms};
+}
+template<class T> void run_forward(Context<T>& s, const WaveletPlan<T>& plan, std::size_t j) {
+    const auto& b = plan.block;
+    wavelet_scales_kernel<<<blocks(plan.count), 256, 0, s.stream>>>(s.ptr(s.parameters+b.nonlinear()+plan.count), s.ptr(plan.inverse),
+                                                                    s.ptr(plan.amplitude), plan.count);
+    check(cudaGetLastError(), "resident wavelet scale launch");
+    transpose(s, s.ptr(s.activation[j]), s.ptr(plan.xt), s.batch, b.inputs, s.capacity);
+    unsigned samples = wavelet_batch_samples(s.batch, wavelet_forward_samples<T>);
+    if (samples == 8 && b.outputs*wavelet_chunks(s.batch, 8) < plan.wave) samples = 4;
+    if (plan.forced.forward_samples) samples = plan.forced.forward_samples;
+    if (b.outputs > 2147483647U) throw std::overflow_error("resident wavelet launch size overflow");
+    const auto chunks = static_cast<unsigned>(std::min<std::size_t>(wavelet_chunks(s.batch, samples), 65535));
+    with_wavelet_samples<wavelet_forward_samples<T>>(samples, [&](auto S) {
+        wavelet_forward_kernel<decltype(S)::value><<<dim3(static_cast<unsigned>(b.outputs), chunks), wavelet_threads, 0, s.stream>>>(
+            wavelet_args(s, plan), s.ptr(s.parameters+b.bias()), s.ptr(s.activation[j+1]), s.status);
+    });
+    check(cudaGetLastError(), "resident wavelet forward launch");
+}
 template<class T> void run_forward(Context<T>& s, const AffinePlan<T>& plan, std::size_t j) {
     const auto count = s.batch*plan.block.features;
     affine_forward_kernel<<<blocks(count), 256, 0, s.stream>>>(s.ptr(s.activation[j]), s.ptr(plan.scale), s.ptr(plan.shift),
@@ -2558,6 +3005,53 @@ template<class T> void run_backward(Context<T>& s, const RationalPlan<T>& plan, 
     });
     check(cudaGetLastError(),"resident rational parameter gradient launch");
 }
+// Backward of per-edge wavelets: S as above; slots = min(chunks, plan.slots);
+// the outputs are split over grid z (dx then reduced by the input finish)
+// when inputs * slots stays below one wave.
+template<class T> void run_backward(Context<T>& s, const WaveletPlan<T>& plan, std::size_t j, T lambda) {
+    const auto& b = plan.block;
+    const bool dx = s.batch && s.input_gradient(j);
+    transpose(s, s.ptr(s.upstream[j+1]), s.ptr(plan.ut), s.batch, b.outputs, s.capacity);
+    wavelet_bias_kernel<<<blocks(b.outputs, 256/32), 256, 0, s.stream>>>(s.ptr(plan.ut), s.ptr(s.gradients+b.bias()), s.batch,
+                                                                        s.capacity, b.outputs, s.status);
+    check(cudaGetLastError(), "resident wavelet bias launch");
+    unsigned slots = 0;
+    if (s.batch) {
+        unsigned samples = wavelet_batch_samples(s.batch, wavelet_backward_samples<T>);
+        while (samples > 2 && 2*b.inputs*wavelet_chunks(s.batch, samples) < plan.wave) samples /= 2;
+        if (plan.forced.backward_samples) samples = plan.forced.backward_samples;
+        slots = static_cast<unsigned>(std::min<std::size_t>(wavelet_chunks(s.batch, samples), plan.slots));
+        std::size_t splits = 1;
+        if (b.inputs*slots < plan.wave) splits = std::min<std::size_t>(plan.splits, (plan.wave-1)/(b.inputs*slots)+1);
+        if (plan.forced.splits) splits = plan.forced.splits;
+        const auto per = (b.outputs-1)/splits+1;
+        splits = (b.outputs-1)/per+1;
+        if (b.inputs > 2147483647U) throw std::overflow_error("resident wavelet launch size overflow");
+        T* dx_out = splits > 1 ? s.ptr(plan.dx_partials) : s.ptr(s.upstream[j]);
+        const auto grid = dim3(static_cast<unsigned>(b.inputs), slots, static_cast<unsigned>(splits));
+        with_wavelet_samples<wavelet_backward_samples<T>>(samples, [&](auto S) {
+            constexpr unsigned samples_per_thread = decltype(S)::value;
+            if (dx)
+                wavelet_backward_kernel<samples_per_thread, true><<<grid, wavelet_threads, 0, s.stream>>>(
+                    wavelet_args(s, plan), s.ptr(plan.ut), s.ptr(plan.partials), per, dx_out, s.capacity*b.inputs, s.status);
+            else
+                wavelet_backward_kernel<samples_per_thread, false><<<grid, wavelet_threads, 0, s.stream>>>(
+                    wavelet_args(s, plan), s.ptr(plan.ut), s.ptr(plan.partials), per, dx_out, s.capacity*b.inputs, s.status);
+        });
+        check(cudaGetLastError(), "resident wavelet backward launch");
+        if (dx && splits > 1) {
+            const auto rows = s.batch*b.inputs;
+            wavelet_input_finish_kernel<<<blocks(rows), 256, 0, s.stream>>>(s.ptr(plan.dx_partials), static_cast<unsigned>(splits),
+                                                                            s.capacity*b.inputs, s.ptr(s.upstream[j]), rows, s.status);
+            check(cudaGetLastError(), "resident wavelet input reduction launch");
+        }
+    }
+    if (!plan.count) return;
+    T* g = s.ptr(s.gradients+b.offset);
+    wavelet_finish_kernel<<<blocks(plan.count), 256, 0, s.stream>>>(s.ptr(plan.partials), slots, s.ptr(s.parameters+b.offset), lambda,
+        g, s.ptr(s.gradients+b.nonlinear()), s.ptr(s.gradients+b.nonlinear()+plan.count), plan.count, s.status);
+    check(cudaGetLastError(), "resident wavelet parameter reduction launch");
+}
 // Input maps are not penalized by the coefficient L2 (lambda unused).
 template<class T> void run_backward(Context<T>& s, const AffinePlan<T>& plan, std::size_t j, T) {
     const auto count = s.batch*plan.block.features;
@@ -2668,6 +3162,12 @@ template<class T> void validate_candidates(Context<T>& s, const TrainableRbfPlan
     check(cudaGetLastError(),"resident width validation launch");
 }
 template<class T> void validate_candidates(Context<T>&, const RationalPlan<T>&) {}
+template<class T> void validate_candidates(Context<T>& s, const WaveletPlan<T>& plan) {
+    if (!plan.count) return;
+    validate_log_scale_kernel<<<blocks(plan.count), 256, 0, s.stream>>>(s.ptr(s.candidates+plan.block.nonlinear()+plan.count),
+                                                                        plan.count, s.status);
+    check(cudaGetLastError(), "resident log-scale validation launch");
+}
 template<class T> void validate_candidates(Context<T>&, const AffinePlan<T>&) {}
 template<class T> void validate_candidates(Context<T>&, const TanhPlan<T>&) {}
 template<class T> void validate_candidates(Context<T>&, const LayerNormPlan<T>&) {}
@@ -2681,6 +3181,12 @@ template<class T> NonlinearGradients download_nonlinear(Context<T>& s, const Tra
     TrainableRbfGradients g{std::vector<double>(b.terms), std::vector<double>(b.terms)};
     s.download(g.centers,s.ptr(s.gradients+b.nonlinear()));
     s.download(g.log_widths,s.ptr(s.gradients+b.nonlinear()+b.terms));
+    return g;
+}
+template<class T> NonlinearGradients download_nonlinear(Context<T>& s, const WaveletPlan<T>& plan) {
+    WaveletGradients g{std::vector<double>(plan.count), std::vector<double>(plan.count)};
+    s.download(g.translations, s.ptr(s.gradients+plan.block.nonlinear()));
+    s.download(g.log_scales, s.ptr(s.gradients+plan.block.nonlinear()+plan.count));
     return g;
 }
 template<class T> NonlinearGradients download_nonlinear(Context<T>& s, const RationalPlan<T>& plan) {
@@ -2701,6 +3207,13 @@ Carrier download_carrier(Context<T>& s, const TrainableRbfPlan<T>& plan, const T
     s.download(basis.centers,s.ptr(s.parameters+b.nonlinear()));
     s.download(basis.log_widths,s.ptr(s.parameters+b.nonlinear()+b.terms));
     return TrainableRbfEdges{std::move(basis), std::move(coefficients)};
+}
+template<class T>
+Carrier download_carrier(Context<T>& s, const WaveletPlan<T>& plan, const WaveletEdges& snapshot, std::vector<double> coefficients) {
+    std::vector<double> translations(plan.count), log_scales(plan.count);
+    s.download(translations, s.ptr(s.parameters+plan.block.nonlinear()));
+    s.download(log_scales, s.ptr(s.parameters+plan.block.nonlinear()+plan.count));
+    return WaveletEdges{snapshot.config, std::move(coefficients), std::move(translations), std::move(log_scales)};
 }
 template<class T>
 Carrier download_carrier(Context<T>& s, const RationalPlan<T>& plan, const RationalEdges& snapshot, std::vector<double> coefficients) {
@@ -2775,6 +3288,7 @@ bool same_structure(const TrainableRbfEdges& a, const TrainableRbfEdges& b) {
     return a.basis.centers.size() == b.basis.centers.size() && a.basis.log_widths.size() == b.basis.log_widths.size();
 }
 bool same_structure(const RationalEdges& a, const RationalEdges& b) { return a.config == b.config; }
+bool same_structure(const WaveletEdges& a, const WaveletEdges& b) { return a.config == b.config; }
 bool same_structure(const AffineMap& a, const AffineMap& b) { return a == b; }
 bool same_structure(const TanhMap& a, const TanhMap& b) { return a == b; }
 bool same_structure(const LayerNormMap& a, const LayerNormMap& b) {
@@ -2858,6 +3372,11 @@ template<class T> void image_carrier(ParameterImage<T>& image, const TrainableRb
 }
 template<class T> void image_carrier(ParameterImage<T>& image, const RationalPlan<T>& plan, const RationalEdges& edges) {
     image.put(plan.block.nonlinear(), edges.denominators, plan.block.nonlinear_count);
+}
+template<class T> void image_carrier(ParameterImage<T>& image, const WaveletPlan<T>& plan, const WaveletEdges& edges) {
+    check_wavelet<T>(edges); // FP32: translations representable, exp(+-l) finite and nonzero
+    image.put(plan.block.nonlinear(), edges.translations, plan.count);
+    image.put(plan.block.nonlinear()+plan.count, edges.log_scales, plan.count);
 }
 template<class T, class P, class Edges>
 void image_stage(ParameterImage<T>& image, const P& plan, const Layer& layer, const Edges& edges) {
@@ -3006,13 +3525,15 @@ struct Engine final : ResidentExecutor, Context<T> {
         ExecutorDevice device;
         const bool queried = std::any_of(plans.begin(), plans.end(), [](const Plan<T>& p) {
             const auto* basis = std::get_if<BasisPlan<T>>(&p);
-            return std::holds_alternative<TrainableRbfPlan<T>>(p) || (basis && basis->expansion.view.kind == detail::BasisKind::BSpline);
+            return std::holds_alternative<TrainableRbfPlan<T>>(p) || std::holds_alternative<WaveletPlan<T>>(p) ||
+                   (basis && basis->expansion.view.kind == detail::BasisKind::BSpline);
         });
         if (queried && available()) {
             device = executor_device();
             for (auto& plan : plans) {
                 if (auto* basis = std::get_if<BasisPlan<T>>(&plan)) select_sparse(*basis, capacity, tensor_ops, device, testing::test_scope.path);
                 if (auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan)) select_reduction(*rbf, device, testing::test_scope.reduction);
+                if (auto* wavelet = std::get_if<WaveletPlan<T>>(&plan)) select_wavelet_launch(*wavelet, capacity, device, testing::test_scope.wavelet);
             }
         }
         Reservation<T> reserve;

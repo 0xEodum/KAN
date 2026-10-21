@@ -33,9 +33,9 @@ endif()
 # carrier loops; backends/cuda the optional kan::cuda target; init/ the
 # initializers. Private headers are included relative to src/.
 add_library(kan STATIC src/core/layer.cpp src/core/network.cpp src/core/input_map.cpp
-            src/carriers/basis.cpp src/carriers/local/local_operations.cpp
+            src/carriers/basis.cpp src/carriers/local/local_operations.cpp src/carriers/local/wavelet.cpp
             src/carriers/rational/rational.cpp src/carriers/rational/rational_operations.cpp
-            src/backends/cpu/basis_edges.cpp src/backends/cpu/rational_edges.cpp
+            src/backends/cpu/basis_edges.cpp src/backends/cpu/rational_edges.cpp src/backends/cpu/wavelet_edges.cpp
             src/init/initializers.cpp src/init/moments.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
@@ -118,7 +118,8 @@ if(BUILD_TESTING)
     foreach(suite basis basis_config carrier hermite_function)
         kan_add_test(carriers ${suite} "cpu;carriers" 60 kan)
     endforeach()
-    foreach(suite local_basis local_layer)
+    # Backlog M7: per-edge trainable Mexican-hat wavelets (wavelet).
+    foreach(suite local_basis local_layer wavelet)
         kan_add_test(carriers/local ${suite} "cpu;local" 60 kan)
     endforeach()
     # Backlog C13: derivative-coefficient form of the spline input derivative (shared formulas).
@@ -193,6 +194,9 @@ if(BUILD_TESTING)
         # Backlog C12: trainable-RBF center/log-width reduction paths (same private hook).
         kan_add_test(backends/cuda local_rbf_reduction_resident "cuda;local" 300 kan::cuda)
         target_include_directories(local_rbf_reduction_resident_test PRIVATE src)
+        # Backlog M7: per-edge trainable wavelets on the resident executor.
+        kan_add_test(backends/cuda wavelet_resident "cuda;local" 300 kan::cuda)
+        target_include_directories(wavelet_resident_test PRIVATE src)
         # Backlog M2 (rational_policy_resident); C6-C8: rational kernel layout,
         # forward VJP checks, launch bounds (rational_resident_execution).
         foreach(suite rational_resident rational_policy_resident)
@@ -275,6 +279,7 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
         kan_add_python_test(residual_python "python;integration;core")
         kan_add_python_test(initializer_python "python;integration;init")
         kan_add_python_test(hermite_function_python "python;integration;carriers")
+        kan_add_python_test(wavelet_python "python;integration;local")
         foreach(suite precision_python resident_upload_python training_python)
             kan_add_python_test(${suite} "python;integration;resident")
         endforeach()

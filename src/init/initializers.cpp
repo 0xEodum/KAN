@@ -137,6 +137,30 @@ RationalEdges rational_edges(const RationalEdges& edges, const Initializer& init
     }
     return next;
 }
+// Per-edge wavelets (backlog M7): coefficient draws in layout order; the
+// translations and log scales are kept (they place the wavelets and define
+// the reference measure). VarianceScaling: sigma_j^2 = gain^2 variance /
+// (inputs size m_j) with each wavelet's own moment m_j under the lobe span
+// (init::wavelet_moments); NoiseInit: the linear carriers' amplitude, G = size.
+WaveletEdges wavelet_edges(const WaveletEdges& edges, const Initializer& initializer, std::size_t inputs,
+                           Generator& generator, Distribution distribution) {
+    const auto size = edges.config.size, count = edges.coefficients.size();
+    const bool uniform = distribution == Distribution::Uniform;
+    WaveletEdges next{edges.config, std::vector<double>(count), edges.translations, edges.log_scales};
+    if (const auto* v = std::get_if<VarianceScaling>(&initializer)) {
+        const auto m = init::wavelet_moments(edges.translations, edges.log_scales);
+        for (std::size_t j = 0; j < count; ++j) {
+            const double sigma = std::sqrt(v->gain * v->gain * m.variance / (double(inputs) * double(size) * m.second_moments[j]));
+            next.coefficients[j] = (uniform ? std::sqrt(3.0) * sigma : sigma) * raw_draw(generator, distribution);
+        }
+    } else {
+        const double a = std::get<NoiseInit>(initializer).scale / (double(size) * std::sqrt(double(inputs)));
+        const double factor = uniform ? 0.5 * a : a / std::sqrt(12.0);
+        for (auto& c : next.coefficients) c = factor * raw_draw(generator, distribution);
+    }
+    return next;
+}
+
 // Residual-branch weights (backlog M3), drawn after the carrier's parameters.
 // VarianceScaling: zero, which keeps its E[y^2] guarantee exact. NoiseInit:
 // pykan's scale_base (mean + spread * U[-1, 1)) / sqrt(inputs); a Normal draw
@@ -164,6 +188,8 @@ void initialize(Layer& layer, const Initializer& initializer) {
         using Edges = std::decay_t<decltype(edges)>;
         if constexpr (std::is_same_v<Edges, RationalEdges>)
             return rational_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common);
+        else if constexpr (std::is_same_v<Edges, WaveletEdges>)
+            return wavelet_edges(edges, initializer, layer.inputs(), generator, common.distribution);
         else
             return linear_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common.distribution);
     }, layer.carrier());

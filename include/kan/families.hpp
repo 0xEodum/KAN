@@ -23,4 +23,10 @@ void set_rbf_parameters(Layer& layer, std::span<const double> centers,
 void set_rational_parameters(Layer& layer, std::span<const double> numerator,
                              std::span<const double> denominators, std::span<const double> bias);
 
+// Per-edge wavelet coefficients, translations, log scales and bias
+// (WaveletEdges, backlog M7); log scales must satisfy valid_log_scale.
+void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients,
+                            std::span<const double> translations, std::span<const double> log_scales,
+                            std::span<const double> bias);
+
 } // namespace kan

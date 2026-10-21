@@ -94,6 +94,15 @@ void same_moments(const std::vector<double>& actual, const std::vector<double>& 
     for (std::size_t k = 0; k < actual.size(); ++k) test::near(actual[k] / expected[k], 1.0, tolerance);
 }
 
+// Backlog M7: explicit, exactly representable translations and log scales.
+kan::Layer wavelet_layer() {
+    kan::Layer layer(5, 4, kan::WaveletConfig{3});
+    std::vector<double> tau(60), l(60);
+    for (std::size_t j = 0; j < 60; ++j) { tau[j] = -0.5 + 0.25 * double(j % 7); l[j] = -1 + 0.25 * double(j % 5); }
+    kan::set_wavelet_parameters(layer, std::vector<double>(60, 0.0), tau, l, std::vector<double>(4, 0.0));
+    return layer;
+}
+
 double mean_square(std::span<const double> v) {
     double s = 0;
     for (double x : v) s += x * x;
@@ -443,6 +452,66 @@ TEST(network_initialization_uses_layer_seeds_and_resets_layer_norm) {
     REQUIRE(digest(net) == before);
 }
 
+TEST(wavelet_initialization_preserves_variance_and_keeps_placement) {
+    // Backlog M7: per-edge wavelets under the measure uniform on
+    // [min(tau - s), max(tau + s)], the span of every term's central lobe
+    // ([-1, 1] for the constructor's placement), with per-term moments.
+    std::uint64_t state = 7;
+    const auto next_u = [&] { state = state * 6364136223846793005ull + 1442695040888963407ull;
+                              return (double(state >> 11) + 0.5) * 0x1p-53; };
+    const std::size_t inputs = 32, outputs = 32, batch = 2048;
+    for (std::size_t size : {1u, 3u}) {
+        for (auto distribution : {kan::Distribution::Uniform, kan::Distribution::Normal}) {
+            std::vector<double> x(inputs * batch);
+            for (auto& v : x) v = 2 * next_u() - 1;
+            // The guarantee holds in expectation over initialization. With one
+            // wavelet per edge every edge of an input shares psi, whose mean on
+            // the measure is far from zero, so a single draw's cross terms
+            // spread the ratio over about 0.8-1.4: average 16 seeds.
+            double ratio = 0;
+            for (std::uint64_t seed = 0; seed < 16; ++seed) {
+                kan::Layer layer(inputs, outputs, kan::WaveletConfig{size});
+                const auto placement = std::get<kan::WaveletEdges>(layer.carrier());
+                kan::initialize(layer, kan::VarianceScaling{0.8, distribution, 21 + size + 100 * seed, {}});
+                const auto& edges = std::get<kan::WaveletEdges>(layer.carrier());
+                REQUIRE(edges.translations == placement.translations);
+                REQUIRE(edges.log_scales == placement.log_scales);
+                REQUIRE(std::ranges::equal(layer.bias(), std::vector<double>(outputs, 0.0)));
+                ratio += mean_square(layer.forward(std::span<const double>(x).first(inputs * 1024), 1024)) / (0.64 / 3) / 16;
+            }
+            test::near(ratio, 1, 0.15);
+        }
+    }
+    // Arbitrary per-edge translations and scales: x uniform on the lobe span.
+    kan::Layer layer(inputs, outputs, kan::WaveletConfig{2});
+    const auto count = inputs * outputs * 2;
+    std::vector<double> tau(count), l(count);
+    double lo = 1e300, hi = -1e300;
+    for (std::size_t j = 0; j < count; ++j) {
+        tau[j] = 1.5 * std::sin(0.37 * double(j));
+        l[j] = -1.2 + 0.8 * std::cos(0.91 * double(j));
+        lo = std::min(lo, tau[j] - std::exp(l[j]));
+        hi = std::max(hi, tau[j] + std::exp(l[j]));
+    }
+    kan::set_wavelet_parameters(layer, std::vector<double>(count, 0.0), tau, l, std::vector<double>(outputs, 0.0));
+    kan::initialize(layer, kan::VarianceScaling{1, kan::Distribution::Normal, 3, {}});
+    std::vector<double> x(inputs * batch);
+    for (auto& v : x) v = lo + (hi - lo) * next_u();
+    test::near(mean_square(layer.forward(x, batch)) / ((hi - lo) * (hi - lo) / 12), 1, 0.15);
+    // NoiseInit: pykan's amplitude with G = size.
+    kan::Layer noisy(inputs, outputs, kan::WaveletConfig{4});
+    kan::initialize(noisy, kan::NoiseInit{0.3, kan::Distribution::Uniform, 5, {}});
+    const double a = 0.3 / (4 * std::sqrt(double(inputs)));
+    double largest = 0;
+    for (double c : noisy.coefficients()) largest = std::max(largest, std::abs(c));
+    REQUIRE(largest <= a / 2 && largest > 0.45 * a);
+    // The residual branch is drawn after the coefficients, as for every carrier.
+    kan::Layer branch(3, 2, kan::WaveletConfig{2});
+    branch.set_residual(kan::SiluResidual{std::vector<double>(6, 0.0)});
+    kan::initialize(branch, kan::NoiseInit{0.3, kan::Distribution::Uniform, 9, {}});
+    REQUIRE(branch.residual()->weights[0] != 0);
+}
+
 TEST(seeds_are_deterministic_and_pinned_across_platforms) {
     // Pinned digests of the parameter bits. The same values must result from
     // MSVC and GCC builds (backlog M4 portability requirement).
@@ -466,6 +535,8 @@ TEST(seeds_are_deterministic_and_pinned_across_platforms) {
         // Backlog M5; pinned with GCC on aarch64 (no MSVC run on that machine).
         {kan::Layer(5, 4, kan::HermiteConfig{7, kan::HermiteNormalization::Function}),
          kan::VarianceScaling{1, kan::Distribution::Uniform, 10, {}}, "e77ab1b759107f4f"},
+        // Backlog M7 (per-term moments under the lobe span); pinned with GCC on aarch64.
+        {wavelet_layer(), kan::VarianceScaling{1, kan::Distribution::Uniform, 11, {}}, "ebfe9f8b648306d3"},
     };
     std::string failures;
     for (auto& c : cases) {
