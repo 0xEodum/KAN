@@ -1,0 +1,62 @@
+# Source formatting (backlog R6). Pinned tool: clang-format 18.1.8
+# (PyPI `clang-format==18.1.8`, see requirements-dev.txt); other major versions
+# format differently, so scripts/check_format.sh and the `format` CTest test
+# accept only 18.x. Scope: include/, src/, tests/, benchmarks/, examples/ and
+# python/*.cpp (docs/ has its own .clang-format that disables formatting).
+#
+# The options keep the existing style (4-space indent, attached braces, `T* p`,
+# `template<...>`, short statements on one line) and only change whitespace:
+# no include or using sorting, no comment reflow, no string splitting, no added
+# namespace comments, braces or qualifiers, no `> >` merging, no comment-prefix
+# spaces. One statement per line is the point of R6 (dense `a; b; c;` lines are
+# split).
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+IndentCaseLabels: false
+NamespaceIndentation: None
+IndentPPDirectives: None
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+SpaceAfterTemplateKeyword: false
+AlwaysBreakTemplateDeclarations: MultiLine
+AlignAfterOpenBracket: Align
+AlignEscapedNewlines: Left
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: All
+AllowShortEnumsOnASingleLine: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+# Whitespace-only guarantees (do not change without re-running the R6 token check).
+SortIncludes: Never
+IncludeBlocks: Preserve
+SortUsingDeclarations: Never
+FixNamespaceComments: false
+ReflowComments: false
+BreakStringLiterals: false
+QualifierAlignment: Leave
+InsertBraces: false
+RemoveBracesLLVM: false
+RemoveParentheses: Leave
+RemoveSemicolon: false
+SpacesInAngles: Leave
+SpacesInLineCommentPrefix:
+  Minimum: 0
+  Maximum: -1
+InsertNewlineAtEOF: false
+IntegerLiteralSeparator:
+  Binary: 0
+  Decimal: 0
+  Hex: 0

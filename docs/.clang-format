@@ -1,0 +1,4 @@
+# Evidence harnesses under docs/ are historical records compiled against the
+# source state they document; they are not reformatted (backlog R6).
+DisableFormat: true
+SortIncludes: Never
