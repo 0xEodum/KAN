@@ -1,0 +1,6 @@
+# Formatting-only commits, skipped by `git blame` once configured with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub's blame view reads this file automatically). One full hash per line.
+#
+# Backlog R6, "style: apply clang-format (backlog R6)":
+1fa14dde881e441b646f38826104bfff302aca64

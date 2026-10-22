@@ -424,6 +424,8 @@ reformatted). The pinned formatter is clang-format 18.1.8 (`requirements-dev.txt
 `scripts/check_format.sh` checks the tree and `scripts/check_format.sh --fix` formats it.
 When bash and a clang-format are found at configure time, CTest also runs the check as
 the `format` test (skipped for a clang-format other than 18.x); no build requires the tool.
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` hides the formatting commit from
+`git blame`.
 
 ## Development evidence
 
