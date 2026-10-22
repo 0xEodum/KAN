@@ -238,7 +238,7 @@ TEST(refit_knots_follow_pykan_quantiles) {
     for (double eps : {0.0, 0.02, 0.5, 1.0})
         for (std::size_t G : {0u, 3u, 7u}) {
             auto layer = seeded(kan::Layer(3, 2, three_grids()));
-            kan::refit_grid(layer, x, batch, kan::GridRefit{G, eps});
+            kan::refit_grid(layer, x, batch, kan::GridRefit{G, eps, 1e-8, true, 0.0});
             const std::size_t intervals = G ? G : 5;
             const auto& s = spline_of(layer);
             REQUIRE(s.grids == 3 && s.degree == 3 && layer.terms() == intervals + 3);
@@ -251,10 +251,20 @@ TEST(refit_knots_follow_pykan_quantiles) {
         }
     // A shared grid from all samples (per_input = false).
     auto layer = seeded(kan::Layer(3, 2, three_grids()));
-    kan::refit_grid(layer, x, batch, kan::GridRefit{4, 0.02, 1e-8, false});
+    kan::refit_grid(layer, x, batch, kan::GridRefit{4, 0.02, 1e-8, false, 0.0});
     const auto g = pykan_knots(x, 4, 0.02);
     REQUIRE(spline_of(layer).grids == 1);
     REQUIRE(spline_of(layer).knots == clamped(3, g.front(), g.back(), std::vector<double>(g.begin() + 1, g.end() - 1)));
+    // The margin extends the domain beyond the extreme samples (default 0.01).
+    auto margin = seeded(kan::Layer(3, 2, three_grids()));
+    kan::refit_grid(margin, x, batch, kan::GridRefit{5});
+    for (std::size_t i = 0; i < 3; ++i) {
+        const auto c = column(x, 3, i);
+        const auto [lo, hi] = std::minmax_element(c.begin(), c.end());
+        const auto row = kan::spline_grid(spline_of(margin), i).knots;
+        REQUIRE(row.front() == *lo - 0.01 * (*hi - *lo) && row.back() == *hi + 0.01 * (*hi - *lo));
+    }
+    test::throws<std::invalid_argument>([&] { kan::refit_grid(margin, x, batch, kan::GridRefit{5, 0.02, 1e-8, true, -1}); });
 }
 
 TEST(refit_reproduces_polynomials_exactly) {
@@ -304,7 +314,7 @@ TEST(refit_onto_a_refined_grid_preserves_the_function) {
     for (std::size_t k = 0; k < x.size(); ++k) x[k] = 0.999 * std::sin(0.71 * double(k) + 0.2);
     x[0] = -1; x[1] = 1; x[2] = 1; x[3] = -1;
     auto refit = layer;
-    kan::refit_grid(refit, x, batch, kan::GridRefit{8, 1.0, 0.0});
+    kan::refit_grid(refit, x, batch, kan::GridRefit{8, 1.0, 0.0, true, 0.0});
     REQUIRE(refit.terms() == 11);
     const auto y0 = layer.forward(x, batch), y1 = refit.forward(x, batch);
     for (std::size_t k = 0; k < y0.size(); ++k) test::near(y1[k], y0[k], 1e-12);

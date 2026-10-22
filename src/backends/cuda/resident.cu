@@ -1,12 +1,18 @@
 #include "kan/resident.hpp"
 #include "backends/cuda/resident_testing.hpp"
 #include "carriers/basis_view.hpp"
+#include "carriers/local/grid_refit.hpp"
 #include "carriers/rational/rational_formulas.hpp"
 #include "core/input_map_formulas.hpp"
 #include "core/residual_formulas.hpp"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <cub/device/device_radix_sort.cuh>
+#include <cub/device/device_run_length_encode.cuh>
+#include <cub/device/device_scan.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
 #include <algorithm>
 #include <cfloat>
 #include <cstddef>
@@ -923,6 +929,146 @@ __global__ void spline_indices_kernel(unsigned* indices, std::size_t inputs, std
     const auto stride = static_cast<std::size_t>(gridDim.x)*blockDim.x;
     for (auto e = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; e < inputs*capacity; e += stride)
         indices[e] = static_cast<unsigned>(e%capacity);
+}
+// Device grid refit (backlog M6, ResidentNetwork::refit_grids): the
+// arithmetic of kan::refit_grid (carriers/local/grid_refit.hpp, in double in
+// every precision) over the layer input of the executor's forward pass.
+// Per layer: the input transposed to (inputs, batch) and sorted per input (CUB
+// segmented radix sort; a shared grid also sorts all values for its knots),
+// refit_knots_kernel (one thread per grid), the runs of the sorted samples
+// with one first term on each grid (CUB run-length encoding of the run key),
+// refit_run_kernel (one thread per run: the run's products in sample order),
+// refit_factor_kernel (one thread per input: the band of the normal matrix
+// from its runs in order, ridge, Cholesky) and refit_solve_kernel (one thread
+// per (input, output): the right-hand side from its runs in order and the
+// banded solve; new coefficients rounded to T). Every sum has a fixed order:
+// deterministic, and in FP64 the CPU refit's operations on the same samples.
+// Status bits of a refit (refit_status reads them).
+constexpr int status_refit_interval = 8, status_refit_knots = 16, status_refit_singular = 32, status_refit_internal = 64;
+struct RefitGrids {
+    const double* fresh;   // new knots, `fresh_grids` rows of `knots` values
+    const double* current; // current knots, `current_grids` rows
+    std::size_t knots, terms, degree, fresh_grids, current_grids;
+    __host__ __device__ const double* fresh_row(std::size_t i) const { return fresh + (fresh_grids == 1 ? 0 : i)*knots; }
+    __host__ __device__ const double* current_row(std::size_t i) const { return current + (current_grids == 1 ? 0 : i)*knots; }
+};
+// Run key of sorted sample e (input e / batch): (input, first new term,
+// first current term or `terms` outside its domain) in one integer.
+template<class T> struct RefitKey {
+    const T* sorted;
+    RefitGrids grids;
+    std::size_t batch;
+    __host__ __device__ unsigned long long operator()(long long e) const {
+        const auto index = static_cast<std::size_t>(e), i = index/batch;
+        const double x = sorted[index];
+        const auto g = detail::spline_first_term(grids.fresh_row(i), grids.terms, grids.degree, x);
+        const auto gc = detail::spline_first_term(grids.current_row(i), grids.terms, grids.degree, x);
+        return (static_cast<unsigned long long>(i)*(grids.terms+1)+g)*(grids.terms+1)+gc;
+    }
+};
+template<class T> struct RefitSample {
+    const T* sorted;
+    __device__ double operator()(std::size_t b) const { return sorted[b]; }
+};
+// One thread per grid g: pykan's knots from its n sorted samples
+// (sorted + g*n), rounded to T; T-strictly increasing interior knots, else a
+// status bit. Writes the knots (T and double), the FP32/TF32 knot scales
+// (degree >= 1) and the current knots in double.
+template<class T>
+__global__ void refit_knots_kernel(const T* sorted, std::size_t n, std::size_t grids, std::size_t intervals, std::size_t degree,
+                                   double eps, double margin, T* knots, T* scales, double* fresh, const T* current, double* current_double,
+                                   std::size_t current_grids, int* status) {
+    const auto count = intervals+2*degree+1, terms = intervals+degree;
+    for (auto g = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; g < grids || g < current_grids;
+         g += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+        if (g < current_grids)
+            for (std::size_t k = 0; k < count; ++k) current_double[g*count+k] = current[g*count+k];
+        if (g >= grids) continue;
+        const RefitSample<T> load{sorted+g*n};
+        if (!(load(0) < load(n-1))) atomicOr(status, status_refit_interval);
+        T* t = knots+g*count;
+        for (std::size_t k = 0; k < count; ++k) {
+            const auto j = k < degree ? 0 : k-degree > intervals ? intervals : k-degree;
+            t[k] = static_cast<T>(detail::refit_knot(load, n, intervals, j, eps, margin));
+            fresh[g*count+k] = t[k];
+        }
+        bool increasing = true;
+        for (std::size_t k = degree; k < degree+intervals; ++k) increasing = increasing && t[k] < t[k+1] && finite_value(t[k+1]);
+        if (!increasing) atomicOr(status, status_refit_knots);
+        if (scales && degree != 0)
+            for (std::size_t j = 1; j < terms; ++j) scales[g*(terms-1)+j-1] = detail::spline_derivative_scale(degree, t[j+degree], t[j]);
+    }
+}
+// One thread per run r < *runs: its products (refit_run_sums, P x P each, at
+// sums + 2*P*P*r) and the first run of every input (first_run[i], and
+// first_run[inputs] = *runs).
+template<unsigned Width, class T>
+__global__ void refit_run_kernel(const T* sorted, RefitGrids grids, std::size_t batch, std::size_t inputs,
+                                 const unsigned long long* keys, const unsigned* counts, const unsigned* offsets, const unsigned* runs,
+                                 unsigned* first_run, double* sums, int* status) {
+    const auto P = grids.degree+1, total = static_cast<std::size_t>(*runs);
+    for (auto r = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; r <= total; r += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+        if (r == total) { first_run[inputs] = static_cast<unsigned>(total); continue; }
+        const auto key = keys[r], span = static_cast<unsigned long long>(grids.terms+1);
+        const auto gc = static_cast<std::size_t>(key%span), g = static_cast<std::size_t>(key/span%span);
+        const auto i = static_cast<std::size_t>(key/span/span);
+        if (r == 0 || keys[r-1]/span/span != i) first_run[i] = static_cast<unsigned>(r);
+        const auto begin = static_cast<std::size_t>(offsets[r]), end = begin+counts[r];
+        double* nn = sums+2*P*P*r;
+        if (!detail::refit_run_sums<Width>(grids.fresh_row(i), grids.terms, grids.current_row(i), grids.terms, grids.degree,
+                                           RefitSample<T>{sorted}, begin, end, g, gc, nn, nn+P*P))
+            atomicOr(status, status_refit_internal);
+    }
+}
+// One thread per input: the band of its normal matrix (runs in order), ridge, Cholesky.
+__global__ void refit_factor_kernel(const unsigned long long* keys, const unsigned* first_run, const double* sums,
+                                    std::size_t inputs, std::size_t terms, std::size_t degree, double ridge, double* bands, int* status) {
+    const auto P = degree+1;
+    const auto span = static_cast<unsigned long long>(terms+1);
+    for (auto i = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; i < inputs; i += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+        double* band = bands+i*terms*P;
+        for (std::size_t k = 0; k < terms*P; ++k) band[k] = 0;
+        for (auto r = static_cast<std::size_t>(first_run[i]); r < first_run[i+1]; ++r) {
+            const auto g = static_cast<std::size_t>(keys[r]/span%span);
+            const double* nn = sums+2*P*P*r;
+            for (std::size_t a = 0; a < P; ++a)
+                for (std::size_t q = a; q < P; ++q) band[(g+q)*P+(q-a)] += nn[a*P+q];
+        }
+        if (!detail::band_cholesky(band, terms, degree, ridge)) atomicOr(status, status_refit_singular);
+    }
+}
+// One thread per (input i, output o), t = i*outputs + o: the right-hand side
+// sum_runs sum M c[o,i,:] (runs in order; rhs[(i*terms + k)*outputs + o],
+// outputs fastest), the banded solve, and the coefficients rounded to T.
+template<class T>
+__global__ void refit_solve_kernel(const unsigned long long* keys, const unsigned* first_run, const double* sums,
+                                   const double* bands, double* rhs, const T* current, T* fresh, std::size_t inputs,
+                                   std::size_t outputs, std::size_t terms, std::size_t degree, int* status) {
+    const auto P = degree+1;
+    const auto span = static_cast<unsigned long long>(terms+1);
+    for (auto t = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; t < inputs*outputs; t += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+        const auto i = t/outputs, o = t%outputs;
+        double* x = rhs+i*terms*outputs+o;
+        for (std::size_t k = 0; k < terms; ++k) x[k*outputs] = 0;
+        const T* c = current+(o*inputs+i)*terms;
+        for (auto r = static_cast<std::size_t>(first_run[i]); r < first_run[i+1]; ++r) {
+            const auto key = keys[r];
+            const auto gc = static_cast<std::size_t>(key%span), g = static_cast<std::size_t>(key/span%span);
+            if (gc == terms) continue;
+            const double* no = sums+2*P*P*r+P*P;
+            for (std::size_t a = 0; a < P; ++a) {
+                double sum = x[(g+a)*outputs];
+                for (std::size_t q = 0; q < P; ++q) sum += no[a*P+q]*static_cast<double>(c[gc+q]);
+                x[(g+a)*outputs] = sum;
+            }
+        }
+        detail::band_solve(bands+i*terms*P, terms, degree, x, outputs);
+        T* next = fresh+(o*inputs+i)*terms;
+        for (std::size_t k = 0; k < terms; ++k) {
+            next[k] = static_cast<T>(x[k*outputs]);
+            report(next[k], status);
+        }
+    }
 }
 constexpr unsigned nonlinear_tiles=64;
 // Center/log-width VJPs: sum over rows r of W[r,k]*(-dPhi/dx) and W[r,k]*dPhi/dlog-width.
@@ -3776,6 +3922,22 @@ void with_matching_stage(const Plan<T>& plan, const NetworkLayer& snapshot, cons
 } // namespace
 
 // Precision-independent interface of an execution engine (one per Precision).
+// Device grid refit workspace (backlog M6), reserved after every other region
+// when the network has a B-spline layer, for its largest layer at capacity
+// (one layer refits at a time): offsets in elements of T.
+struct RefitSpace {
+    bool available = false; // false: no B-spline layer, or inputs*capacity beyond 32-bit sort indices
+    std::size_t runs = 0;   // run bound of the largest layer
+    std::size_t xt = 0, sorted = 0, keys = 0, counts = 0, offsets = 0, first_run = 0, run_count = 0, segments = 0;
+    std::size_t sums = 0, bands = 0, rhs = 0, fresh = 0, current = 0, knots = 0, scales = 0, backup = 0;
+    std::size_t storage = 0, storage_bytes = 0;
+};
+// Runs of a layer's sorted samples: at most min(batch, 2*terms+1) per input
+// (a monotone path through (first new term, first current term or outside)).
+inline std::size_t refit_runs(std::size_t inputs, std::size_t capacity, std::size_t terms) {
+    return product(inputs, std::min(capacity, product(terms, 2)+1));
+}
+
 struct ResidentExecutor {
     virtual ~ResidentExecutor() = default;
     virtual void upload_input(std::span<const double> input, std::size_t batch) = 0;
@@ -3784,6 +3946,7 @@ struct ResidentExecutor {
     virtual void backward(double coefficient_l2) = 0;
     virtual void sgd(double learning_rate) = 0;
     virtual void upload_parameters(const Network& network) = 0;
+    virtual void refit_grids(const GridRefit& options) = 0;
     virtual void train_step(double learning_rate, double coefficient_l2, Loss loss) = 0;
     virtual void train_batch(std::span<const double> input, std::span<const double> target, std::size_t batch,
                              double learning_rate, double coefficient_l2) = 0;
@@ -3928,6 +4091,8 @@ struct Engine final : ResidentExecutor, Context<T> {
                                                                             basis->sparse.active ? e.block.terms : e.block.terms-1));
                 }
         if (difference_size) this->differences = reserve(difference_size);
+        // Backlog M6: the device refit workspace, after every earlier region.
+        reserve_refit(reserve);
         graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
         if (auto* layout = testing::test_scope.layout) {
@@ -4028,6 +4193,239 @@ struct Engine final : ResidentExecutor, Context<T> {
         arena = nullptr; status = nullptr; stream = nullptr; blas = nullptr; this->pinned = nullptr;
     }
     void reset_status() { check(cudaMemsetAsync(status, 0, sizeof(int), stream), "resident status reset"); }
+    // Backlog M6: device grid refit (refit kernels above).
+    RefitSpace refit;
+    // The expansion plan of B-spline layer j, or null.
+    const ExpansionPlan<T>* spline_plan(std::size_t j) const {
+        const auto* basis = std::get_if<BasisPlan<T>>(&plans[j]);
+        return basis && basis->expansion.view.kind == detail::BasisKind::BSpline ? &basis->expansion : nullptr;
+    }
+    std::size_t knot_scale_count(const ExpansionPlan<T>& p) const {
+        return spline_difference_vjp<T> && p.view.degree != 0 ? product(p.grids, p.block.terms-1) : 0;
+    }
+    using RefitIterator = thrust::transform_iterator<RefitKey<T>, thrust::counting_iterator<long long>>;
+    static std::size_t double_elements(std::size_t count) { return (product(count, sizeof(double))+sizeof(T)-1)/sizeof(T); }
+    void reserve_refit(Reservation<T>& reserve) {
+        std::size_t samples = 0, runs = 0, sums = 0, bands = 0, rhs = 0, knots = 0, scales = 0, backup = 0, inputs = 0;
+        bool any = false, pooled = false;
+        for (std::size_t j = 0; j < plans.size(); ++j) {
+            const auto* p = spline_plan(j);
+            if (!p) continue;
+            any = true;
+            const auto& b = p->block;
+            const auto P = p->view.degree+1;
+            const auto r = refit_runs(b.inputs, capacity, b.terms);
+            samples = std::max(samples, product(b.inputs, capacity));
+            runs = std::max(runs, r);
+            sums = std::max(sums, product(r, 2*P*P));
+            bands = std::max(bands, product(product(b.inputs, b.terms), P));
+            rhs = std::max(rhs, product(product(b.inputs, b.terms), b.outputs));
+            knots = std::max(knots, knot_count(*p));
+            scales = std::max(scales, knot_scale_count(*p));
+            backup += knot_count(*p)+knot_scale_count(*p);
+            inputs = std::max(inputs, b.inputs);
+            pooled = pooled || (p->grids == 1 && b.inputs > 1);
+            // Run keys (input, g, g') in 64 bits.
+            if (b.terms+1 > (std::size_t{1} << 21) || b.inputs > (std::size_t{1} << 21)) return;
+        }
+        if (!any || samples > static_cast<std::size_t>(std::numeric_limits<int>::max()) || capacity == 0) return;
+        const int items = static_cast<int>(samples);
+        std::size_t bytes = 0, query = 0;
+        check(cub::DeviceSegmentedRadixSort::SortKeys(nullptr, query, static_cast<const T*>(nullptr), static_cast<T*>(nullptr), items,
+                  static_cast<int>(inputs), static_cast<const int*>(nullptr), static_cast<const int*>(nullptr)), "resident refit sort size");
+        bytes = std::max(bytes, query);
+        if (pooled) {
+            check(cub::DeviceRadixSort::SortKeys(nullptr, query, static_cast<const T*>(nullptr), static_cast<T*>(nullptr), items),
+                  "resident refit sort size");
+            bytes = std::max(bytes, query);
+        }
+        check(cub::DeviceRunLengthEncode::Encode(nullptr, query, RefitIterator(thrust::counting_iterator<long long>(0), RefitKey<T>{}),
+                  static_cast<unsigned long long*>(nullptr), static_cast<unsigned*>(nullptr), static_cast<unsigned*>(nullptr), items),
+              "resident refit run size");
+        bytes = std::max(bytes, query);
+        check(cub::DeviceScan::ExclusiveSum(nullptr, query, static_cast<const unsigned*>(nullptr), static_cast<unsigned*>(nullptr),
+                  static_cast<int>(runs)), "resident refit scan size");
+        bytes = std::max(bytes, query);
+        refit.available = true;
+        refit.runs = runs;
+        refit.xt = reserve(samples); refit.sorted = reserve(samples);
+        refit.keys = reserve(double_elements(runs)); // 64-bit keys
+        refit.counts = reserve(index_elements<T>(runs)); refit.offsets = reserve(index_elements<T>(runs));
+        refit.first_run = reserve(index_elements<T>(inputs+1)); refit.run_count = reserve(index_elements<T>(1));
+        refit.segments = reserve(index_elements<T>(product(inputs, 2)));
+        refit.sums = reserve(double_elements(sums)); refit.bands = reserve(double_elements(bands)); refit.rhs = reserve(double_elements(rhs));
+        refit.fresh = reserve(double_elements(knots)); refit.current = reserve(double_elements(knots));
+        refit.knots = reserve(knots); refit.scales = reserve(scales); refit.backup = reserve(backup);
+        refit.storage_bytes = bytes; refit.storage = reserve((bytes+sizeof(T)-1)/sizeof(T));
+    }
+    template<class U> U* refit_ptr(std::size_t offset) { return reinterpret_cast<U*>(ptr(offset)); }
+    int read_status() {
+        check(cudaGetLastError(), "resident kernel launch");
+        int value = 0;
+        check(cudaMemcpyAsync(&value, status, sizeof(int), cudaMemcpyDeviceToHost, stream), "resident status download");
+        sync();
+        if (value) reset_status();
+        return value;
+    }
+    void copy(std::size_t to, std::size_t from, std::size_t count) {
+        if (count) check(cudaMemcpyAsync(ptr(to), ptr(from), count*sizeof(T), cudaMemcpyDeviceToDevice, stream), "resident refit copy");
+    }
+    // Refits layer j from activation[j]: new coefficients into the active
+    // region (a copy; the previous active region is `candidates`), new knots
+    // and knot scales into the layer's regions.
+    void enqueue_refit(std::size_t j, const GridRefit& options) {
+        const auto& p = *spline_plan(j);
+        const auto& b = p.block;
+        const auto degree = p.view.degree, terms = b.terms, count = knot_count(p)/p.grids, inputs = b.inputs;
+        const auto all = product(inputs, batch);
+        const int items = static_cast<int>(all);
+        T* xt = ptr(refit.xt);
+        T* sorted = ptr(refit.sorted);
+        auto* segments = refit_ptr<int>(refit.segments);
+        void* storage = ptr(refit.storage);
+        transpose(*this, ptr(activation[j]), xt, batch, inputs, batch); // xt[i*batch + b]
+        spline_segments_kernel<<<blocks(inputs), 256, 0, stream>>>(segments, inputs, batch, batch);
+        check(cudaGetLastError(), "resident refit segment launch");
+        const auto per_input = [&] {
+            auto bytes = refit.storage_bytes;
+            check(cub::DeviceSegmentedRadixSort::SortKeys(storage, bytes, static_cast<const T*>(xt), sorted, items, static_cast<int>(inputs),
+                      static_cast<const int*>(segments), static_cast<const int*>(segments+inputs), 0, static_cast<int>(sizeof(T)*8), stream),
+                  "resident refit sort");
+        };
+        const bool pooled = p.grids == 1 && inputs > 1;
+        if (pooled) {
+            auto bytes = refit.storage_bytes;
+            check(cub::DeviceRadixSort::SortKeys(storage, bytes, static_cast<const T*>(xt), sorted, items, 0, static_cast<int>(sizeof(T)*8), stream),
+                  "resident refit sort");
+        } else {
+            per_input();
+        }
+        auto* fresh = refit_ptr<double>(refit.fresh);
+        auto* current = refit_ptr<double>(refit.current);
+        refit_knots_kernel<<<blocks(p.grids, 64), 64, 0, stream>>>(sorted, pooled ? all : batch, p.grids, terms-degree, degree,
+            options.grid_eps, options.margin, ptr(refit.knots), knot_scale_count(p) ? ptr(refit.scales) : nullptr, fresh, ptr(p.knots), current,
+            p.grids, status);
+        check(cudaGetLastError(), "resident refit knot launch");
+        if (pooled) per_input();
+        // Runs of equal (input, first new term, first current term).
+        const auto runs = refit_runs(inputs, batch, terms);
+        auto* keys = refit_ptr<unsigned long long>(refit.keys);
+        auto* counts = refit_ptr<unsigned>(refit.counts);
+        auto* offsets = refit_ptr<unsigned>(refit.offsets);
+        auto* run_count = refit_ptr<unsigned>(refit.run_count);
+        auto* first_run = refit_ptr<unsigned>(refit.first_run);
+        check(cudaMemsetAsync(counts, 0, runs*sizeof(unsigned), stream), "resident refit run reset");
+        const RefitGrids grids{fresh, current, count, terms, degree, p.grids, p.grids};
+        {
+            auto bytes = refit.storage_bytes;
+            check(cub::DeviceRunLengthEncode::Encode(storage, bytes, RefitIterator(thrust::counting_iterator<long long>(0), RefitKey<T>{sorted, grids, batch}),
+                      keys, counts, run_count, items, stream), "resident refit runs");
+            bytes = refit.storage_bytes;
+            check(cub::DeviceScan::ExclusiveSum(storage, bytes, static_cast<const unsigned*>(counts), offsets, static_cast<int>(runs), stream),
+                  "resident refit run offsets");
+        }
+        auto* sums = refit_ptr<double>(refit.sums);
+        const auto launch_runs = [&](auto width) {
+            refit_run_kernel<decltype(width)::value><<<blocks(runs+1, 128), 128, 0, stream>>>(sorted, grids, batch, inputs, keys, counts,
+                offsets, run_count, first_run, sums, status);
+        };
+        if (degree < max_sparse_spline_width) with_spline_width(static_cast<unsigned>(degree+1), launch_runs);
+        else launch_runs(std::integral_constant<unsigned, 0>{});
+        check(cudaGetLastError(), "resident refit run launch");
+        auto* bands = refit_ptr<double>(refit.bands);
+        refit_factor_kernel<<<blocks(inputs, 64), 64, 0, stream>>>(keys, first_run, sums, inputs, terms, degree, options.ridge, bands, status);
+        check(cudaGetLastError(), "resident refit factor launch");
+        refit_solve_kernel<<<blocks(inputs*b.outputs, 128), 128, 0, stream>>>(keys, first_run, sums, bands, refit_ptr<double>(refit.rhs),
+            ptr(candidates+b.offset), ptr(parameters+b.offset), inputs, b.outputs, terms, degree, status);
+        check(cudaGetLastError(), "resident refit solve launch");
+        copy(p.knots, refit.knots, knot_count(p));
+        copy(p.knot_scales, refit.scales, knot_scale_count(p));
+    }
+    void refit_grids(const GridRefit& options) override {
+        flush();
+        if (!(options.grid_eps >= 0 && options.grid_eps <= 1)) throw std::invalid_argument("grid_eps must be in [0, 1]");
+        if (!(options.ridge >= 0) || !std::isfinite(options.ridge)) throw std::invalid_argument("refit ridge must be finite and nonnegative");
+        if (!(options.margin >= 0) || !std::isfinite(options.margin)) throw std::invalid_argument("refit margin must be finite and nonnegative");
+        if (!has_input) throw std::logic_error("resident input has not been uploaded");
+        std::vector<char> refits(plans.size(), 0);
+        bool any = false;
+        for (std::size_t j = 0; j < plans.size(); ++j) {
+            const auto* p = spline_plan(j);
+            if (!p) continue;
+            const auto& b = p->block;
+            if (options.intervals && options.intervals != b.terms-p->view.degree)
+                throw std::invalid_argument("resident grid refit keeps the term count: intervals must be 0 or the layer's");
+            if (b.inputs > 1 && options.per_input != (p->grids != 1))
+                throw std::invalid_argument("resident grid refit keeps each layer's grid form: per_input must match it");
+            refits[j] = 1; any = true;
+        }
+        if (!any) throw std::invalid_argument("grid refit requires a network with B-spline layers");
+        if (batch == 0) throw std::invalid_argument("grid refit needs samples");
+        if (!refit.available) throw std::invalid_argument("resident grid refit: inputs*capacity exceeds 32-bit sort indices");
+        const auto last = static_cast<std::size_t>(std::find(refits.rbegin(), refits.rend(), 1) - refits.rbegin());
+        const auto end = plans.size()-last;
+        // Atomic: knots and knot scales are backed up, coefficients go to a
+        // copy of the parameters that becomes the active region on success.
+        reset_status();
+        std::size_t backed = refit.backup;
+        for (std::size_t j = 0; j < end; ++j)
+            if (refits[j]) {
+                const auto& p = *spline_plan(j);
+                copy(backed, p.knots, knot_count(p)); backed += knot_count(p);
+                copy(backed, p.knot_scales, knot_scale_count(p)); backed += knot_scale_count(p);
+            }
+        copy(candidates, parameters, parameter_count);
+        std::swap(parameters, candidates);
+        has_forward = has_backward = false;
+        try {
+            for (std::size_t j = 0; j < end; ++j) {
+                if (refits[j]) {
+                    enqueue_refit(j, options);
+                    const int bits = read_status();
+                    const auto where = "resident grid refit of layer " + std::to_string(j) + ": ";
+                    if (bits&status_refit_interval) throw std::invalid_argument(where + "the samples of an input span no interval");
+                    if (bits&status_refit_knots) throw std::invalid_argument(where + "knots coincide (repeated samples; raise grid_eps)");
+                    if (bits&status_refit_singular)
+                        throw std::invalid_argument(where + "the least-squares system is singular (knot spans without samples; use ridge > 0)");
+                    if (bits&status_refit_internal) throw std::logic_error(where + "inconsistent spline spans");
+                    if (bits) throw std::overflow_error(where + "nonfinite result");
+                }
+                if (j+1 < end) std::visit([&](const auto& plan) { run_forward(*this, plan, j); run_residual_forward(*this, plan, j); }, plans[j]);
+            }
+        } catch (...) {
+            std::swap(parameters, candidates);
+            backed = refit.backup;
+            for (std::size_t j = 0; j < end; ++j)
+                if (refits[j]) {
+                    const auto& p = *spline_plan(j);
+                    copy(p.knots, backed, knot_count(p)); backed += knot_count(p);
+                    copy(p.knot_scales, backed, knot_scale_count(p)); backed += knot_scale_count(p);
+                }
+            sync();
+            reset_status();
+            sync();
+            throw;
+        }
+        // The snapshot's knots: exact widenings of the device's.
+        std::vector<NetworkLayer> layers(model.layers().begin(), model.layers().end());
+        std::vector<std::vector<double>> knots(plans.size());
+        for (std::size_t j = 0; j < end; ++j)
+            if (refits[j]) {
+                knots[j].resize(knot_count(*spline_plan(j)));
+                this->download(knots[j], ptr(spline_plan(j)->knots));
+            }
+        sync();
+        for (std::size_t j = 0; j < end; ++j)
+            if (refits[j]) {
+                auto& layer = std::get<Layer>(layers[j]);
+                const auto& edges = std::get<BasisEdges>(layer.carrier());
+                auto spline = std::get<BSplineConfig>(edges.basis);
+                spline.knots = std::move(knots[j]);
+                layer.set_carrier(BasisEdges{std::move(spline), edges.coefficients});
+            }
+        model = Network(std::move(layers));
+    }
+
     // Eager calls report through bits[0] and leave it clear, so that a
     // training interval always starts with every status word zero.
     void result() {
@@ -4436,7 +4834,7 @@ void ResidentNetwork::forward() { state().engine->forward(); }
 void ResidentNetwork::backward(double coefficient_l2) { state().engine->backward(coefficient_l2); }
 void ResidentNetwork::sgd(double learning_rate) { state().engine->sgd(learning_rate); }
 void ResidentNetwork::upload_parameters(const Network& network) { state().engine->upload_parameters(network); }
-void ResidentNetwork::refit_grids(const GridRefit&) { state(); throw std::logic_error("ResidentNetwork::refit_grids: not implemented"); }
+void ResidentNetwork::refit_grids(const GridRefit& options) { state().engine->refit_grids(options); }
 void ResidentNetwork::train_step(double learning_rate, double coefficient_l2, Loss loss) {
     state().engine->train_step(learning_rate, coefficient_l2, loss);
 }

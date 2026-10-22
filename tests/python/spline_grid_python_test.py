@@ -56,7 +56,8 @@ class SplineGrid(unittest.TestCase):
         kan.refit_grid(layer, x, options)
         self.assertEqual(layer.terms, 7)
         self.assertEqual(layer.carrier.basis.grids, 2)
-        self.assertEqual(layer.carrier.basis.knots[0], x[:, 0].min())
+        lo, hi = x[:, 0].min(), x[:, 0].max()
+        self.assertEqual(layer.carrier.basis.knots[0], lo - .01 * (hi - lo))  # default margin 0.01
         with self.assertRaises(ValueError): kan.refit_grid(layer, np.full((5, 2), .5), options)
         net = kan.Network([seeded(kan.Layer(2, 2, kan.ChebyshevConfig(3)), .4), seeded(kan.Layer(2, 1, grids()))])
         manual = net.layers[1]

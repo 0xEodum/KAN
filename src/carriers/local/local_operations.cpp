@@ -163,6 +163,7 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
     if (!edges) throw std::invalid_argument("grid refit requires splines");
     if (!(options.grid_eps >= 0 && options.grid_eps <= 1)) throw std::invalid_argument("grid_eps must be in [0, 1]");
     if (!(options.ridge >= 0) || !std::isfinite(options.ridge)) throw std::invalid_argument("refit ridge must be finite and nonnegative");
+    if (!(options.margin >= 0) || !std::isfinite(options.margin)) throw std::invalid_argument("refit margin must be finite and nonnegative");
     const auto inputs = layer.inputs(), outputs = layer.outputs();
     if (input.size() != checked_size(batch, inputs)) throw std::invalid_argument("refit input shape mismatch");
     require_finite(input);
@@ -192,9 +193,12 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
         const auto load = [&](std::size_t k) { return x[k]; };
         if (!(x.front() < x.back()))
             throw std::invalid_argument("grid refit: the samples of input " + std::to_string(g) + " span no interval");
-        next_basis.knots.insert(next_basis.knots.end(), p, x.front());
-        for (std::size_t j = 0; j <= intervals; ++j) next_basis.knots.push_back(detail::refit_knot(load, n, intervals, j, options.grid_eps));
-        next_basis.knots.insert(next_basis.knots.end(), p, x.back());
+        const double lo = detail::refit_knot(load, n, intervals, 0, options.grid_eps, options.margin);
+        const double hi = detail::refit_knot(load, n, intervals, intervals, options.grid_eps, options.margin);
+        next_basis.knots.insert(next_basis.knots.end(), p, lo);
+        for (std::size_t j = 0; j <= intervals; ++j)
+            next_basis.knots.push_back(detail::refit_knot(load, n, intervals, j, options.grid_eps, options.margin));
+        next_basis.knots.insert(next_basis.knots.end(), p, hi);
         const auto t = std::span<const double>(next_basis.knots).subspan(g * (next_terms + p + 1));
         for (std::size_t j = p; j < p + intervals; ++j)
             if (!(t[j] < t[j + 1]) || !std::isfinite(t[j + 1]))

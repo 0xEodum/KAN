@@ -25,10 +25,12 @@ void insert_knots(Layer& layer, std::span<const double> knots);
 std::vector<double> adapt_grid(Layer& layer, std::span<const double> input, std::size_t batch);
 
 // Quantile grid refit (backlog M6, pykan's update_grid_from_samples). Each new
-// grid has `intervals` knot intervals on [min, max] of its samples: interior
-// knot j = grid_eps*(uniform knot j) + (1 - grid_eps)*(the sample of rank
-// floor(n*j/intervals) of the n sorted samples), clamped endpoints repeated
-// degree+1 times, strictly increasing interior knots. The coefficients are
+// grid has `intervals` knot intervals on [min - m*r, max + m*r] of its samples
+// (r = max - min, m = margin): interior knot j = grid_eps*(uniform knot j) +
+// (1 - grid_eps)*(the sample of rank floor(n*j/intervals) of the n sorted
+// samples), clamped endpoints repeated degree+1 times, strictly increasing
+// interior knots. The margin keeps samples next to the extremes inside the
+// clamped domain (pykan's grid extends degree intervals beyond the samples). The coefficients are
 // refit by least squares to the current edge functions at the samples of
 // their input, sum (s(x) - f(x))^2 + ridge*sum c^2 (banded normal equations).
 struct GridRefit {
@@ -36,6 +38,7 @@ struct GridRefit {
     double grid_eps = 0.02;    // in [0, 1]: 1 uniform knots, 0 quantile knots (pykan default 0.02)
     double ridge = 1e-8;       // finite, >= 0 (pykan's regularized least squares)
     bool per_input = true;     // one grid per input (pykan); false: one shared grid from all samples
+    double margin = 0.01;      // finite, >= 0: the domain extends margin*(max - min) beyond the samples
     bool operator==(const GridRefit&) const = default;
 };
 // Refits the B-spline layer's grids from layer inputs (batch x inputs) and

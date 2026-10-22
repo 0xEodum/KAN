@@ -326,13 +326,15 @@ PYBIND11_MODULE(_kan, module) {
     module.def("spline_grid", &kan::spline_grid, py::arg("config"), py::arg("grid"));
     module.def("per_input_grids", &kan::per_input_grids, py::arg("config"), py::arg("inputs"));
     py::class_<kan::GridRefit>(module, "GridRefit")
-        .def(py::init([](std::size_t intervals, double grid_eps, double ridge, bool per_input) {
-            return kan::GridRefit{intervals, grid_eps, ridge, per_input}; }),
-             py::arg("intervals") = 0, py::arg("grid_eps") = 0.02, py::arg("ridge") = 1e-8, py::arg("per_input") = true)
+        .def(py::init([](std::size_t intervals, double grid_eps, double ridge, bool per_input, double margin) {
+            return kan::GridRefit{intervals, grid_eps, ridge, per_input, margin}; }),
+             py::arg("intervals") = 0, py::arg("grid_eps") = 0.02, py::arg("ridge") = 1e-8, py::arg("per_input") = true,
+             py::arg("margin") = 0.01)
         .def_readwrite("intervals", &kan::GridRefit::intervals)
         .def_readwrite("grid_eps", &kan::GridRefit::grid_eps)
         .def_readwrite("ridge", &kan::GridRefit::ridge)
         .def_readwrite("per_input", &kan::GridRefit::per_input)
+        .def_readwrite("margin", &kan::GridRefit::margin)
         .def(py::self == py::self);
     auto wavelet = config_class<kan::MexicanHatConfig>(module, "MexicanHatConfig");
     derived_size(wavelet);

@@ -8,6 +8,7 @@
 #include "support/test.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -50,6 +51,11 @@ std::vector<double> inputs(std::size_t count, double phase = 0) {
     for (std::size_t k = 0; k < count; k += 7) x[k] = special[(k / 7) % 8];
     return x;
 }
+std::string test_digits(double v) {
+    char text[40];
+    std::snprintf(text, sizeof text, "%.17g", v);
+    return text;
+}
 struct Tolerance { double relative, floor; };
 Tolerance tolerance(Precision p) {
     if (p == Precision::Float64) return {1e-11, 1e-12};
@@ -62,8 +68,8 @@ void compare(std::span<const double> actual, std::span<const double> expected, T
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i)
         if (!(std::abs(actual[i] - expected[i]) <= t.relative * std::abs(expected[i]) + t.floor * scale + 1e-300))
-            throw std::runtime_error(what + " index " + std::to_string(i) + " actual=" + std::to_string(actual[i]) +
-                                     " expected=" + std::to_string(expected[i]));
+            throw std::runtime_error(what + " index " + std::to_string(i) + " actual=" + test_digits(actual[i]) +
+                                     " expected=" + test_digits(expected[i]));
 }
 bool same_bits(std::span<const double> a, std::span<const double> b) {
     return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size_bytes()) == 0;
@@ -208,7 +214,8 @@ TEST(device_refit_matches_the_cpu_refit) {
                         const auto& a = spline_of(refit, j);
                         const auto& e = spline_of(cpu, j);
                         REQUIRE(a.grids == e.grids && a.degree == e.degree && a.knots.size() == e.knots.size());
-                        if (p == Precision::Float64) compare(a.knots, e.knots, {1e-14, 1e-15}, what + " knots");
+                        // Samples are device activations (FP64: the tanh map within its parity tolerance).
+                        if (p == Precision::Float64) compare(a.knots, e.knots, {1e-12, 1e-13}, what + " knots");
                         else compare(a.knots, e.knots, {1e-5, 1e-5}, what + " knots");
                     }
                     const auto xa = refit_samples(97, 13, 0.7);
@@ -307,6 +314,30 @@ TEST(refit_failures_leave_the_executor_unchanged) {
         none.upload_input(x, batch);
         test::throws<std::invalid_argument>([&] { none.refit_grids(); });
     }
+}
+
+// FP64 refit of a first layer on the uploaded network input: the CPU refit's
+// operations on the same samples (knots within an FMA contraction of the
+// parity build's, which are bitwise the CPU's), coefficients within 1e-11.
+TEST(fp64_refit_on_the_network_input_follows_the_cpu) {
+    for (auto path : {SplinePath::Dense, SplinePath::Sparse})
+        for (std::size_t degree : {1u, 3u}) {
+            kan::Network network({seeded(kan::Layer(9, 5, grids(degree, degree + 8, 9)), 0.4)});
+            ResidentTestScope scope(path);
+            const std::size_t batch = 777;
+            const auto x = refit_samples(batch, 9, 0.2);
+            ResidentNetwork gpu(network, batch);
+            gpu.upload_input(x, batch);
+            for (double eps : {0.0, 0.02, 1.0}) {
+                auto cpu = gpu.download_parameters();
+                gpu.refit_grids(kan::GridRefit{0, eps});
+                cpu.refit_grids(x, batch, kan::GridRefit{0, eps});
+                const auto refit = gpu.download_parameters();
+                compare(spline_of(refit, 0).knots, spline_of(cpu, 0).knots, {1e-15, 0}, "f64 knots");
+                compare(std::get<kan::Layer>(refit.layers()[0]).coefficients(), std::get<kan::Layer>(cpu.layers()[0]).coefficients(),
+                        {1e-11, 1e-12}, "f64 refit coefficients");
+            }
+        }
 }
 
 int main() { return kan::cuda::available() ? test::run() : 0; }

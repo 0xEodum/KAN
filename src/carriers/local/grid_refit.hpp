@@ -7,9 +7,11 @@
 // precision; only its inputs (activations) and the final rounding differ.
 //
 // Per input, with its n samples sorted ascending:
-// - knots (refit_knot): pykan's update_grid_from_samples on [x_0, x_(n-1)],
-//   interior knot j = eps*(x_0 + h*j) + (1 - eps)*x_(floor(n/G*j)),
-//   h = (x_(n-1) - x_0)/G, endpoints the extreme samples (clamped);
+// - knots (refit_knot): pykan's update_grid_from_samples on the domain
+//   [a, c] = [x_0 - m*r, x_(n-1) + m*r], r = x_(n-1) - x_0 (m the relative
+//   margin; pykan's own grid extends k intervals beyond the samples instead):
+//   interior knot j = eps*(a + h*j) + (1 - eps)*x_(floor(n/G*j)), h = (c - a)/G,
+//   endpoints a and c (clamped; m = 0: the extreme samples);
 // - least squares: min sum_b (s(x_b) - f(x_b))^2 + ridge*sum c^2 with f the
 //   current edge function, i.e. (B^T B + ridge I) c = B^T f, B^T f = M c_old
 //   with the cross Gram matrix M of the new and the current basis. Sorted
@@ -26,10 +28,13 @@
 namespace kan::detail {
 
 // pykan's knot j of `intervals` from n >= 1 sorted samples (sorted(k) is
-// sample k). Endpoints are the extreme samples exactly.
+// sample k) with the relative margin m >= 0. With m = 0 the endpoints are the
+// extreme samples exactly.
 template<class Load>
-KAN_HOST_DEVICE inline double refit_knot(const Load& sorted, std::size_t n, std::size_t intervals, std::size_t j, double eps) {
-    const double lo = sorted(0), hi = sorted(n - 1);
+KAN_HOST_DEVICE inline double refit_knot(const Load& sorted, std::size_t n, std::size_t intervals, std::size_t j, double eps,
+                                         double margin) {
+    const double first = sorted(0), last = sorted(n - 1), extension = margin * (last - first);
+    const double lo = first - extension, hi = last + extension;
     if (j == 0) return lo;
     if (j >= intervals) return hi;
     auto rank = static_cast<std::size_t>(static_cast<double>(n) / static_cast<double>(intervals) * static_cast<double>(j));
