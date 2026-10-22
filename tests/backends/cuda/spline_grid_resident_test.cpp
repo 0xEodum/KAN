@@ -132,6 +132,12 @@ TEST(per_input_layers_match_the_cpu) {
                     gpu.forward();
                     REQUIRE(gpu.download_output().empty());
                 }
+    // Rows too long for the FP32 stage (above 85 terms): the unstaged kernel path.
+    for (auto p : precisions) {
+        ResidentTestScope scope(SplinePath::Dense);
+        ResidentNetwork gpu(kan::Network({seeded(kan::Layer(5, 3, grids(3, 120, 5)), 0.6)}), 64, p);
+        check_against_cpu(gpu, 64, 0.01, p, std::string(name(p)) + " long rows");
+    }
 }
 
 // Identical grids repeated per input give bitwise the shared layer's results.

@@ -155,6 +155,27 @@ template<class T> __device__ void write_silu(SiluRows<T> silu, std::size_t index
 // stage but not written; the backward pass recomputes it.
 // Residual (backlog M3): the pass that reads X also writes the layer's S and
 // silu' rows; the instantiation without it is the kernel as before.
+// Per-input spline grids (backlog M6): row r = (sample, input) of a layer
+// reads the knot vector at knots + (r % inputs) * stride. The input index of a
+// grid-stride loop advances incrementally (one 64-bit remainder per thread).
+struct KnotRows {
+    std::size_t inputs, stride;
+};
+template<bool Grids> struct RowInput {
+    __device__ RowInput(std::size_t, std::size_t, const KnotRows&) {}
+    __device__ void advance(const KnotRows&) {}
+    template<class T> __device__ const T* knots(const T* knots, const KnotRows&) const { return knots; }
+};
+template<> struct RowInput<true> {
+    std::size_t input, step; // the row's input and the loop step's remainder, both < inputs
+    __device__ RowInput(std::size_t row, std::size_t loop_step, const KnotRows& rows)
+        : input(row % rows.inputs), step(loop_step % rows.inputs) {}
+    __device__ void advance(const KnotRows& rows) {
+        input += step;
+        if (input >= rows.inputs) input -= rows.inputs;
+    }
+    template<class T> __device__ const T* knots(const T* knots, const KnotRows& rows) const { return knots + input * rows.stride; }
+};
 template<detail::BasisKind Kind, bool Residual, class T>
 __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_derivatives,
                              std::size_t count, detail::BasisViewOf<T> basis, unsigned tile_rows, SiluRows<T> silu,
@@ -208,6 +229,59 @@ __global__ void basis_kernel(const T* input, T* values, T* derivatives, T* log_d
             values[offset + i] = stage[i];
             if (derivatives) derivatives[offset + i] = stage[plane + i];
             if (basis.trainable) log_derivatives[offset + i] = stage[2 * plane + i];
+        }
+        __syncthreads();
+    }
+}
+// B-spline layers with per-input grids (backlog M6): basis_kernel's B-spline
+// rows with each row's own knot vector (a separate kernel, so the
+// basis_kernel instantiations are unchanged).
+template<bool Residual, class T>
+__global__ void basis_grid_kernel(const T* input, T* values, T* derivatives, std::size_t count, detail::BasisViewOf<T> basis,
+                                  unsigned tile_rows, SiluRows<T> silu, int* status, KnotRows knot_rows) {
+    const StatusGuard guard{status};
+    const auto terms = basis.terms;
+    if (tile_rows == 0) {
+        const auto stride = static_cast<std::size_t>(gridDim.x) * blockDim.x;
+        auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+        for (RowInput<true> at(index, stride, knot_rows); index < count; index += stride, at.advance(knot_rows)) {
+            const auto row = index * terms;
+            const T x = input[index];
+            const T* knots = at.knots(basis.knots, knot_rows);
+            if (std::is_same_v<T, double> || derivatives) {
+                auto view = basis;
+                view.knots = knots;
+                detail::basis_terms_for<detail::BasisKind::BSpline>(view, x, detail::BasisRowOf<T>{values + row, derivatives + row, nullptr, nullptr}, guard);
+            } else {
+                // FP32/TF32 rows beyond the stage (backlog C13): values only, as basis_kernel.
+                T v[detail::max_spline_degree+1], d[detail::max_spline_degree+1];
+                for (std::size_t k = 0; k < terms; ++k) values[row + k] = 0;
+                const auto g = detail::spline_span_terms(knots, terms, basis.degree, x, v, d, guard);
+                if (g != terms) for (std::size_t r = 0; r <= basis.degree; ++r) values[row + g + r] = v[r];
+            }
+            if constexpr (Residual) write_silu(silu, index, x, guard);
+        }
+        return;
+    }
+    T* stage = stage_memory<T>();
+    const auto plane = static_cast<std::size_t>(tile_rows) * terms;
+    const auto step = static_cast<std::size_t>(gridDim.x) * tile_rows;
+    auto base = static_cast<std::size_t>(blockIdx.x) * tile_rows;
+    for (RowInput<true> at(base + threadIdx.x, step, knot_rows); base < count; base += step, at.advance(knot_rows)) {
+        const auto rows = count - base < tile_rows ? count - base : static_cast<std::size_t>(tile_rows);
+        if (threadIdx.x < rows) {
+            const auto row = threadIdx.x * terms;
+            const T x = input[base + threadIdx.x];
+            auto view = basis;
+            view.knots = at.knots(basis.knots, knot_rows);
+            detail::basis_terms_for<detail::BasisKind::BSpline>(view, x, detail::BasisRowOf<T>{stage + row, stage + plane + row, nullptr, nullptr}, guard);
+            if constexpr (Residual) write_silu(silu, base + threadIdx.x, x, guard);
+        }
+        __syncthreads();
+        const auto length = rows * terms, offset = base * terms;
+        for (auto i = static_cast<std::size_t>(threadIdx.x); i < length; i += blockDim.x) {
+            values[offset + i] = stage[i];
+            if (derivatives) derivatives[offset + i] = stage[plane + i];
         }
         __syncthreads();
     }
@@ -331,10 +405,24 @@ template<class T, unsigned Degree> struct SplineDifferences {
     const T* knots;
     std::size_t terms, degree;
 };
+// Per-input grids (backlog M6): row r reads the knots of input r % inputs.
+template<class T, unsigned Degree> struct GridSplineDifferences {
+    const T* input;
+    const T* knots;
+    std::size_t terms, degree;
+    KnotRows rows;
+};
 template<class Source> constexpr bool difference_rows = false;
 template<class T, unsigned Degree> constexpr bool difference_rows<SplineDifferences<T, Degree>> = true;
+template<class T, unsigned Degree> constexpr bool difference_rows<GridSplineDifferences<T, Degree>> = true;
 template<class Source> constexpr unsigned difference_degree = 0;
 template<class T, unsigned Degree> constexpr unsigned difference_degree<SplineDifferences<T, Degree>> = Degree;
+template<class T, unsigned Degree> constexpr unsigned difference_degree<GridSplineDifferences<T, Degree>> = Degree;
+template<class Source> constexpr bool grid_rows = false;
+template<class T, unsigned Degree> constexpr bool grid_rows<GridSplineDifferences<T, Degree>> = true;
+template<class Source> __device__ KnotRows knot_rows_of(const Source& source) {
+    if constexpr (grid_rows<Source>) return source.rows; else return KnotRows{};
+}
 
 // One launch finishes a layer's backward: dx[r] = sum_k Phi'[r,k]*W[r,k] for
 // the rows r = (sample, input), then the `checked` parameter VJPs [dC | db]:
@@ -356,11 +444,14 @@ __global__ void backward_finish_kernel(Source source, const T* w, T* dx,
             constexpr std::size_t width = D ? D : detail::max_spline_degree;
             const auto span = source.terms-1;
             const std::size_t degree = D ? std::size_t{D} : source.degree;
-            for (auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; index < rows; index += stride) {
+            const auto knot_rows = knot_rows_of(source);
+            auto index = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+            RowInput<grid_rows<Source>> at(index, stride, knot_rows);
+            for (; index < rows; index += stride, at.advance(knot_rows)) {
                 T sum = 0;
                 if (degree != 0) {
                     T values[width+1], lower[width];
-                    const auto g = detail::spline_lower_terms(source.knots, source.terms, degree, source.input[index],
+                    const auto g = detail::spline_lower_terms(at.knots(source.knots, knot_rows), source.terms, degree, source.input[index],
                                                               values, lower, CheckedEarlier{});
                     if (g != source.terms) {
                         const T* row = w+index*span+g;
@@ -439,6 +530,17 @@ __global__ void spline_difference_kernel(const T* c, const T* scales, T* differe
         differences[e] = j+1 < terms ? detail::spline_derivative_coefficient(c[k-1], c[k], scales[j]) : T(0);
     }
 }
+// Per-input grids (backlog M6): the knot scales of input i at
+// scales[i*(terms-1) + j-1], i = q % inputs for edge q = (o, i).
+template<class Index, class T>
+__global__ void spline_grid_difference_kernel(const T* c, const T* scales, T* differences, Index count, Index span, Index terms,
+                                              Index inputs) {
+    const auto stride = static_cast<Index>(gridDim.x)*blockDim.x;
+    for (auto e = static_cast<Index>(blockIdx.x)*blockDim.x+threadIdx.x; e < count; e += stride) {
+        const Index q = e/span, j = e-q*span, k = q*terms+j+1;
+        differences[e] = j+1 < terms ? detail::spline_derivative_coefficient(c[k-1], c[k], scales[(q%inputs)*(terms-1)+j]) : T(0);
+    }
+}
 // Sparse B-spline path (backlog C5). At any input only degree+1 = P of a
 // spline's terms can be nonzero, so a sparse layer keeps per input and sample
 // the index g of the first of them (`first`, unsigned [inputs][capacity]) and
@@ -486,9 +588,9 @@ template<class T> constexpr unsigned spline_tile_samples = std::is_same_v<T, dou
 // instead of the P input derivatives.
 template<class T, unsigned P> constexpr unsigned sparse_derivative_rows = spline_difference_vjp<T> ? P-1 : P;
 template<class T> std::size_t sparse_derivative_count(unsigned width) { return spline_difference_vjp<T> ? width-1 : width; }
-template<unsigned P, bool Residual, class T>
-__global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
-                                    const T* knots, std::size_t terms, SiluRows<T> silu, int* status) {
+template<unsigned P, bool Residual, bool Grids, class T>
+__device__ __forceinline__ void spline_rows(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
+                                            const T* knots, std::size_t terms, SiluRows<T> silu, int* status, std::size_t knot_stride) {
     constexpr unsigned TS = spline_tile_samples<T>, D = sparse_derivative_rows<T, P>;
     __shared__ unsigned first[32][TS+1];
     __shared__ T values[P][32][TS+1], derivatives[D ? D : 1][32][TS+1];
@@ -502,8 +604,10 @@ __global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::siz
             const T x = input[b*inputs+i];
             T v[P], d[P];
             std::size_t g;
-            if constexpr (spline_difference_vjp<T>) g = detail::spline_lower_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
-            else g = detail::spline_span_terms(knots, terms, std::size_t{P-1}, x, v, d, guard);
+            const T* t = knots;
+            if constexpr (Grids) t += i*knot_stride;
+            if constexpr (spline_difference_vjp<T>) g = detail::spline_lower_terms(t, terms, std::size_t{P-1}, x, v, d, guard);
+            else g = detail::spline_span_terms(t, terms, std::size_t{P-1}, x, v, d, guard);
             if (g == terms) {
                 g = 0;
                 for (unsigned j = 0; j < P; ++j) { v[j] = 0; d[j] = 0; }
@@ -535,6 +639,18 @@ __global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::siz
         }
         __syncthreads();
     }
+}
+
+template<unsigned P, bool Residual, class T>
+__global__ void spline_basis_kernel(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
+                                    const T* knots, std::size_t terms, SiluRows<T> silu, int* status) {
+    spline_rows<P, Residual, false>(input, rows, batch, inputs, knots, terms, silu, status, 0);
+}
+// Per-input grids (backlog M6): input i reads knots + i*knot_stride.
+template<unsigned P, bool Residual, class T>
+__global__ void spline_grid_basis_kernel(const T* input, SparseRows<T> rows, std::size_t batch, std::size_t inputs,
+                                         const T* knots, std::size_t terms, SiluRows<T> silu, int* status, std::size_t knot_stride) {
+    spline_rows<P, Residual, true>(input, rows, batch, inputs, knots, terms, silu, status, knot_stride);
 }
 
 // Forward: a block of stage_threads samples (lane = sample) and
@@ -1993,6 +2109,9 @@ struct ExpansionPlan {
     // FP32/TF32 B-spline layers of degree >= 1 (backlog C13): the knot scales
     // s_j = p/(t_{j+p} - t_j), j = 1..terms-1, of the derivative coefficients.
     std::size_t knot_scales = 0;
+    // Per-input spline grids (backlog M6): `grids` knot vectors of knot_stride
+    // knots each (grids = 1: the shared grid, knot_stride 0 in the kernels).
+    std::size_t grids = 1, knot_stride = 0;
     // Phi' rows kept from forward to backward; otherwise (backlog C3) the
     // backward finish recomputes them from the layer input (no derivatives region).
     bool stored_derivatives = true;
@@ -2156,8 +2275,10 @@ template<class T, class C> void check_basis(const C& c) {
             }
         } else if constexpr (std::is_same_v<C, BSplineConfig>) {
             representable<T>(c.knots);
+            // Within each grid (backlog M6: one per input, or one shared).
+            const auto n = c.knots.size()/c.grids;
             for (std::size_t k = 0; k + 1 < c.knots.size(); ++k)
-                if (c.knots[k] < c.knots[k+1] && !(static_cast<T>(c.knots[k]) < static_cast<T>(c.knots[k+1]))) invalid();
+                if ((k+1)%n != 0 && c.knots[k] < c.knots[k+1] && !(static_cast<T>(c.knots[k]) < static_cast<T>(c.knots[k+1]))) invalid();
         } else if constexpr (std::is_same_v<C, MexicanHatConfig>) {
             representable<T>(c.centers);
             for (double scale : c.scales) narrow_positive<T>(scale);
@@ -2183,9 +2304,12 @@ template<class T> detail::RationalScalars<T> device_scalars(const RationalConfig
 }
 
 template<class T> Plan<T> make_plan(const Layer& layer, const BasisEdges& edges, std::size_t offset) {
-    if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis); spline && spline->grids != 1)
-        throw std::invalid_argument("resident per-input spline grids are not supported yet");
-    return BasisPlan<T>{{parameter_block(layer, 0, offset), device_view<T>(edges.basis)}};
+    BasisPlan<T> plan{{parameter_block(layer, 0, offset), device_view<T>(edges.basis)}};
+    if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis); spline && spline->grids != 1) {
+        plan.expansion.grids = spline->grids;
+        plan.expansion.knot_stride = spline->knots.size()/spline->grids;
+    }
+    return plan;
 }
 template<class T> Plan<T> make_plan(const Layer& layer, const TrainableRbfEdges& edges, std::size_t offset) {
     return TrainableRbfPlan<T>{{parameter_block(layer, product(layer.terms(), 2), offset), device_view<T>(edges.basis)}};
@@ -2263,13 +2387,15 @@ template<class T> void reserve_sparse(SparseSplinePlan& p, const ParameterBlock&
     p.sort_storage = reserve((p.sort_bytes+sizeof(T)-1)/sizeof(T));
 }
 template<class T> void reserve_knot_scales(ExpansionPlan<T>& p, Reservation<T>& reserve) {
-    if constexpr (spline_difference_vjp<T>) if (p.view.degree != 0) p.knot_scales = reserve(p.block.terms-1);
+    if constexpr (spline_difference_vjp<T>) if (p.view.degree != 0) p.knot_scales = reserve(product(p.grids, p.block.terms-1));
 }
+// Knots of every grid (backlog M6).
+template<class T> std::size_t knot_count(const ExpansionPlan<T>& p) { return product(p.grids, p.block.terms+p.view.degree+1); }
 template<class T> void reserve_workspace(BasisPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
     if (plan.sparse.active) {
         reserve_sparse(plan.sparse, p.block, capacity, reserve);
-        p.knots = reserve(p.block.terms+p.view.degree+1);
+        p.knots = reserve(knot_count(p));
         reserve_knot_scales(p, reserve);
         return;
     }
@@ -2280,7 +2406,7 @@ template<class T> void reserve_workspace(BasisPlan<T>& plan, std::size_t capacit
     if (p.view.kind == detail::BasisKind::GaussianRbf || p.view.kind == detail::BasisKind::MexicanHat)
         p.centers = reserve(p.block.terms);
     if (p.view.kind == detail::BasisKind::MexicanHat) p.scales = reserve(p.block.terms);
-    if (p.view.kind == detail::BasisKind::BSpline) { p.knots = reserve(p.block.terms+p.view.degree+1); reserve_knot_scales(p, reserve); }
+    if (p.view.kind == detail::BasisKind::BSpline) { p.knots = reserve(knot_count(p)); reserve_knot_scales(p, reserve); }
 }
 template<class T> void reserve_workspace(TrainableRbfPlan<T>& plan, std::size_t capacity, Reservation<T>& reserve) {
     auto& p = plan.expansion;
@@ -2709,13 +2835,18 @@ template<class T> void upload_carrier(Context<T>& s, const BasisPlan<T>& plan, c
         if constexpr (std::is_same_v<C, GaussianRbfConfig> || std::is_same_v<C, MexicanHatConfig>) s.upload(s.ptr(p.centers), {c.centers.data(), terms});
         if constexpr (std::is_same_v<C, MexicanHatConfig>) s.upload(s.ptr(p.scales), {c.scales.data(), terms});
         if constexpr (std::is_same_v<C, BSplineConfig>) {
-            s.upload(s.ptr(p.knots), {c.knots.data(), terms+c.degree+1});
+            s.upload(s.ptr(p.knots), {c.knots.data(), knot_count(p)});
             if constexpr (spline_difference_vjp<T>) {
                 if (c.degree != 0) {
-                    // Knot scales in T from the rounded knots, as the device would compute them.
-                    std::vector<double> scales(terms-1);
-                    for (std::size_t j = 1; j < terms; ++j)
-                        scales[j-1] = detail::spline_derivative_scale(c.degree, narrow<T>(c.knots[j+c.degree]), narrow<T>(c.knots[j]));
+                    // Knot scales in T from the rounded knots, as the device would compute
+                    // them; grid by grid (backlog M6), each grid's knots t[g*n ...].
+                    const auto n = terms+c.degree+1;
+                    std::vector<double> scales(product(p.grids, terms-1));
+                    for (std::size_t g = 0; g < p.grids; ++g) {
+                        const double* t = c.knots.data()+g*n;
+                        for (std::size_t j = 1; j < terms; ++j)
+                            scales[g*(terms-1)+j-1] = detail::spline_derivative_scale(c.degree, narrow<T>(t[j+c.degree]), narrow<T>(t[j]));
+                    }
                     s.upload(s.ptr(p.knot_scales), scales);
                 }
             }
@@ -2814,7 +2945,16 @@ void expansion_forward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j, 
     // With the residual branch (backlog M3) the same pass writes S and silu'.
     const bool residual = b.residual_count != 0;
     const auto silu = residual ? silu_rows(s, b) : SiluRows<T>{nullptr, nullptr};
-    detail::visit_basis_family(basis.kind, [&](auto family) {
+    if (p.knot_stride) {
+        // Per-input spline grids (backlog M6).
+        const auto launch = [&](auto with_residual) {
+            basis_grid_kernel<decltype(with_residual)::value><<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads,
+                                                                shared, s.stream>>>(
+                s.ptr(s.activation[j]), s.ptr(p.values), p.stored_derivatives ? s.ptr(p.derivatives) : nullptr, count, basis,
+                tile_rows, silu, s.status, KnotRows{b.inputs, p.knot_stride});
+        };
+        if (residual) launch(std::true_type{}); else launch(std::false_type{});
+    } else detail::visit_basis_family(basis.kind, [&](auto family) {
         const auto launch = [&](auto with_residual) {
             basis_kernel<decltype(family)::value, decltype(with_residual)::value>
                 <<<blocks(count, tile_rows ? tile_rows : stage_threads), stage_threads, shared, s.stream>>>(
@@ -2858,7 +2998,15 @@ template<class T> void spline_differences(Context<T>& s, const ExpansionPlan<T>&
     const T* c = s.ptr(s.parameters+b.offset);
     // The kernel also forms coefficient indices up to edges*terms, and its
     // grid-stride index must not wrap past count.
-    if (product(edges, b.terms) <= std::numeric_limits<unsigned>::max()-std::size_t{blocks(count)}*256)
+    const bool narrow_index = product(edges, b.terms) <= std::numeric_limits<unsigned>::max()-std::size_t{blocks(count)}*256;
+    if (p.knot_stride) { // per-input knot scales (backlog M6)
+        if (narrow_index)
+            spline_grid_difference_kernel<unsigned><<<blocks(count), 256, 0, s.stream>>>(c, s.ptr(p.knot_scales), s.ptr(s.differences),
+                static_cast<unsigned>(count), static_cast<unsigned>(span), static_cast<unsigned>(b.terms), static_cast<unsigned>(b.inputs));
+        else
+            spline_grid_difference_kernel<std::size_t><<<blocks(count), 256, 0, s.stream>>>(c, s.ptr(p.knot_scales), s.ptr(s.differences),
+                count, span, b.terms, b.inputs);
+    } else if (narrow_index)
         spline_difference_kernel<unsigned><<<blocks(count), 256, 0, s.stream>>>(c, s.ptr(p.knot_scales), s.ptr(s.differences),
             static_cast<unsigned>(count), static_cast<unsigned>(span), static_cast<unsigned>(b.terms));
     else
@@ -2894,8 +3042,13 @@ template<class T> void sparse_forward(Context<T>& s, const BasisPlan<T>& plan, s
         const dim3 tiles(static_cast<unsigned>((b.inputs-1)/32+1),
                          static_cast<unsigned>(std::min<std::size_t>((s.batch-1)/spline_tile_samples<T>+1, 65535)));
         const auto launch = [&](auto with_residual) {
-            spline_basis_kernel<P, decltype(with_residual)::value><<<tiles, stage_threads, 0, s.stream>>>(
-                s.ptr(s.activation[j]), rows, s.batch, b.inputs, s.ptr(plan.expansion.knots), b.terms, silu, s.status);
+            if (plan.expansion.knot_stride) // per-input grids (backlog M6)
+                spline_grid_basis_kernel<P, decltype(with_residual)::value><<<tiles, stage_threads, 0, s.stream>>>(
+                    s.ptr(s.activation[j]), rows, s.batch, b.inputs, s.ptr(plan.expansion.knots), b.terms, silu, s.status,
+                    plan.expansion.knot_stride);
+            else
+                spline_basis_kernel<P, decltype(with_residual)::value><<<tiles, stage_threads, 0, s.stream>>>(
+                    s.ptr(s.activation[j]), rows, s.batch, b.inputs, s.ptr(plan.expansion.knots), b.terms, silu, s.status);
         };
         if (residual) launch(std::true_type{}); else launch(std::false_type{});
         check(cudaGetLastError(), "resident sparse basis launch");
@@ -3133,7 +3286,11 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
     if (differences) {
         if constexpr (spline_difference_vjp<T>) {
             const auto launch = [&](auto degree) {
-                finish(SplineDifferences<T, decltype(degree)::value>{s.ptr(s.activation[j]), s.ptr(p.knots), b.terms, p.view.degree});
+                if (p.knot_stride) // per-input grids (backlog M6)
+                    finish(GridSplineDifferences<T, decltype(degree)::value>{s.ptr(s.activation[j]), s.ptr(p.knots), b.terms, p.view.degree,
+                                                                              KnotRows{b.inputs, p.knot_stride}});
+                else
+                    finish(SplineDifferences<T, decltype(degree)::value>{s.ptr(s.activation[j]), s.ptr(p.knots), b.terms, p.view.degree});
             };
             switch (p.view.degree) {
             case 1: launch(std::integral_constant<unsigned, 1>{}); break;
