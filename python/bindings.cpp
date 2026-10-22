@@ -647,27 +647,24 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("outputs", &kan::Network::outputs)
         .def("insert_knot", &kan::Network::insert_knot, py::arg("layer_index"), py::arg("x"),
              py::call_guard<py::gil_scoped_release>())
-        // samples: a vector in that layer's input domain (not propagated), or a
-        // network input batch (batch, inputs) propagated to the layer (backlog M6).
-        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) -> py::object {
+        // samples: a vector in that layer's input domain (not propagated).
+        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) {
             const auto data=array_data(samples);
-            if (samples.ndim() == 2) {
-                const auto batch = input_batch(samples, model.inputs(), std::nullopt);
-                std::vector<double> knots;
-                {
-                    py::gil_scoped_release release;
-                    knots = model.adapt_grid(index, data, batch);
-                }
-                return owned(knots, {axis(knots.size())});
-            }
-            if(samples.ndim()!=1)throw py::value_error("samples must be a vector or have shape (batch, inputs)");
-            double knot = 0;
+            if(samples.ndim()!=1)throw py::value_error("samples must be a vector (network input: adapt_grid_from_input)");
+            py::gil_scoped_release release;return model.adapt_grid(index,data);
+        }, py::arg("layer_index"), py::arg("samples").noconvert())
+        // Backlog M6: a network input batch (batch, inputs) propagated to the
+        // layer; returns the inserted knot of every grid.
+        .def("adapt_grid_from_input", [](kan::Network& model, std::size_t index, py::array input) {
+            const auto batch = input_batch(input, model.inputs(), std::nullopt);
+            const auto data = array_data(input);
+            std::vector<double> knots;
             {
                 py::gil_scoped_release release;
-                knot = model.adapt_grid(index, data);
+                knots = model.adapt_grid(index, data, batch);
             }
-            return py::float_(knot);
-        }, py::arg("layer_index"), py::arg("samples").noconvert())
+            return owned(knots, {axis(knots.size())});
+        }, py::arg("layer_index"), py::arg("input").noconvert())
         .def("refit_grids", [](kan::Network& model, py::array input, const kan::GridRefit& options) {
             const auto batch = input_batch(input, model.inputs(), std::nullopt);
             const auto data = array_data(input);

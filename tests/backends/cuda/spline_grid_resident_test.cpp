@@ -341,4 +341,37 @@ TEST(fp64_refit_on_the_network_input_follows_the_cpu) {
         }
 }
 
+// Review H1: a nonfinite activation (overflow in a preceding map) reaching a
+// refit layer raises std::overflow_error and leaves the executor unchanged and
+// usable; FP32 knots beyond the range are rejected as such.
+TEST(nonfinite_refit_samples_are_rejected) {
+    for (auto p : precisions) {
+        kan::Network network({kan::NetworkLayer(kan::InputMap(2, kan::AffineMap{{10, 1}, {0, 0}})),
+                              kan::NetworkLayer(kan::InputMap(2, kan::LayerNormMap{})),
+                              kan::NetworkLayer(seeded(kan::Layer(2, 3, grids(1, 6, 2)), 0.3))});
+        ResidentNetwork gpu(network, 8, p);
+        std::vector<double> x(16);
+        for (std::size_t k = 0; k < x.size(); ++k) x[k] = 0.1 * double(k) - 0.7;
+        const double huge = p == Precision::Float64 ? 1e308 : 3e38;
+        x[2] = huge; // input 0 of sample 1: 10*huge overflows, LayerNorm then gives NaN
+        gpu.upload_input(x, 8);
+        const auto before = gpu.download_parameters();
+        test::throws<std::overflow_error>([&] { gpu.refit_grids(); });
+        const auto after = gpu.download_parameters();
+        REQUIRE(spline_of(after, 2) == spline_of(before, 2));
+        x[2] = 0.25;
+        gpu.upload_input(x, 8);
+        gpu.refit_grids();
+        gpu.forward();
+    }
+    // FP32: samples spanning [-3.4e38, 0] give a left endpoint beyond the range with the margin.
+    for (auto p : {Precision::Float32, Precision::TensorFloat32}) {
+        kan::Network network({seeded(kan::Layer(1, 2, grids(1, 6, 1)), 0.3)});
+        ResidentNetwork gpu(network, 4, p);
+        gpu.upload_input(std::vector<double>{-3.4e38, -1e38, 0, -5}, 4);
+        try { gpu.refit_grids(); REQUIRE(false); }
+        catch (const std::invalid_argument& e) { REQUIRE(std::string(e.what()).find("singular") == std::string::npos); }
+    }
+}
+
 int main() { return kan::cuda::available() ? test::run() : 0; }

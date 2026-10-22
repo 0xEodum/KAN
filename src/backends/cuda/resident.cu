@@ -989,14 +989,16 @@ __global__ void spline_indices_kernel(unsigned* indices, std::size_t inputs, std
 // segmented radix sort; a shared grid also sorts all values for its knots),
 // refit_knots_kernel (one thread per grid), the runs of the sorted samples
 // with one first term on each grid (CUB run-length encoding of the run key),
-// refit_run_kernel (one thread per run: the run's products in sample order),
+// refit_run_kernel (one warp per run for degrees 0..3, one thread otherwise:
+// the run's products),
 // refit_factor_kernel (one thread per input: the band of the normal matrix
 // from its runs in order, ridge, Cholesky) and refit_solve_kernel (one thread
 // per (input, output): the right-hand side from its runs in order and the
 // banded solve; new coefficients rounded to T). Every sum has a fixed order:
 // deterministic, and in FP64 the CPU refit's operations on the same samples.
 // Status bits of a refit (refit_status reads them).
-constexpr int status_refit_interval = 8, status_refit_knots = 16, status_refit_singular = 32, status_refit_internal = 64;
+constexpr int status_refit_interval = 8, status_refit_knots = 16, status_refit_singular = 32, status_refit_internal = 64,
+              status_refit_nonfinite = 128;
 // New and current knots in double (the run keys) and in T (the products).
 template<class T> struct RefitGrids {
     const double* fresh;   // new knots, `fresh_grids` rows of `knots` values
@@ -1040,6 +1042,8 @@ __global__ void refit_knots_kernel(const T* sorted, std::size_t n, std::size_t g
             for (std::size_t k = 0; k < count; ++k) current_double[g*count+k] = current[g*count+k];
         if (g >= grids) continue;
         const RefitSample<T> load{sorted+g*n};
+        // The radix sort puts nonfinite values (NaN, +-inf) at the ends (review H1).
+        if (!finite_value(load(0)) || !finite_value(load(n-1))) { atomicOr(status, status_refit_nonfinite); continue; }
         if (!(load(0) < load(n-1))) atomicOr(status, status_refit_interval);
         T* t = knots+g*count;
         for (std::size_t k = 0; k < count; ++k) {
@@ -1047,7 +1051,7 @@ __global__ void refit_knots_kernel(const T* sorted, std::size_t n, std::size_t g
             t[k] = static_cast<T>(detail::refit_knot(load, n, intervals, j, eps, margin));
             fresh[g*count+k] = t[k];
         }
-        bool increasing = true;
+        bool increasing = finite_value(t[degree]); // FP32: the margin can round the endpoint beyond the range (review L3)
         for (std::size_t k = degree; k < degree+intervals; ++k) increasing = increasing && t[k] < t[k+1] && finite_value(t[k+1]);
         if (!increasing) atomicOr(status, status_refit_knots);
         if (scales && degree != 0)
@@ -1107,6 +1111,7 @@ __global__ void refit_factor_kernel(const unsigned long long* keys, const unsign
         for (std::size_t k = 0; k < terms*P; ++k) band[k] = 0;
         for (auto r = static_cast<std::size_t>(first_run[i]); r < first_run[i+1]; ++r) {
             const auto g = static_cast<std::size_t>(keys[r]/span%span);
+            if (g >= terms) continue; // not for finite samples (all inside the new domain)
             const double* nn = sums+2*P*P*r;
             for (std::size_t a = 0; a < P; ++a)
                 for (std::size_t q = a; q < P; ++q) band[(g+q)*P+(q-a)] += nn[a*P+q];
@@ -1118,7 +1123,7 @@ __global__ void refit_factor_kernel(const unsigned long long* keys, const unsign
 // t = i*chunk + (o - o0): the right-hand side sum_runs sum M c[o,i,:] (runs in
 // order; rhs[(i*terms + k)*chunk + o - o0], outputs fastest), the banded
 // solve, and the coefficients rounded to T. Chunks bound the double
-// right-hand-side workspace (refit_chunk outputs at a time).
+// right-hand-side workspace (refit_outputs outputs at a time).
 template<class T>
 __global__ void refit_solve_kernel(const unsigned long long* keys, const unsigned* first_run, const double* sums,
                                    const double* bands, double* rhs, const T* current, T* fresh, std::size_t inputs,
@@ -1135,7 +1140,7 @@ __global__ void refit_solve_kernel(const unsigned long long* keys, const unsigne
         for (auto r = static_cast<std::size_t>(first_run[i]); r < first_run[i+1]; ++r) {
             const auto key = keys[r];
             const auto gc = static_cast<std::size_t>(key%span), g = static_cast<std::size_t>(key/span%span);
-            if (gc == terms) continue;
+            if (gc == terms || g >= terms) continue;
             const double* no = sums+2*P*P*r+P*P;
             for (std::size_t a = 0; a < P; ++a) {
                 double sum = x[(g+a)*chunk];
@@ -2737,6 +2742,7 @@ struct ExecutorDevice {
     unsigned multiprocessors = 1; // cudaDevAttrMultiProcessorCount
     std::size_t l2_bytes = 0;     // cudaDevAttrL2CacheSize
     std::size_t shared_optin = 0; // cudaDevAttrMaxSharedMemoryPerBlockOptin
+    unsigned threads_per_multiprocessor = 0; // cudaDevAttrMaxThreadsPerMultiProcessor
 };
 ExecutorDevice executor_device() {
     ExecutorDevice d;
@@ -2749,6 +2755,8 @@ ExecutorDevice executor_device() {
         d.l2_bytes = static_cast<std::size_t>(value);
     if (cudaDeviceGetAttribute(&value, cudaDevAttrMaxSharedMemoryPerBlockOptin, device) == cudaSuccess)
         d.shared_optin = static_cast<std::size_t>(value);
+    if (cudaDeviceGetAttribute(&value, cudaDevAttrMaxThreadsPerMultiProcessor, device) == cudaSuccess && value > 0)
+        d.threads_per_multiprocessor = static_cast<unsigned>(value);
     return d;
 }
 // Knot staging of a dense per-input B-spline layer (backlog M6): the rows a
@@ -2787,9 +2795,11 @@ template<class T> void select_knot_stage(ExpansionPlan<T>& p, const ExecutorDevi
     p.grid_blocks = static_cast<unsigned>(std::min<std::size_t>(std::size_t{device.multiprocessors}*static_cast<unsigned>(resident), 65535));
 }
 // Sparse per-input layers (backlog M6): spline_grid_basis_kernel stages its
-// 32 knot rows when they fit the default 48 KiB with the kernel's static
-// shared memory (cudaFuncGetAttributes); otherwise it reads global memory.
-template<class T> void select_sparse_knot_stage(BasisPlan<T>& plan) {
+// 32 knot rows when they fit the device's per-block opt-in shared memory with
+// the kernel's static shared memory (cudaFuncGetAttributes; above the default
+// 48 KiB the kernel's dynamic limit is raised); otherwise it reads global
+// memory.
+template<class T> void select_sparse_knot_stage(BasisPlan<T>& plan, const ExecutorDevice& device) {
     auto& p = plan.expansion;
     if (!p.knot_stride) return;
     const auto pad = static_cast<unsigned>(p.knot_stride | 1);
@@ -2800,7 +2810,17 @@ template<class T> void select_sparse_knot_stage(BasisPlan<T>& plan) {
         const auto query = residual ? cudaFuncGetAttributes(&attributes, spline_grid_basis_kernel<P, true, T>)
                                     : cudaFuncGetAttributes(&attributes, spline_grid_basis_kernel<P, false, T>);
         if (query != cudaSuccess) { cudaGetLastError(); return; }
-        if (attributes.sharedSizeBytes + std::size_t{32}*pad*sizeof(T) <= (std::size_t{48} << 10)) p.knot_pad = pad;
+        const auto dynamic = std::size_t{32}*pad*sizeof(T);
+        const auto limit = std::max(std::size_t{48} << 10, device.shared_optin);
+        if (attributes.sharedSizeBytes + dynamic > limit) return;
+        if (attributes.sharedSizeBytes + dynamic > (std::size_t{48} << 10)) {
+            // The largest dynamic size any executor may need (a per-function attribute).
+            const auto most = static_cast<int>(limit-attributes.sharedSizeBytes);
+            const auto set = residual ? cudaFuncSetAttribute(spline_grid_basis_kernel<P, true, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, most)
+                                      : cudaFuncSetAttribute(spline_grid_basis_kernel<P, false, T>, cudaFuncAttributeMaxDynamicSharedMemorySize, most);
+            if (set != cudaSuccess) { cudaGetLastError(); return; }
+        }
+        p.knot_pad = pad;
     });
 }
 // Selection of the sparse B-spline path (backlog C5), per layer at
@@ -4095,10 +4115,11 @@ struct RefitSpace {
 };
 // Runs of a layer's sorted samples: at most min(batch, 2*terms+1) per input
 // (a monotone path through (first new term, first current term or outside)).
-// Outputs per refit_solve_kernel launch: bounds its right-hand sides to
-// inputs*terms*refit_chunk doubles (all outputs at once needed up to twice the
-// FP32 coefficients; 64 outputs keep inputs*64 threads per launch).
-constexpr std::size_t refit_chunk = 64;
+// Outputs per refit_solve_kernel launch (review L4): enough (input, output)
+// threads to fill the device once (multiprocessors x resident threads), but
+// right-hand sides (doubles, inputs x terms x outputs) of at most one sample
+// buffer (inputs x capacity values of T); all outputs at once needed up to
+// twice a layer's FP32 coefficients (arena +20% at 48 terms).
 inline std::size_t refit_runs(std::size_t inputs, std::size_t capacity, std::size_t terms) {
     return product(inputs, std::min(capacity, product(terms, 2)+1));
 }
@@ -4209,7 +4230,7 @@ struct Engine final : ResidentExecutor, Context<T> {
                 if (auto* basis = std::get_if<BasisPlan<T>>(&plan)) {
                     select_sparse(*basis, capacity, tensor_ops, device, testing::test_scope.path);
                     if (!basis->sparse.active) select_knot_stage(basis->expansion, device, basis->expansion.block.residual_count != 0);
-                    else select_sparse_knot_stage(*basis);
+                    else select_sparse_knot_stage(*basis, device);
                 }
                 if (auto* rbf = std::get_if<TrainableRbfPlan<T>>(&plan)) select_reduction(*rbf, device, testing::test_scope.reduction);
                 if (auto* wavelet = std::get_if<WaveletPlan<T>>(&plan)) select_wavelet_launch(*wavelet, capacity, device, testing::test_scope.wavelet);
@@ -4261,7 +4282,7 @@ struct Engine final : ResidentExecutor, Context<T> {
                 }
         if (difference_size) this->differences = reserve(difference_size);
         // Backlog M6: the device refit workspace, after every earlier region.
-        reserve_refit(reserve);
+        reserve_refit(reserve, device);
         graphs.reserve(max_graphs);
         const auto bytes = product(reserve.total, sizeof(T));
         if (auto* layout = testing::test_scope.layout) {
@@ -4374,7 +4395,15 @@ struct Engine final : ResidentExecutor, Context<T> {
     }
     using RefitIterator = thrust::transform_iterator<RefitKey<T>, thrust::counting_iterator<long long>>;
     static std::size_t double_elements(std::size_t count) { return (product(count, sizeof(double))+sizeof(T)-1)/sizeof(T); }
-    void reserve_refit(Reservation<T>& reserve) {
+    std::size_t refit_threads = 0; // multiprocessors x threads per multiprocessor
+    std::size_t refit_outputs(std::size_t inputs, std::size_t outputs, std::size_t terms) const {
+        const auto fill = (refit_threads+inputs-1)/inputs;
+        const auto memory = product(inputs, capacity)*sizeof(T)/(product(product(inputs, terms), sizeof(double)));
+        return std::min(outputs, std::max<std::size_t>(1, std::min(fill, memory)));
+    }
+    std::string refit_unavailable = "the network has no B-spline layer";
+    void reserve_refit(Reservation<T>& reserve, const ExecutorDevice& device) {
+        refit_threads = std::max<std::size_t>(std::size_t{device.multiprocessors}*device.threads_per_multiprocessor, 2048);
         std::size_t samples = 0, runs = 0, sums = 0, bands = 0, rhs = 0, knots = 0, scales = 0, backup = 0, inputs = 0;
         bool any = false, pooled = false;
         for (std::size_t j = 0; j < plans.size(); ++j) {
@@ -4388,16 +4417,24 @@ struct Engine final : ResidentExecutor, Context<T> {
             runs = std::max(runs, r);
             sums = std::max(sums, product(r, 2*P*P));
             bands = std::max(bands, product(product(b.inputs, b.terms), P));
-            rhs = std::max(rhs, product(product(b.inputs, b.terms), std::min(b.outputs, refit_chunk)));
+            rhs = std::max(rhs, product(product(b.inputs, b.terms), refit_outputs(b.inputs, b.outputs, b.terms)));
             knots = std::max(knots, knot_count(*p));
             scales = std::max(scales, knot_scale_count(*p));
             backup += knot_count(*p)+knot_scale_count(*p);
             inputs = std::max(inputs, b.inputs);
             pooled = pooled || (p->grids == 1 && b.inputs > 1);
             // Run keys (input, g, g') in 64 bits.
-            if (b.terms+1 > (std::size_t{1} << 21) || b.inputs > (std::size_t{1} << 21)) return;
+            if (b.terms+1 > (std::size_t{1} << 21) || b.inputs > (std::size_t{1} << 21)) {
+                refit_unavailable = "a layer's inputs or terms exceed the 21-bit run keys";
+                return;
+            }
         }
-        if (!any || samples > static_cast<std::size_t>(std::numeric_limits<int>::max()) || capacity == 0) return;
+        if (!any) return;
+        if (capacity == 0) { refit_unavailable = "capacity 0"; return; }
+        if (samples > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+            refit_unavailable = "inputs*capacity exceeds the 32-bit CUB item count";
+            return;
+        }
         const int items = static_cast<int>(samples);
         std::size_t bytes = 0, query = 0;
         check(cub::DeviceSegmentedRadixSort::SortKeys(nullptr, query, static_cast<const T*>(nullptr), static_cast<T*>(nullptr), items,
@@ -4442,7 +4479,10 @@ struct Engine final : ResidentExecutor, Context<T> {
     // Refits layer j from activation[j]: new coefficients into the active
     // region (a copy; the previous active region is `candidates`), new knots
     // and knot scales into the layer's regions.
-    void enqueue_refit(std::size_t j, const GridRefit& options) {
+    // Stage 1 (sort, knots) and stage 2 (runs, fit, solve, knot copy); the
+    // caller checks the status between them, so nonfinite samples or invalid
+    // knots never reach the run keys (review H1).
+    void enqueue_refit(std::size_t j, const GridRefit& options, bool second) {
         const auto& p = *spline_plan(j);
         const auto& b = p.block;
         const auto degree = p.view.degree, terms = b.terms, count = knot_count(p)/p.grids, inputs = b.inputs;
@@ -4452,6 +4492,13 @@ struct Engine final : ResidentExecutor, Context<T> {
         T* sorted = ptr(refit.sorted);
         auto* segments = refit_ptr<int>(refit.segments);
         void* storage = ptr(refit.storage);
+        auto* fresh = refit_ptr<double>(refit.fresh);
+        auto* current = refit_ptr<double>(refit.current);
+        const bool pooled = p.grids == 1 && inputs > 1;
+        if (second) {
+            enqueue_fit(p, options, pooled, items, xt, sorted, segments, storage, fresh, current);
+            return;
+        }
         transpose(*this, ptr(activation[j]), xt, batch, inputs, batch); // xt[i*batch + b]
         spline_segments_kernel<<<blocks(inputs), 256, 0, stream>>>(segments, inputs, batch, batch);
         check(cudaGetLastError(), "resident refit segment launch");
@@ -4461,7 +4508,6 @@ struct Engine final : ResidentExecutor, Context<T> {
                       static_cast<const int*>(segments), static_cast<const int*>(segments+inputs), 0, static_cast<int>(sizeof(T)*8), stream),
                   "resident refit sort");
         };
-        const bool pooled = p.grids == 1 && inputs > 1;
         if (pooled) {
             auto bytes = refit.storage_bytes;
             check(cub::DeviceRadixSort::SortKeys(storage, bytes, static_cast<const T*>(xt), sorted, items, 0, static_cast<int>(sizeof(T)*8), stream),
@@ -4469,13 +4515,21 @@ struct Engine final : ResidentExecutor, Context<T> {
         } else {
             per_input();
         }
-        auto* fresh = refit_ptr<double>(refit.fresh);
-        auto* current = refit_ptr<double>(refit.current);
         refit_knots_kernel<<<blocks(p.grids, 64), 64, 0, stream>>>(sorted, pooled ? all : batch, p.grids, terms-degree, degree,
             options.grid_eps, options.margin, ptr(refit.knots), knot_scale_count(p) ? ptr(refit.scales) : nullptr, fresh, ptr(p.knots), current,
             p.grids, status);
         check(cudaGetLastError(), "resident refit knot launch");
-        if (pooled) per_input();
+    }
+    void enqueue_fit(const ExpansionPlan<T>& p, const GridRefit& options, bool pooled, int items, T* xt, T* sorted, int* segments,
+                     void* storage, double* fresh, double* current) {
+        const auto& b = p.block;
+        const auto degree = p.view.degree, terms = b.terms, count = knot_count(p)/p.grids, inputs = b.inputs;
+        if (pooled) {
+            auto bytes = refit.storage_bytes;
+            check(cub::DeviceSegmentedRadixSort::SortKeys(storage, bytes, static_cast<const T*>(xt), sorted, items, static_cast<int>(inputs),
+                      static_cast<const int*>(segments), static_cast<const int*>(segments+inputs), 0, static_cast<int>(sizeof(T)*8), stream),
+                  "resident refit sort");
+        }
         // Runs of equal (input, first new term, first current term).
         const auto runs = refit_runs(inputs, batch, terms);
         auto* keys = refit_ptr<unsigned long long>(refit.keys);
@@ -4503,9 +4557,9 @@ struct Engine final : ResidentExecutor, Context<T> {
         else launch_runs(std::integral_constant<unsigned, 0>{});
         check(cudaGetLastError(), "resident refit run launch");
         auto* bands = refit_ptr<double>(refit.bands);
-        refit_factor_kernel<<<blocks(inputs, 64), 64, 0, stream>>>(keys, first_run, sums, inputs, terms, degree, options.ridge, bands, status);
+        refit_factor_kernel<<<blocks(inputs, 32), 32, 0, stream>>>(keys, first_run, sums, inputs, terms, degree, options.ridge, bands, status);
         check(cudaGetLastError(), "resident refit factor launch");
-        const auto chunk = std::min(b.outputs, refit_chunk);
+        const auto chunk = refit_outputs(b.inputs, b.outputs, b.terms);
         for (std::size_t o0 = 0; o0 < b.outputs; o0 += chunk) {
             refit_solve_kernel<<<blocks(inputs*chunk, 128), 128, 0, stream>>>(keys, first_run, sums, bands, refit_ptr<double>(refit.rhs),
                 ptr(candidates+b.offset), ptr(parameters+b.offset), inputs, b.outputs, o0, chunk, terms, degree, status);
@@ -4534,7 +4588,7 @@ struct Engine final : ResidentExecutor, Context<T> {
         }
         if (!any) throw std::invalid_argument("grid refit requires a network with B-spline layers");
         if (batch == 0) throw std::invalid_argument("grid refit needs samples");
-        if (!refit.available) throw std::invalid_argument("resident grid refit: inputs*capacity exceeds 32-bit sort indices");
+        if (!refit.available) throw std::invalid_argument("resident grid refit unavailable: " + refit_unavailable);
         const auto last = static_cast<std::size_t>(std::find(refits.rbegin(), refits.rend(), 1) - refits.rbegin());
         const auto end = plans.size()-last;
         // Atomic: knots and knot scales are backed up, coefficients go to a
@@ -4553,9 +4607,15 @@ struct Engine final : ResidentExecutor, Context<T> {
         try {
             for (std::size_t j = 0; j < end; ++j) {
                 if (refits[j]) {
-                    enqueue_refit(j, options);
-                    const int bits = read_status();
                     const auto where = "resident grid refit of layer " + std::to_string(j) + ": ";
+                    enqueue_refit(j, options, false);
+                    int bits = read_status();
+                    if (bits&1) throw std::overflow_error(where + "nonfinite activation before the layer");
+                    if (bits&status_refit_nonfinite) throw std::overflow_error(where + "nonfinite samples");
+                    if (!bits) {
+                        enqueue_refit(j, options, true);
+                        bits = read_status();
+                    }
                     if (bits&status_refit_interval) throw std::invalid_argument(where + "the samples of an input span no interval");
                     if (bits&status_refit_knots) throw std::invalid_argument(where + "knots coincide (repeated samples; raise grid_eps)");
                     if (bits&status_refit_singular)

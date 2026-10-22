@@ -64,8 +64,9 @@ class SplineGrid(unittest.TestCase):
         kan.refit_grid(manual, net.layers[0].forward(x))
         self.assertEqual(net.refit_grids(x), 1)
         self.assertEqual(net.layers[1].carrier.basis, manual.carrier.basis)
-        k = net.adapt_grid(1, x)
+        k = net.adapt_grid_from_input(1, x)
         self.assertEqual(k.shape, (2,))
+        with self.assertRaises(ValueError): net.adapt_grid(1, x)  # 2-D: use adapt_grid_from_input
 
     @unittest.skipUnless(kan.cuda_enabled and '--cuda' in sys.argv and kan.cuda_available(), 'CUDA build and device')
     def test_resident_refit(self):

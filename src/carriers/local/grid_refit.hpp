@@ -50,7 +50,7 @@ KAN_HOST_DEVICE inline double refit_knot(const Load& sorted, std::size_t n, std:
 // without the evaluation.
 template<class Scalar>
 KAN_HOST_DEVICE inline std::size_t spline_first_term(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x) {
-    if (x < t[degree] || x > t[terms]) return terms;
+    if (!(x >= t[degree] && x <= t[terms])) return terms; // NaN: outside
     std::size_t span = terms - 1;
     if (x != t[terms]) {
         std::size_t lo = degree, hi = terms;
@@ -70,7 +70,7 @@ KAN_HOST_DEVICE inline std::size_t spline_first_term(const Scalar* t, std::size_
 // (nothing written).
 template<class Scalar>
 KAN_HOST_DEVICE inline std::size_t spline_values(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x, Scalar* v) {
-    if (x < t[degree] || x > t[terms]) return terms;
+    if (!(x >= t[degree] && x <= t[terms])) return terms; // NaN: outside
     std::size_t span = terms - 1;
     if (x != t[terms]) {
         std::size_t lo = degree, hi = terms;
