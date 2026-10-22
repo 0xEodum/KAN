@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <optional>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -2364,6 +2365,10 @@ struct BasisPlan {
     using edges_type = BasisEdges;
     ExpansionPlan<T> expansion;
     SparseSplinePlan sparse;
+    // After a device grid refit (backlog M6): the layer's configuration with
+    // the refit knots, which replaces the snapshot's in downloads and in the
+    // upload structure check (the snapshot keeps its construction state).
+    std::optional<BSplineConfig> refit;
 };
 
 // Adds trainable shared centers/log widths (nonlinear block: centers, then
@@ -3836,7 +3841,8 @@ template<class T> NonlinearGradients download_nonlinear(Context<T>& s, const Rat
 
 // The trained carrier: the snapshot's configuration with current parameters.
 template<class T>
-Carrier download_carrier(Context<T>&, const BasisPlan<T>&, const BasisEdges& snapshot, std::vector<double> coefficients) {
+Carrier download_carrier(Context<T>&, const BasisPlan<T>& plan, const BasisEdges& snapshot, std::vector<double> coefficients) {
+    if (plan.refit) return BasisEdges{*plan.refit, std::move(coefficients)};
     return BasisEdges{snapshot.basis, std::move(coefficients)};
 }
 template<class T>
@@ -4061,7 +4067,12 @@ void with_matching_stage(const Plan<T>& plan, const NetworkLayer& snapshot, cons
             if (expected.residual().has_value() != actual->residual().has_value()) structure_mismatch(j, "residual branch presence");
         const auto* actual_kind = std::get_if<Kind>(&kind_of(*actual));
         if (!actual_kind) structure_mismatch(j, std::is_same_v<Stage, Layer> ? "carrier" : "map kind");
-        if (!same_structure(expected_kind, *actual_kind)) structure_mismatch(j, "fixed configuration");
+        bool same = true;
+        if constexpr (requires { p.refit; } && std::is_same_v<Kind, BasisEdges>)
+            same = p.refit ? actual_kind->basis == BasisConfig(*p.refit) : same_structure(expected_kind, *actual_kind);
+        else
+            same = same_structure(expected_kind, *actual_kind);
+        if (!same) structure_mismatch(j, "fixed configuration");
         f(p, *actual, *actual_kind);
     });
 }
@@ -4557,24 +4568,20 @@ struct Engine final : ResidentExecutor, Context<T> {
             sync();
             throw;
         }
-        // The snapshot's knots: exact widenings of the device's.
-        std::vector<NetworkLayer> layers(model.layers().begin(), model.layers().end());
-        std::vector<std::vector<double>> knots(plans.size());
+        // The layers' configurations with the refit knots (exact widenings of
+        // the device's); the snapshot itself is not copied (its coefficients
+        // are as large as the model: copying them cost 120 ms of a 140 ms
+        // 1024-wide refit).
+        std::vector<BSplineConfig> configs(plans.size());
         for (std::size_t j = 0; j < end; ++j)
             if (refits[j]) {
-                knots[j].resize(knot_count(*spline_plan(j)));
-                this->download(knots[j], ptr(spline_plan(j)->knots));
+                const auto& p = *spline_plan(j);
+                configs[j] = BSplineConfig{p.view.degree, std::vector<double>(knot_count(p)), p.grids};
+                this->download(configs[j].knots, ptr(p.knots));
             }
         sync();
         for (std::size_t j = 0; j < end; ++j)
-            if (refits[j]) {
-                auto& layer = std::get<Layer>(layers[j]);
-                const auto& edges = std::get<BasisEdges>(layer.carrier());
-                auto spline = std::get<BSplineConfig>(edges.basis);
-                spline.knots = std::move(knots[j]);
-                layer.set_carrier(BasisEdges{std::move(spline), edges.coefficients});
-            }
-        model = Network(std::move(layers));
+            if (refits[j]) std::get<BasisPlan<T>>(plans[j]).refit = std::move(configs[j]);
     }
 
     // Eager calls report through bits[0] and leave it clear, so that a

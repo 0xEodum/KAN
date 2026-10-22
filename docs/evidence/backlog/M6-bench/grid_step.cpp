@@ -9,6 +9,7 @@
 // Usage: grid_step <f64|f32|tf32> <widths, e.g. 256x256x256x10> <batch> <intervals> <degree>
 //                  <shared|replicated|input> <auto|dense|sparse> [windows=5] [mode=step|refit]
 // Build: scripts/link_harness.sh <build> docs/evidence/backlog/M6-bench/grid_step.cpp <exe> -Isrc
+//        (base c06b2ca: add -DM6_BASE; shared grids and step mode only)
 // CSV: precision,grid,path,widths,batch,intervals,degree,window,value_ms,hash
 #include "kan/families.hpp"
 #include "kan/resident.hpp"
@@ -49,7 +50,8 @@ kan::Network network(const std::vector<std::size_t>& w, std::size_t G, std::size
         return std::sqrt(-2 * std::log(u())) * std::cos(6.283185307179586 * u());
     };
     for (std::size_t j = 0; j + 1 < w.size(); ++j) {
-        kan::BSplineConfig c{p, uniform(p, G, -1, 1), 1};
+        kan::BSplineConfig c{p, uniform(p, G, -1, 1)};
+#ifndef M6_BASE
         if (grid == "replicated") c = kan::per_input_grids(c, w[j]);
         if (grid == "input") {
             c.knots.clear(); c.grids = w[j];
@@ -59,6 +61,7 @@ kan::Network network(const std::vector<std::size_t>& w, std::size_t G, std::size
                 c.knots.insert(c.knots.end(), t.begin(), t.end());
             }
         }
+#endif
         kan::Layer layer(w[j], w[j + 1], c);
         std::vector<double> coefficients(layer.coefficients().size()), bias(w[j + 1], 0.0);
         const double scale = 0.5 / std::sqrt(double(w[j]));
@@ -122,6 +125,7 @@ int main(int argc, char** argv) {
             r.synchronize();
             row(window, ms(t) / steps);
         }
+#ifndef M6_BASE
     } else if (mode == "refit") {
         // Device refit (per window: one refit, the executor otherwise idle).
         r.refit_grids(); r.synchronize();
@@ -142,5 +146,6 @@ int main(int argc, char** argv) {
             rebuilt.synchronize();
             row(window, ms(t));
         }
+#endif
     }
 }

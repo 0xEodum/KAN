@@ -111,10 +111,12 @@ template<unsigned Width, class Scalar>
 KAN_HOST_DEVICE bool refit_sample(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current, std::size_t current_terms,
                                   std::size_t degree, Scalar x, std::size_t g, std::size_t g_current, double* nn, double* no) {
     constexpr std::size_t Most = Width ? Width : max_spline_degree + 1;
-    const std::size_t P = Width ? Width : degree + 1;
+    // A compile-time degree keeps the Cox-de Boor scratch in registers (nvcc
+    // -Xptxas -v: 144-352 bytes of stack per thread with the runtime degree).
+    const std::size_t P = Width ? Width : degree + 1, d = P - 1;
     Scalar a[Most], c[Most];
-    const auto ga = spline_values(fresh, fresh_terms, degree, x, a);
-    const auto gc = spline_values(current, current_terms, degree, x, c);
+    const auto ga = spline_values(fresh, fresh_terms, d, x, a);
+    const auto gc = spline_values(current, current_terms, d, x, c);
     if (gc == current_terms)
         for (std::size_t q = 0; q < P; ++q) c[q] = 0;
     for (std::size_t r = 0; r < P; ++r) {
