@@ -1114,19 +1114,23 @@ __global__ void refit_factor_kernel(const unsigned long long* keys, const unsign
         if (!detail::band_cholesky(band, terms, degree, ridge)) atomicOr(status, status_refit_singular);
     }
 }
-// One thread per (input i, output o), t = i*outputs + o: the right-hand side
-// sum_runs sum M c[o,i,:] (runs in order; rhs[(i*terms + k)*outputs + o],
-// outputs fastest), the banded solve, and the coefficients rounded to T.
+// One thread per (input i, output o) of the output chunk [o0, o0 + chunk),
+// t = i*chunk + (o - o0): the right-hand side sum_runs sum M c[o,i,:] (runs in
+// order; rhs[(i*terms + k)*chunk + o - o0], outputs fastest), the banded
+// solve, and the coefficients rounded to T. Chunks bound the double
+// right-hand-side workspace (refit_chunk outputs at a time).
 template<class T>
 __global__ void refit_solve_kernel(const unsigned long long* keys, const unsigned* first_run, const double* sums,
                                    const double* bands, double* rhs, const T* current, T* fresh, std::size_t inputs,
-                                   std::size_t outputs, std::size_t terms, std::size_t degree, int* status) {
+                                   std::size_t outputs, std::size_t o0, std::size_t chunk, std::size_t terms, std::size_t degree,
+                                   int* status) {
     const auto P = degree+1;
     const auto span = static_cast<unsigned long long>(terms+1);
-    for (auto t = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; t < inputs*outputs; t += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
-        const auto i = t/outputs, o = t%outputs;
-        double* x = rhs+i*terms*outputs+o;
-        for (std::size_t k = 0; k < terms; ++k) x[k*outputs] = 0;
+    for (auto t = static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x; t < inputs*chunk; t += static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+        const auto i = t/chunk, o = o0+t%chunk;
+        if (o >= outputs) continue;
+        double* x = rhs+i*terms*chunk+t%chunk;
+        for (std::size_t k = 0; k < terms; ++k) x[k*chunk] = 0;
         const T* c = current+(o*inputs+i)*terms;
         for (auto r = static_cast<std::size_t>(first_run[i]); r < first_run[i+1]; ++r) {
             const auto key = keys[r];
@@ -1134,15 +1138,15 @@ __global__ void refit_solve_kernel(const unsigned long long* keys, const unsigne
             if (gc == terms) continue;
             const double* no = sums+2*P*P*r+P*P;
             for (std::size_t a = 0; a < P; ++a) {
-                double sum = x[(g+a)*outputs];
+                double sum = x[(g+a)*chunk];
                 for (std::size_t q = 0; q < P; ++q) sum += no[a*P+q]*static_cast<double>(c[gc+q]);
-                x[(g+a)*outputs] = sum;
+                x[(g+a)*chunk] = sum;
             }
         }
-        detail::band_solve(bands+i*terms*P, terms, degree, x, outputs);
+        detail::band_solve(bands+i*terms*P, terms, degree, x, chunk);
         T* next = fresh+(o*inputs+i)*terms;
         for (std::size_t k = 0; k < terms; ++k) {
-            next[k] = static_cast<T>(x[k*outputs]);
+            next[k] = static_cast<T>(x[k*chunk]);
             report(next[k], status);
         }
     }
@@ -4091,6 +4095,10 @@ struct RefitSpace {
 };
 // Runs of a layer's sorted samples: at most min(batch, 2*terms+1) per input
 // (a monotone path through (first new term, first current term or outside)).
+// Outputs per refit_solve_kernel launch: bounds its right-hand sides to
+// inputs*terms*refit_chunk doubles (all outputs at once needed up to twice the
+// FP32 coefficients; 64 outputs keep inputs*64 threads per launch).
+constexpr std::size_t refit_chunk = 64;
 inline std::size_t refit_runs(std::size_t inputs, std::size_t capacity, std::size_t terms) {
     return product(inputs, std::min(capacity, product(terms, 2)+1));
 }
@@ -4380,7 +4388,7 @@ struct Engine final : ResidentExecutor, Context<T> {
             runs = std::max(runs, r);
             sums = std::max(sums, product(r, 2*P*P));
             bands = std::max(bands, product(product(b.inputs, b.terms), P));
-            rhs = std::max(rhs, product(product(b.inputs, b.terms), b.outputs));
+            rhs = std::max(rhs, product(product(b.inputs, b.terms), std::min(b.outputs, refit_chunk)));
             knots = std::max(knots, knot_count(*p));
             scales = std::max(scales, knot_scale_count(*p));
             backup += knot_count(*p)+knot_scale_count(*p);
@@ -4497,9 +4505,12 @@ struct Engine final : ResidentExecutor, Context<T> {
         auto* bands = refit_ptr<double>(refit.bands);
         refit_factor_kernel<<<blocks(inputs, 64), 64, 0, stream>>>(keys, first_run, sums, inputs, terms, degree, options.ridge, bands, status);
         check(cudaGetLastError(), "resident refit factor launch");
-        refit_solve_kernel<<<blocks(inputs*b.outputs, 128), 128, 0, stream>>>(keys, first_run, sums, bands, refit_ptr<double>(refit.rhs),
-            ptr(candidates+b.offset), ptr(parameters+b.offset), inputs, b.outputs, terms, degree, status);
-        check(cudaGetLastError(), "resident refit solve launch");
+        const auto chunk = std::min(b.outputs, refit_chunk);
+        for (std::size_t o0 = 0; o0 < b.outputs; o0 += chunk) {
+            refit_solve_kernel<<<blocks(inputs*chunk, 128), 128, 0, stream>>>(keys, first_run, sums, bands, refit_ptr<double>(refit.rhs),
+                ptr(candidates+b.offset), ptr(parameters+b.offset), inputs, b.outputs, o0, chunk, terms, degree, status);
+            check(cudaGetLastError(), "resident refit solve launch");
+        }
         copy(p.knots, refit.knots, knot_count(p));
         copy(p.knot_scales, refit.scales, knot_scale_count(p));
     }

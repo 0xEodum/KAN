@@ -322,7 +322,8 @@ TEST(refit_failures_leave_the_executor_unchanged) {
 TEST(fp64_refit_on_the_network_input_follows_the_cpu) {
     for (auto path : {SplinePath::Dense, SplinePath::Sparse})
         for (std::size_t degree : {1u, 3u}) {
-            kan::Network network({seeded(kan::Layer(9, 5, grids(degree, degree + 8, 9)), 0.4)});
+            // 130 outputs: the solve runs in output chunks (refit_chunk = 64).
+            kan::Network network({seeded(kan::Layer(9, degree == 3 ? 130 : 5, grids(degree, degree + 8, 9)), 0.4)});
             ResidentTestScope scope(path);
             const std::size_t batch = 777;
             const auto x = refit_samples(batch, 9, 0.2);
