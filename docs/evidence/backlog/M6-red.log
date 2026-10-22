@@ -1,0 +1,42 @@
+# Backlog M6 RED: public API, bindings and tests over stubs (base c06b2ca), 2026-10-21
+# build-cuda (parity), GB10 sm_121, CUDA 13.0
+$ ./build-cuda/spline_grid_test
+FAIL per_input_configuration_is_validated: spline knots must be finite and nondecreasing
+FAIL per_input_layer_is_the_sum_of_its_inputs: spline knots must be finite and nondecreasing
+FAIL identical_grids_match_the_shared_layer_bitwise: spline_grid: not implemented
+FAIL insert_knots_and_adapt_grid_per_input: spline knots must be finite and nondecreasing
+FAIL refit_knots_follow_pykan_quantiles: spline knots must be finite and nondecreasing
+FAIL refit_reproduces_polynomials_exactly: spline knots must be finite and nondecreasing
+FAIL refit_onto_a_refined_grid_preserves_the_function: per_input_grids: not implemented
+FAIL refit_validation_is_atomic: spline knots must be finite and nondecreasing
+FAIL refit_keeps_bias_residual_and_handles_degree_zero: spline knots must be finite and nondecreasing
+FAIL network_refit_propagates_samples_through_preceding_layers: spline_grid: not implemented
+FAIL network_adapt_grid_propagates_samples: spline_grid: not implemented
+FAIL initializers_use_each_inputs_grid: spline knots must be finite and nondecreasing
+0/12 passed
+$ ./build-cuda/spline_grid_resident_test
+FAIL per_input_layers_match_the_cpu: spline knots must be finite and nondecreasing
+FAIL identical_per_input_grids_match_the_shared_layer_bitwise: spline_grid: not implemented
+FAIL device_refit_matches_the_cpu_refit: spline knots must be finite and nondecreasing
+FAIL refit_keeps_graphs_uploads_and_allocations: spline knots must be finite and nondecreasing
+FAIL refit_failures_leave_the_executor_unchanged: spline knots must be finite and nondecreasing
+0/5 passed
+$ ctest -R spline_grid_python --output-on-failure (build-cuda)
+ERROR: test_configuration (__main__.SplineGrid.test_configuration)
+RuntimeError: spline_grid: not implemented
+ERROR: test_refit_adapt_and_network (__main__.SplineGrid.test_refit_adapt_and_network)
+ValueError: spline knots must be finite and nondecreasing
+ERROR: test_resident_refit (__main__.SplineGrid.test_resident_refit)
+ValueError: spline knots must be finite and nondecreasing
+Ran 3 tests in 0.000s
+FAILED (errors=3)
+Errors while running CTest
+$ ctest (build-cuda) summary
+95% tests passed, 3 tests failed out of 59
+	 14 - spline_grid (Failed)
+	 40 - spline_grid_resident (Failed)
+	 56 - spline_grid_python (Failed)
+$ ctest (build-cpu) summary
+94% tests passed, 2 tests failed out of 36
+	 14 - spline_grid (Failed)
+	 33 - spline_grid_python (Failed)

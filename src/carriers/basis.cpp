@@ -99,6 +99,9 @@ void validate_basis(const BasisConfig& config) {
     std::visit([](const auto& c) { validate(c); }, config);
 }
 
+BSplineConfig spline_grid(const BSplineConfig&, std::size_t) { throw std::logic_error("spline_grid: not implemented"); }
+BSplineConfig per_input_grids(const BSplineConfig&, std::size_t) { throw std::logic_error("per_input_grids: not implemented"); }
+
 BasisValues evaluate_basis(const BasisConfig& config, double x) {
     validate_basis(config);
     if (!std::isfinite(x)) throw std::invalid_argument("basis input must be finite");

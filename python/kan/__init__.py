@@ -30,6 +30,7 @@ from _kan import DenominatorPolicy, RationalConfig, evaluate_basis, evaluate_rat
 from _kan import WaveletConfig, evaluate_wavelet, valid_log_scale
 from _kan import BasisEdges, TrainableRbfEdges, RationalEdges, WaveletEdges
 from _kan import insert_knot, adapt_grid, set_rbf_parameters, set_rational_parameters, set_wavelet_parameters
+from _kan import insert_knots, refit_grid, GridRefit, spline_grid, per_input_grids
 from _kan import AffineMap, TanhMap, LayerNormMap, InputMap, affine_from_range, affine_from_moments
 from _kan import LayerGradients, InputMapGradients, NetworkGradients, cuda_enabled, cuda_available, Precision, Loss
 from _kan import Distribution, DenominatorInit, VarianceScaling, NoiseInit, reference_moments, initialize, layer_seed

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kan/families.hpp"
 #include "kan/input_map.hpp"
 #include "kan/layer.hpp"
 #include <concepts>
@@ -43,8 +44,19 @@ public:
     void sgd(const NetworkGradients& gradients, double learning_rate);
     // Forward to kan::insert_knot / kan::adapt_grid (kan/families.hpp) on the
     // KAN layer at layer_index; an input map there raises invalid_argument.
+    // `samples` are in that layer's input domain; they are not propagated.
     void insert_knot(std::size_t layer_index, double x);
     double adapt_grid(std::size_t layer_index, std::span<const double> samples);
+    // Backlog M6: samples propagated through the preceding layers. `input` is
+    // a network input batch (batch x inputs()); its activations at layer_index
+    // feed kan::adapt_grid(layer, activations, batch). Returns its knots.
+    std::vector<double> adapt_grid(std::size_t layer_index, std::span<const double> input, std::size_t batch);
+    // Refits every B-spline layer in order (kan::refit_grid) on the network
+    // input batch propagated forward: each layer sees the activations of the
+    // layers before it after their refit (pykan's update_grid). Atomic; a
+    // network without B-spline layers raises std::invalid_argument. Returns the
+    // number of refit layers.
+    std::size_t refit_grids(std::span<const double> input, std::size_t batch, const GridRefit& options = {});
     // Coefficient L2 of the KAN layers (coefficients and residual-branch
     // weights, Layer::regularization); input maps contribute zero value and
     // zero gradients of their trainable parameters.

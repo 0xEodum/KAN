@@ -98,6 +98,10 @@ double adapt_grid(Layer& layer, std::span<const double> samples) {
     return x;
 }
 
+void insert_knots(Layer&, std::span<const double>) { throw std::logic_error("insert_knots: not implemented"); }
+std::vector<double> adapt_grid(Layer&, std::span<const double>, std::size_t) { throw std::logic_error("adapt_grid: not implemented"); }
+void refit_grid(Layer&, std::span<const double>, std::size_t, const GridRefit&) { throw std::logic_error("refit_grid: not implemented"); }
+
 void set_rbf_parameters(Layer& layer, std::span<const double> centers, std::span<const double> log_widths) {
     const auto* edges = std::get_if<TrainableRbfEdges>(&layer.carrier());
     if (!edges) throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");

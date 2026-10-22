@@ -60,10 +60,15 @@ struct TrainableRbfConfig {
     bool operator==(const TrainableRbfConfig&) const = default;
 };
 
-// Clamped B-spline of degree 0..16; knots.size() - degree - 1 terms.
+// Clamped B-spline of degree 0..16. `knots` holds `grids` knot vectors of
+// equal length n one after another (backlog M6): grids = 1 is one grid shared
+// by every input of a layer; a layer with grids = inputs gives input i its own
+// grid knots[i*n, (i+1)*n) (pykan's per-input grid). Every grid has the same
+// degree and n - degree - 1 terms (basis_size).
 struct BSplineConfig {
     std::size_t degree = 3;
     std::vector<double> knots;
+    std::size_t grids = 1;
     bool operator==(const BSplineConfig&) const = default;
 };
 
@@ -97,11 +102,22 @@ inline std::size_t basis_size(const GaussianRbfConfig& c) noexcept { return c.ce
 inline std::size_t basis_size(const TrainableRbfConfig& c) noexcept { return c.centers.size(); }
 inline std::size_t basis_size(const MexicanHatConfig& c) noexcept { return c.centers.size(); }
 inline std::size_t basis_size(const BSplineConfig& c) noexcept {
-    return c.knots.size() > c.degree && c.knots.size() - c.degree > 1 ? c.knots.size() - c.degree - 1 : 0;
+    if (c.grids == 0 || c.knots.size() % c.grids != 0) return 0;
+    const auto n = c.knots.size() / c.grids;
+    return n > c.degree && n - c.degree > 1 ? n - c.degree - 1 : 0;
 }
 std::size_t basis_size(const BasisConfig& config) noexcept;
 
 void validate_basis(const BasisConfig& config);
+// A spline with several grids (backlog M6) has no single evaluation:
+// evaluate_basis raises std::invalid_argument; evaluate spline_grid(config, i).
 BasisValues evaluate_basis(const BasisConfig& config, double x);
+
+// Per-input spline grids (backlog M6). spline_grid returns grid `grid` of a
+// validated configuration as a single-grid configuration (std::invalid_argument
+// for an invalid configuration or grid index); per_input_grids repeats a
+// single-grid configuration's knots for `inputs` inputs (inputs > 0).
+BSplineConfig spline_grid(const BSplineConfig& config, std::size_t grid);
+BSplineConfig per_input_grids(const BSplineConfig& config, std::size_t inputs);
 
 } // namespace kan

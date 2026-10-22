@@ -316,11 +316,24 @@ PYBIND11_MODULE(_kan, module) {
     auto spline = config_class<kan::BSplineConfig>(module, "BSplineConfig");
     derived_size(spline);
     spline
-        .def(py::init([](std::size_t degree, std::vector<double> knots) {
-            return kan::BSplineConfig{degree, std::move(knots)}; }),
-             py::arg("degree") = 3, py::arg("knots") = std::vector<double>{})
+        .def(py::init([](std::size_t degree, std::vector<double> knots, std::size_t grids) {
+            return kan::BSplineConfig{degree, std::move(knots), grids}; }),
+             py::arg("degree") = 3, py::arg("knots") = std::vector<double>{}, py::arg("grids") = 1,
+             "knots holds `grids` knot vectors of equal length; grids = inputs gives every input its own grid (backlog M6).")
         .def_readwrite("degree", &kan::BSplineConfig::degree)
-        .def_readwrite("knots", &kan::BSplineConfig::knots);
+        .def_readwrite("knots", &kan::BSplineConfig::knots)
+        .def_readwrite("grids", &kan::BSplineConfig::grids);
+    module.def("spline_grid", &kan::spline_grid, py::arg("config"), py::arg("grid"));
+    module.def("per_input_grids", &kan::per_input_grids, py::arg("config"), py::arg("inputs"));
+    py::class_<kan::GridRefit>(module, "GridRefit")
+        .def(py::init([](std::size_t intervals, double grid_eps, double ridge, bool per_input) {
+            return kan::GridRefit{intervals, grid_eps, ridge, per_input}; }),
+             py::arg("intervals") = 0, py::arg("grid_eps") = 0.02, py::arg("ridge") = 1e-8, py::arg("per_input") = true)
+        .def_readwrite("intervals", &kan::GridRefit::intervals)
+        .def_readwrite("grid_eps", &kan::GridRefit::grid_eps)
+        .def_readwrite("ridge", &kan::GridRefit::ridge)
+        .def_readwrite("per_input", &kan::GridRefit::per_input)
+        .def(py::self == py::self);
     auto wavelet = config_class<kan::MexicanHatConfig>(module, "MexicanHatConfig");
     derived_size(wavelet);
     wavelet
@@ -389,12 +402,39 @@ PYBIND11_MODULE(_kan, module) {
     // Family-specific operations (kan/families.hpp).
     module.def("insert_knot", &kan::insert_knot, py::arg("layer"), py::arg("x"),
                py::call_guard<py::gil_scoped_release>());
-    module.def("adapt_grid", [](kan::Layer& layer, py::array samples) {
+    // samples: a vector (one shared grid), or layer inputs (batch, inputs)
+    // returning the inserted knot of every grid (backlog M6).
+    module.def("adapt_grid", [](kan::Layer& layer, py::array samples) -> py::object {
         const auto data = array_data(samples);
-        if (samples.ndim() != 1) throw py::value_error("samples must be a vector");
-        py::gil_scoped_release release;
-        return kan::adapt_grid(layer, data);
+        if (samples.ndim() == 2) {
+            const auto batch = input_batch(samples, layer.inputs(), std::nullopt);
+            std::vector<double> knots;
+            {
+                py::gil_scoped_release release;
+                knots = kan::adapt_grid(layer, data, batch);
+            }
+            return owned(knots, {axis(knots.size())});
+        }
+        if (samples.ndim() != 1) throw py::value_error("samples must be a vector or have shape (batch, inputs)");
+        double knot = 0;
+        {
+            py::gil_scoped_release release;
+            knot = kan::adapt_grid(layer, data);
+        }
+        return py::float_(knot);
     }, py::arg("layer"), py::arg("samples").noconvert());
+    module.def("insert_knots", [](kan::Layer& layer, py::array knots) {
+        const auto data = array_data(knots);
+        if (knots.ndim() != 1) throw py::value_error("knots must be a vector");
+        py::gil_scoped_release release;
+        kan::insert_knots(layer, data);
+    }, py::arg("layer"), py::arg("knots").noconvert());
+    module.def("refit_grid", [](kan::Layer& layer, py::array input, const kan::GridRefit& options) {
+        const auto batch = input_batch(input, layer.inputs(), std::nullopt);
+        const auto data = array_data(input);
+        py::gil_scoped_release release;
+        kan::refit_grid(layer, data, batch, options);
+    }, py::arg("layer"), py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{});
     module.def("set_rbf_parameters", [](kan::Layer& layer, py::array centers, py::array log_widths) {
         if (!std::holds_alternative<kan::TrainableRbfEdges>(layer.carrier()))
             throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");
@@ -605,11 +645,33 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("outputs", &kan::Network::outputs)
         .def("insert_knot", &kan::Network::insert_knot, py::arg("layer_index"), py::arg("x"),
              py::call_guard<py::gil_scoped_release>())
-        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) {
+        // samples: a vector in that layer's input domain (not propagated), or a
+        // network input batch (batch, inputs) propagated to the layer (backlog M6).
+        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) -> py::object {
             const auto data=array_data(samples);
-            if(samples.ndim()!=1)throw py::value_error("samples must be a vector");
-            py::gil_scoped_release release;return model.adapt_grid(index,data);
+            if (samples.ndim() == 2) {
+                const auto batch = input_batch(samples, model.inputs(), std::nullopt);
+                std::vector<double> knots;
+                {
+                    py::gil_scoped_release release;
+                    knots = model.adapt_grid(index, data, batch);
+                }
+                return owned(knots, {axis(knots.size())});
+            }
+            if(samples.ndim()!=1)throw py::value_error("samples must be a vector or have shape (batch, inputs)");
+            double knot = 0;
+            {
+                py::gil_scoped_release release;
+                knot = model.adapt_grid(index, data);
+            }
+            return py::float_(knot);
         }, py::arg("layer_index"), py::arg("samples").noconvert())
+        .def("refit_grids", [](kan::Network& model, py::array input, const kan::GridRefit& options) {
+            const auto batch = input_batch(input, model.inputs(), std::nullopt);
+            const auto data = array_data(input);
+            py::gil_scoped_release release;
+            return model.refit_grids(data, batch, options);
+        }, py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{})
         .def("regularization", [](const kan::Network& model, double lambda) {
             kan::NetworkRegularizationResult r;
             {py::gil_scoped_release release;r=model.regularization(lambda);}
@@ -679,6 +741,8 @@ PYBIND11_MODULE(_kan, module) {
              py::arg("network"), py::call_guard<py::gil_scoped_release>())
         .def("download_parameters", [](Resident& model) { return model.value.download_parameters(); },
              py::call_guard<py::gil_scoped_release>())
+        .def("refit_grids", [](Resident& model, const kan::GridRefit& options) { model.value.refit_grids(options); },
+             py::arg("options") = kan::GridRefit{}, py::call_guard<py::gil_scoped_release>())
         // Backlog C9: graph-captured training steps and deferred status.
         .def("upload_target", [](Resident& model, py::array target) {
             const auto data = shaped(target, {axis(model.value.batch()), axis(model.outputs)});

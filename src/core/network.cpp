@@ -62,6 +62,13 @@ double Network::adapt_grid(std::size_t index, std::span<const double> samples) {
     return kan::adapt_grid(kan_layer(index), samples);
 }
 
+std::vector<double> Network::adapt_grid(std::size_t, std::span<const double>, std::size_t) {
+    throw std::logic_error("Network::adapt_grid: not implemented");
+}
+std::size_t Network::refit_grids(std::span<const double>, std::size_t, const GridRefit&) {
+    throw std::logic_error("Network::refit_grids: not implemented");
+}
+
 NetworkRegularizationResult Network::regularization(double lambda) const {
     validate_state();
     if (!std::isfinite(lambda) || lambda < 0)

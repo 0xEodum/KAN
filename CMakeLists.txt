@@ -118,8 +118,9 @@ if(BUILD_TESTING)
     foreach(suite basis basis_config carrier hermite_function)
         kan_add_test(carriers ${suite} "cpu;carriers" 60 kan)
     endforeach()
-    # Backlog M7: per-edge trainable Mexican-hat wavelets (wavelet).
-    foreach(suite local_basis local_layer wavelet)
+    # Backlog M7: per-edge trainable Mexican-hat wavelets (wavelet); M6: per-input
+    # spline grids, quantile refit and propagated grid adaptation (spline_grid).
+    foreach(suite local_basis local_layer wavelet spline_grid)
         kan_add_test(carriers/local ${suite} "cpu;local" 60 kan)
     endforeach()
     # Backlog C13: derivative-coefficient form of the spline input derivative (shared formulas).
@@ -197,6 +198,9 @@ if(BUILD_TESTING)
         # Backlog M7: per-edge trainable wavelets on the resident executor.
         kan_add_test(backends/cuda wavelet_resident "cuda;local" 300 kan::cuda)
         target_include_directories(wavelet_resident_test PRIVATE src)
+        # Backlog M6: per-input spline grids and the device grid refit.
+        kan_add_test(backends/cuda spline_grid_resident "cuda;local" 300 kan::cuda)
+        target_include_directories(spline_grid_resident_test PRIVATE src)
         # Backlog M2 (rational_policy_resident); C6-C8: rational kernel layout,
         # forward VJP checks, launch bounds (rational_resident_execution).
         foreach(suite rational_resident rational_policy_resident)
@@ -280,6 +284,7 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
         kan_add_python_test(initializer_python "python;integration;init")
         kan_add_python_test(hermite_function_python "python;integration;carriers")
         kan_add_python_test(wavelet_python "python;integration;local")
+        kan_add_python_test(spline_grid_python "python;integration;local")
         foreach(suite precision_python resident_upload_python training_python)
             kan_add_python_test(${suite} "python;integration;resident")
         endforeach()

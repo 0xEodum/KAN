@@ -4277,6 +4277,7 @@ void ResidentNetwork::forward() { state().engine->forward(); }
 void ResidentNetwork::backward(double coefficient_l2) { state().engine->backward(coefficient_l2); }
 void ResidentNetwork::sgd(double learning_rate) { state().engine->sgd(learning_rate); }
 void ResidentNetwork::upload_parameters(const Network& network) { state().engine->upload_parameters(network); }
+void ResidentNetwork::refit_grids(const GridRefit&) { state(); throw std::logic_error("ResidentNetwork::refit_grids: not implemented"); }
 void ResidentNetwork::train_step(double learning_rate, double coefficient_l2, Loss loss) {
     state().engine->train_step(learning_rate, coefficient_l2, loss);
 }

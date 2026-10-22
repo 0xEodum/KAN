@@ -64,6 +64,17 @@ public:
     // allocation; one host-to-device copy, or for FP64 parameters above 1 MiB
     // one per parameter tensor (copied without host staging).
     void upload_parameters(const Network& network);
+    // Backlog M6: refits the grids of every B-spline layer on the device from
+    // the uploaded input batch propagated forward, as Network::refit_grids
+    // (pykan's update_grid during training) at the current term count: the
+    // options keep each layer's grid form (per_input must match it) and
+    // intervals is 0 or the current count. Knots and coefficients change in
+    // place; graphs, workspace and allocations are unchanged. Any failure
+    // (degenerate samples, coinciding knots, a singular fit) raises
+    // std::invalid_argument and leaves the executor unchanged. Success
+    // invalidates output and gradients and keeps input and upstream;
+    // download_parameters() then returns the refit knots.
+    void refit_grids(const GridRefit& options = {});
 
     // Training steps (backlog C9; contract in docs/CONTRACT.md). One step is
     // forward, the loss gradient, backward(coefficient_l2) and
