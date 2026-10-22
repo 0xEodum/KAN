@@ -1,0 +1,108 @@
+== build-cuda memcheck spline_grid_resident_test --leak-check full
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 5 s)
+== build-cuda racecheck spline_grid_resident_test 
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 133 s)
+== build-cuda synccheck spline_grid_resident_test 
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda initcheck spline_grid_resident_test 
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 4 s)
+== build-cuda memcheck local_resident_test --leak-check full
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda memcheck local_sparse_resident_test --leak-check full
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 3 s)
+== build-cuda memcheck local_spline_gradient_resident_test --leak-check full
+  TF32 dense degree 3 intervals 128: largest error/bound 0.0944473 (entry 3733)
+  TF32 dense degree 3 intervals 256: largest error/bound 0.322092 (entry 2229)
+  TF32 sparse degree 3 intervals 128: largest error/bound 6.15604e-05 (entry 1637)
+  TF32 sparse degree 3 intervals 256: largest error/bound 0.00010128 (entry 3375)
+  FP32 dense degree 3 intervals 128: largest error/bound 0.0257371 (entry 1637)
+  FP32 dense degree 3 intervals 256: largest error/bound 0.276561 (entry 3375)
+  FP32 sparse degree 3 intervals 128: largest error/bound 0.0280168 (entry 1637)
+  FP32 sparse degree 3 intervals 256: largest error/bound 0.276561 (entry 3375)
+  TF32 dense degree 1 intervals 32: largest error/bound 0.132263 (entry 293)
+  TF32 sparse degree 1 intervals 32: largest error/bound 2.10521e-05 (entry 614)
+  TF32 dense degree 2 intervals 32: largest error/bound 0.141528 (entry 1448)
+  TF32 sparse degree 2 intervals 32: largest error/bound 1.59915e-05 (entry 4675)
+  TF32 dense degree 3 intervals 32: largest error/bound 0.132836 (entry 647)
+  TF32 sparse degree 3 intervals 32: largest error/bound 1.5687e-05 (entry 1737)
+  TF32 dense degree 5 intervals 64: largest error/bound 0.127234 (entry 162)
+  FP32 dense degree 1 intervals 32: largest error/bound 0.0103689 (entry 2577)
+  FP32 sparse degree 1 intervals 32: largest error/bound 0.0143715 (entry 614)
+  FP32 dense degree 2 intervals 32: largest error/bound 0.00979506 (entry 110)
+  FP32 sparse degree 2 intervals 32: largest error/bound 0.0109169 (entry 4675)
+  FP32 dense degree 3 intervals 32: largest error/bound 0.00877178 (entry 1724)
+  FP32 sparse degree 3 intervals 32: largest error/bound 0.010709 (entry 1737)
+  FP32 dense degree 5 intervals 64: largest error/bound 0.00950174 (entry 1862)
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda-fma memcheck spline_grid_resident_test --leak-check full
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 6 s)
+== build-cuda-fma racecheck spline_grid_resident_test 
+7/7 passed
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+   (exit 0, 136 s)
+== build-cuda-fma synccheck spline_grid_resident_test 
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)
+== build-cuda-fma initcheck spline_grid_resident_test 
+7/7 passed
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 4 s)
+== build-cuda-fma memcheck local_resident_test --leak-check full
+7/7 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 1 s)
+== build-cuda-fma memcheck local_sparse_resident_test --leak-check full
+8/8 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 3 s)
+== build-cuda-fma memcheck local_spline_gradient_resident_test --leak-check full
+  TF32 dense degree 3 intervals 128: largest error/bound 0.0944492 (entry 3733)
+  TF32 dense degree 3 intervals 256: largest error/bound 0.322092 (entry 2229)
+  TF32 sparse degree 3 intervals 128: largest error/bound 5.65512e-05 (entry 1637)
+  TF32 sparse degree 3 intervals 256: largest error/bound 0.000108443 (entry 3305)
+  FP32 dense degree 3 intervals 128: largest error/bound 0.0257371 (entry 1637)
+  FP32 dense degree 3 intervals 256: largest error/bound 0.296121 (entry 3305)
+  FP32 sparse degree 3 intervals 128: largest error/bound 0.0257371 (entry 1637)
+  FP32 sparse degree 3 intervals 256: largest error/bound 0.296121 (entry 3305)
+  TF32 dense degree 1 intervals 32: largest error/bound 0.132263 (entry 293)
+  TF32 sparse degree 1 intervals 32: largest error/bound 1.51889e-05 (entry 2577)
+  TF32 dense degree 2 intervals 32: largest error/bound 0.141528 (entry 1448)
+  TF32 sparse degree 2 intervals 32: largest error/bound 1.43482e-05 (entry 110)
+  TF32 dense degree 3 intervals 32: largest error/bound 0.132836 (entry 647)
+  TF32 sparse degree 3 intervals 32: largest error/bound 1.34826e-05 (entry 3316)
+  TF32 dense degree 5 intervals 64: largest error/bound 0.127234 (entry 162)
+  FP32 dense degree 1 intervals 32: largest error/bound 0.0103689 (entry 2577)
+  FP32 sparse degree 1 intervals 32: largest error/bound 0.0103689 (entry 2577)
+  FP32 dense degree 2 intervals 32: largest error/bound 0.00979506 (entry 110)
+  FP32 sparse degree 2 intervals 32: largest error/bound 0.00979506 (entry 110)
+  FP32 dense degree 3 intervals 32: largest error/bound 0.00920413 (entry 3316)
+  FP32 sparse degree 3 intervals 32: largest error/bound 0.00920413 (entry 3316)
+  FP32 dense degree 5 intervals 64: largest error/bound 0.00950174 (entry 1862)
+5/5 passed
+========= LEAK SUMMARY: 0 bytes leaked in 0 allocations
+========= ERROR SUMMARY: 0 errors
+   (exit 0, 2 s)

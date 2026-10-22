@@ -1,0 +1,13 @@
+# Review H1/L3 RED (spline_grid_resident, new case nonfinite_refit_samples_are_rejected), build-cuda before the fix
+PASS fp64_refit_on_the_network_input_follows_the_cpu
+FAIL nonfinite_refit_samples_are_rejected: resident refit copy: an illegal memory access was encountered
+6/7 passed
+# under compute-sanitizer memcheck
+      1 6/7 passed
+      1 ========= ERROR SUMMARY: 32 errors
+      1 FAIL nonfinite_refit_samples_are_rejected: resident refit copy: an illegal memory access was encountered
+      1 ========= Invalid __global__ write of size 4 bytes
+      4 ========= Program hit cudaErrorIllegalAddress (error 700) due to "an illegal memory access was encountered" on CUDA API call to cudaDeviceSynchronize.
+     18 ========= Program hit cudaErrorIllegalAddress (error 700) due to "an illegal memory access was encountered" on CUDA API call to cudaEventDestroy.
+      5 ========= Program hit cudaErrorIllegalAddress (error 700) due to "an illegal memory access was encountered" on CUDA API call to cudaFree.
+      2 ========= Program hit cudaErrorIllegalAddress (error 700) due to "an illegal memory access was encountered" on CUDA API call to cudaMemcpyAsync.

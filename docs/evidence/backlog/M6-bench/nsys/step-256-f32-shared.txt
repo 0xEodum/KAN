@@ -1,0 +1,16 @@
+# nsys (graph nodes traced) kernel summary: FP32 256x256x256x10 b2048 G5 degree 3, shared grids, M6 final; 2 windows of train_step
+# share, total, launches, average, kernel
+ 27.8%   112.227 ms    610 x    184.0 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+ 20.9%    84.511 ms    610 x    138.5 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nt_align1>(T1::Params)
+ 17.2%    69.428 ms    915 x     75.9 us  void kan::cuda::<unnamed>::basis_grid_kernel<(bool)0, (int)3, float>(const T3 *, T3 *, T3 *, unsigned long, ka
+ 10.5%    42.261 ms    305 x    138.6 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x64_8x5_nn_align1>(T1::Params)
+  6.1%    24.679 ms    915 x     27.0 us  void kan::cuda::<unnamed>::backward_finish_kernel<kan::cuda::<unnamed>::SplineDifferences<float, (unsigned int
+  4.8%    19.252 ms    305 x     63.1 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_64x64_8x5_tn_align1>(T1::Params)
+  4.4%    17.692 ms    305 x     58.0 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nn_align1>(T1::Params)
+  2.3%     9.360 ms    305 x     30.7 us  void kan::cuda::<unnamed>::candidate_kernel<float>(const T1 *, const T1 *, T1 *, unsigned long, T1, int *)
+  2.3%     9.162 ms    305 x     30.0 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nt_align1>(T1::Params)
+  0.9%     3.694 ms    610 x      6.1 us  void kan::cuda::<unnamed>::spline_difference_kernel<unsigned int, float>(const T2 *, const T2 *, T2 *, T1, T1,
+  0.8%     3.121 ms    915 x      3.4 us  void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long, unsigned long, int *)
+  0.7%     2.768 ms   1220 x      2.3 us  void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, float, float, float, (bool)0, float, float, f
+  0.7%     2.710 ms    305 x      8.9 us  void gemvNSP_kernel<float, float, float, float, (int)1, (int)32, (int)4, (int)1024, (bool)0, cublasGemvParamsE
+  0.6%     2.456 ms    610 x      4.0 us  std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, float, float, float, float, (bool)0, (bool)1

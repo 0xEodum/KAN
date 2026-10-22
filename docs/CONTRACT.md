@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4, M5 and M7)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4, M5, M6 and M7)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -156,6 +156,9 @@ policy), `AffineMap` and `TanhMap` values, the LayerNorm epsilon and whether it 
 gain/bias. Spline knots are configuration, not state: `insert_knot`/`adapt_grid` change the
 term count, and knots moved at an equal count (`set_carrier`) change the fixed function
 space the coefficients refer to; both are rejected, and such a model needs a new executor.
+The executor's own `refit_grids` (backlog M6) changes its knots in place; its snapshot
+takes the refit knots, so `download_parameters()` returns them and `upload_parameters`
+then compares against them (the network before the refit is rejected).
 A `download_parameters()` result always matches its executor, and the round trip is exact
 in every precision (downloads are exact widenings). Values are validated with the
 construction rules of the executor's precision: finite, and in FP32 magnitudes at most
@@ -520,7 +523,9 @@ count) if strictly inside that span, otherwise its midpoint. Empty/outside-only
 samples or a span without a representable interior value fail explicitly.
 Updates are atomic; stale gradient shapes are rejected after refinement. The
 `Network::insert_knot/adapt_grid` conveniences forward to them and accept an explicit layer index and samples in that layer's input domain.
-Samples do not implicitly propagate through preceding layers.
+Samples do not implicitly propagate through preceding layers; the network-input forms
+of backlog M6 (`Network::adapt_grid(index, input, batch)`, `Network::refit_grids`) do,
+explicitly (see "Per-input grids and quantile refit").
 
 `regularization(lambda)` returns the coefficient L2 penalty
 `lambda/2*sum(coefficients^2)` and its parameter VJP `lambda*coefficients`; a layer with
@@ -1113,6 +1118,140 @@ type. Trainable RBF widths report "nonfinite" in both cases (their kernels are u
   s = 1/16 and 1/32 on [-1, 1]: 3.1x and 3.8x the evaluation cost at s = 1/4). A batch just above
   a multiple of 256·S costs more than its valid samples suggest (FP32 256-wide: 2049 samples 1.54x
   of 2048).
+
+## Per-input grids and quantile refit (backlog M6)
+
+**Per-input grids.** `BSplineConfig{degree, knots, grids}`: `knots` holds `grids` clamped
+knot vectors of equal length `n` one after another, each validated as an M3 spline (degree
+0..16, clamped endpoints of multiplicity exactly degree+1, interior multiplicity at most
+degree+1, positive domain); `basis_size = n - degree - 1` for every grid. `grids = 1`
+(the default, so `BSplineConfig{p, knots}` is unchanged) is one grid shared by every input;
+a layer with `grids = inputs` gives input `i` the knots `knots[i*n, (i+1)*n)` (pykan's
+per-input grid). Any other count raises `std::invalid_argument` (constructor,
+`set_carrier`). Degree and term count are common to the grids, so the coefficient layout
+`(outputs, inputs, terms)`, L2, initializers' draw order, `set_parameters` and the resident
+contraction, sparse path and C13 derivative coefficients are unchanged; edge `(o, i)` uses
+grid `i`. `grids` is part of `operator==` and of the structure `upload_parameters` checks.
+`evaluate_basis` of a configuration with several grids raises `std::invalid_argument`;
+`spline_grid(config, g)` returns grid `g` as a single-grid configuration,
+`per_input_grids(config, inputs)` repeats a single grid (identical grids give bitwise the
+shared layer's results on the CPU and the resident executor). `reference_moments` takes a
+single grid; `VarianceScaling` draws input `i`'s coefficients with the moments and
+variance of its own grid (uniform on its domain), so `E[y^2]` is `gain^2` times the mean
+of the inputs' reference variances; `NoiseInit` uses `G = terms - degree`, common to all
+grids. Only B-splines have per-input grids: Gaussian and Mexican-hat dictionaries are
+translation-scale families whose per-input affine placement is an explicit `AffineMap`
+(backlog M1), trainable RBFs learn their centers and widths, and per-edge wavelets
+(backlog M7) learn their own translations and scales.
+
+**Knot insertion.** `insert_knot(layer, x)` and `adapt_grid(layer, samples)` keep their M3
+behavior and require one shared grid. `insert_knots(layer, knots)` inserts `knots[g]` into
+grid `g` (one per grid, each strictly inside its domain, allowed multiplicity) by Boehm
+insertion, with the M3 arithmetic. `adapt_grid(layer, input, batch)` takes layer inputs
+`(batch, inputs)`, applies the M3 rule (median of the most populated span, else its
+midpoint) per grid — to all values of the batch for a shared grid (the 1-D form's result),
+to column `i` for grid `i` — inserts the knots and returns them.
+
+**Quantile refit** (`refit_grid(layer, input, batch, GridRefit)`, pykan's
+`update_grid_from_samples`; shared host/device formulas in
+`src/carriers/local/grid_refit.hpp`). `GridRefit{intervals = 0, grid_eps = 0.02,
+ridge = 1e-8, per_input = true, margin = 0.01}`: `grid_eps` in [0, 1], `ridge` and `margin`
+finite and nonnegative (`std::invalid_argument` otherwise, also for a non-spline layer,
+an input of the wrong shape, nonfinite input and batch 0). New grids: one per input
+(`per_input`, or one shared grid from all values of the batch), each with `G = intervals`
+(0 keeps `terms - degree`) knot intervals and the layer's degree. From the `n` sorted
+samples `x_0 <= ... <= x_(n-1)` of a grid, `r = x_(n-1) - x_0`, domain
+`[a, c] = [x_0 - margin*r, x_(n-1) + margin*r]`, `h = (c - a)/G`, interior knot
+`j = 1..G-1`: `grid_eps*(a + h*j) + (1 - grid_eps)*x_(floor(n/G*j))` (pykan's quantile index
+and mixing, computed in double as `double(n)/G*j`), endpoints `a` and `c` repeated
+degree+1 times. With `margin = 0` the extreme samples are the endpoints exactly, which
+leaves them on the boundary of the clamped domain (any later perturbation moves them
+outside, where the spline is zero); pykan instead extends its grid `k` intervals beyond
+the samples. The interior knots must be strictly increasing and finite (in the executor's
+precision on the device): samples that span no interval, or quantile knots that coincide
+(repeated samples with `grid_eps = 0`), raise `std::invalid_argument`. Coefficients: for
+every input, with its own samples `x_b` (the batch column) and the current edge functions
+`f_(o,i)`, `c = argmin sum_b (s(x_b) - f(x_b))^2 + ridge*sum c^2`, i.e. the banded normal
+equations `(B^T B + ridge*I) c = B^T f` with `B^T f = M c_old` (`M` the cross Gram matrix of
+the new and the current basis; samples outside the current domain have `f = 0`). The
+sorted samples are grouped into runs with one first term on each grid; each run's products
+are summed in sample order, runs in order; the band (half bandwidth `degree`) is factored by
+Cholesky, a pivot not above `64*2^-52` of its diagonal raises `std::invalid_argument`
+("singular": spans without samples need `ridge > 0`), and all outputs are solved with the
+factor. The refit reproduces any edge that is a polynomial of the spline degree on the
+samples' range to rounding (Marsden), and any spline when the new knots contain the old
+ones and samples cover the domain. Bias and residual branch are unchanged; the layer is
+replaced atomically through `set_carrier` (stale gradient shapes are rejected afterwards).
+
+**Network refit.** `Network::refit_grids(input, batch, options)` propagates the network
+input forward and refits every B-spline `BasisEdges` layer in order on its own input
+activations, computed with the layers before it already refit (pykan's `update_grid`); it
+returns the number of refit layers, raises `std::invalid_argument` for a network without
+B-spline layers and is atomic (built on a copy). `Network::adapt_grid(index, input,
+batch)` propagates the network input to layer `index` and applies `adapt_grid(layer,
+activations, batch)`.
+
+**Resident per-input layers.** Per-input knots (and FP32/TF32 knot scales) are reserved,
+validated (FP32: knots distinct within each grid stay distinct) and uploaded per grid;
+dense and sparse paths and all precisions run them. Knot-reading kernels have per-input
+variants (`basis_grid_kernel`, `spline_grid_basis_kernel`, `GridSplineDifferences` in the
+backward finish, `spline_grid_difference_kernel`); the sparse-path selection rule and the
+arena are those of a shared-grid layer plus `(grids - 1)` knot vectors and knot-scale rows.
+Results equal the CPU within the C5/C1 tolerances; identical grids are bitwise the
+shared-grid layer. `basis_grid_kernel` stages each block's knot rows in shared memory
+(rows with an odd stride; the grid is bounded by multiprocessors times the instantiation's
+resident blocks from the occupancy API, and its loop step is a multiple of the inputs, or
+it runs one iteration) when stage and knots fit 48 KiB, and evaluates degrees 0..3 at
+compile time; dense shared-grid B-spline layers run the same kernel as one grid of every
+input (same arithmetic: bitwise the previous results).
+
+**Device refit** (`ResidentNetwork::refit_grids(GridRefit)`). Refits every B-spline layer
+from the uploaded batch propagated through the executor's forward pass, as
+`Network::refit_grids`, at the current term count (`intervals` 0 or the layer's) and grid
+form (`per_input` must match every layer with more than one input; `std::invalid_argument`
+otherwise, before anything changes); `std::logic_error` without an uploaded input,
+`std::invalid_argument` for batch 0 or a network without B-spline layers. Per layer: the
+input transposed to `(inputs, batch)`, a CUB segmented radix sort per input (plus a sort of
+all values for a shared grid), the knots per grid (one thread each), the run keys
+`(input, first new term, first current term)` run-length encoded by CUB and their offsets
+scanned, one warp per run summing its products (lanes over samples in order, a fixed
+shuffle tree; one thread per run, in order, for degrees above 3), one thread per input for
+the band and its Cholesky factor, one thread per (input, output) for the right-hand side and
+the solve, coefficients rounded to the executor precision. Spline values are evaluated in
+the executor precision from its samples and knots, products and sums in double. Every sum
+has a fixed order: deterministic for one device and build; FP64 results agree with the CPU
+refit of the same samples within `1e-11` relative in the parity build and, in the FMA build,
+for well-sampled fits (knots within an FMA contraction of the CPU's; for systems regularized
+only by the ridge, e.g. fewer samples than terms, that knot rounding is amplified by the
+system's conditioning: up to about 1e-8 measured at ridge 1e-8), and FP32/TF32 within their
+precision (the samples are the executor's activations). Knots that coincide or leave the
+executor's range (an FP32 endpoint) raise "knots coincide or leave the precision's range". Atomic: the
+new coefficients go to a copy of the parameters that becomes the active region on success,
+knots and knot scales are backed up and restored on failure; each layer's status is
+checked after its sort and knots and again after its fit, before the next layer (messages
+"the samples of an input span no interval", "knots coincide", "the least-squares system is
+singular", naming the layer: `std::invalid_argument`; a nonfinite activation reaching a refit
+layer, e.g. from an overflowing input map, raises `std::overflow_error` before any run is
+formed). The right-hand sides are solved for as many outputs at a time as fill the device
+once (multiprocessors times resident threads per multiprocessor, divided by the inputs), at
+most as many as keep the right-hand sides within one sample buffer (`inputs*capacity` values). Success invalidates
+output and gradients (input and upstream stay), keeps every captured graph valid (they read
+knots, scales and parameters from the arena) and allocates nothing: the workspace (largest
+B-spline layer at capacity: transposed and sorted samples, run keys/counts/offsets and
+products, bands, right-hand sides, staged knots, backups of every layer's knots, CUB
+temporary storage) is reserved after every other region when the network has a B-spline
+layer and `inputs*capacity` fits the 32-bit CUB item count (and inputs and terms the
+21-bit fields of the run keys); otherwise `refit_grids` raises `std::invalid_argument` naming
+the reason. Measured growth of the arena: 7-9% for the networks in the
+[M6 evidence](evidence/backlog/M6.md#memory). A change of the term count
+still needs a host refit and a new executor. Measured cost and memory:
+[M6 evidence](evidence/backlog/M6.md). Python: `kan.BSplineConfig(degree, knots, grids=1)`,
+`kan.spline_grid`, `kan.per_input_grids`, `kan.GridRefit(...)`, `kan.insert_knots`,
+`kan.adapt_grid(layer, samples)` (vector: a float; `(batch, inputs)`: the knots),
+`kan.refit_grid(layer, input, options)`, `Network.refit_grids(input, options)`,
+`Network.adapt_grid(index, samples)` (a vector in the layer's domain),
+`Network.adapt_grid_from_input(index, input)` (a network input batch, propagated),
+`ResidentNetwork.refit_grids(options)`.
 
 ## Extension boundaries
 

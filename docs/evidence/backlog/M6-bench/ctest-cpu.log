@@ -1,0 +1,88 @@
+Test project /home/core_ai/PyProjects/KAN/build-cpu
+      Start  1: layer
+ 1/36 Test  #1: layer ............................   Passed    0.00 sec
+      Start  2: network
+ 2/36 Test  #2: network ..........................   Passed    0.00 sec
+      Start  3: input_map
+ 3/36 Test  #3: input_map ........................   Passed    0.02 sec
+      Start  4: residual
+ 4/36 Test  #4: residual .........................   Passed    0.00 sec
+      Start  5: residual_formula
+ 5/36 Test  #5: residual_formula .................   Passed    0.00 sec
+      Start  6: residual_training
+ 6/36 Test  #6: residual_training ................   Passed   33.39 sec
+      Start  7: basis
+ 7/36 Test  #7: basis ............................   Passed    0.00 sec
+      Start  8: basis_config
+ 8/36 Test  #8: basis_config .....................   Passed    0.00 sec
+      Start  9: carrier
+ 9/36 Test  #9: carrier ..........................   Passed    0.00 sec
+      Start 10: hermite_function
+10/36 Test #10: hermite_function .................   Passed    0.00 sec
+      Start 11: local_basis
+11/36 Test #11: local_basis ......................   Passed    0.00 sec
+      Start 12: local_layer
+12/36 Test #12: local_layer ......................   Passed    0.00 sec
+      Start 13: wavelet
+13/36 Test #13: wavelet ..........................   Passed    0.01 sec
+      Start 14: spline_grid
+14/36 Test #14: spline_grid ......................   Passed    0.01 sec
+      Start 15: spline_derivative_formula
+15/36 Test #15: spline_derivative_formula ........   Passed    0.01 sec
+      Start 16: rational
+16/36 Test #16: rational .........................   Passed    0.00 sec
+      Start 17: rational_layer
+17/36 Test #17: rational_layer ...................   Passed    0.03 sec
+      Start 18: rational_allocation
+18/36 Test #18: rational_allocation ..............   Passed    0.01 sec
+      Start 19: rational_policy
+19/36 Test #19: rational_policy ..................   Passed    0.00 sec
+      Start 20: initializer
+20/36 Test #20: initializer ......................   Passed    1.09 sec
+      Start 21: initializer_training
+21/36 Test #21: initializer_training .............   Passed   22.35 sec
+      Start 22: package_custom_include
+22/36 Test #22: package_custom_include ...........   Passed    0.14 sec
+      Start 23: package_default_configuration
+23/36 Test #23: package_default_configuration ....   Passed    0.13 sec
+      Start 24: fit_polynomial
+24/36 Test #24: fit_polynomial ...................   Passed    0.00 sec
+      Start 25: python
+25/36 Test #25: python ...........................   Passed    0.10 sec
+      Start 26: local_python
+26/36 Test #26: local_python .....................   Passed    0.13 sec
+      Start 27: rational_python
+27/36 Test #27: rational_python ..................   Passed    0.13 sec
+      Start 28: input_map_python
+28/36 Test #28: input_map_python .................   Passed    0.08 sec
+      Start 29: residual_python
+29/36 Test #29: residual_python ..................   Passed    0.12 sec
+      Start 30: initializer_python
+30/36 Test #30: initializer_python ...............   Passed    0.26 sec
+      Start 31: hermite_function_python
+31/36 Test #31: hermite_function_python ..........   Passed    0.12 sec
+      Start 32: wavelet_python
+32/36 Test #32: wavelet_python ...................   Passed    0.11 sec
+      Start 33: spline_grid_python
+33/36 Test #33: spline_grid_python ...............   Passed    0.11 sec
+      Start 34: precision_python
+34/36 Test #34: precision_python .................   Passed    0.09 sec
+      Start 35: resident_upload_python
+35/36 Test #35: resident_upload_python ...........   Passed    0.08 sec
+      Start 36: training_python
+36/36 Test #36: training_python ..................   Passed    0.08 sec
+
+100% tests passed, 0 tests failed out of 36
+
+Label Time Summary:
+carriers       =   0.13 sec*proc (5 tests)
+core           =  33.63 sec*proc (8 tests)
+cpu            =  57.22 sec*proc (24 tests)
+init           =  23.70 sec*proc (3 tests)
+integration    =   1.68 sec*proc (15 tests)
+local          =   0.37 sec*proc (8 tests)
+python         =   1.40 sec*proc (12 tests)
+rational       =   0.17 sec*proc (5 tests)
+resident       =   0.25 sec*proc (3 tests)
+
+Total Test time (real) =  58.63 sec

@@ -1,0 +1,9 @@
+# C5 sass_cmp.py: base c06b2ca resident.cu.o vs M6 final, parity and FMA builds
+## parity
+before 218 kernels, after 292, common 218, differing 0
+only after: 74 e.g. ['_ZN3cub18CUB_300001_SM_12106detail10radix_sort29DeviceRadixSortOnesweepKernelINS1_5radix10policy_hubIdNS0_8NullTypeEjE10Policy1000ELNS0_9SortOrderE0EdS6_jiiNS1_21identity_decomposer_tEEEvPT5_SC_PT3_PKSD_PT1_PKSH_PT2_PKSL_T4_iiT6_', '_ZN3cub18CUB_300001_SM_12106detail10radix_sor
+only before: []
+## fma
+before 218 kernels, after 292, common 218, differing 0
+only after: 74 e.g. ['_ZN3cub18CUB_300001_SM_12106detail10radix_sort29DeviceRadixSortOnesweepKernelINS1_5radix10policy_hubIdNS0_8NullTypeEjE10Policy1000ELNS0_9SortOrderE0EdS6_jiiNS1_21identity_decomposer_tEEEvPT5_SC_PT3_PKSD_PT1_PKSH_PT2_PKSL_T4_iiT6_', '_ZN3cub18CUB_300001_SM_12106detail10radix_sor
+only before: []

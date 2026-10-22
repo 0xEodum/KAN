@@ -1,0 +1,17 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,1.008,0.992,1.024
+basis,legacy_full,4,1.123,1.071,1.151
+basis,resident_full,24,1.001,0.923,1.092
+basis,transfer_full,24,1.009,0.988,1.066
+local,cpu_full,12,1.007,1.000,1.013
+local,resident_full,12,0.971,0.869,1.021
+local,transfer_full,12,0.979,0.896,1.009
+rational,cpu_full,12,1.006,0.998,1.013
+rational,resident_full,12,1.002,1.000,1.009
+rational,transfer_full,12,1.006,1.000,1.031
+checksum mismatches: 0
+
+legacy_full re-run (basis --backend legacy, A B B A):
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,legacy_full,4,0.910,0.894,0.939
+checksum mismatches: 0

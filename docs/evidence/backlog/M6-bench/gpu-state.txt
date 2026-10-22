@@ -1,0 +1,19 @@
+# GPU state of the recorded measurements
+## frozen suites (2026-10-21, before)
+name, driver_version, clocks.current.sm [MHz], clocks.max.sm [MHz], utilization.gpu [%], power.draw [W], temperature.gpu
+NVIDIA GB10, 580.159.03, 2405 MHz, 3003 MHz, 0 %, 11.07 W, 38
+## frozen suites (after)
+name, driver_version, clocks.current.sm [MHz], clocks.max.sm [MHz], utilization.gpu [%], power.draw [W], temperature.gpu
+NVIDIA GB10, 580.159.03, 2405 MHz, 3003 MHz, 0 %, 15.55 W, 40
+## ab.csv: 2026-10-21 17:35-17:48 UTC+local, before a foreign training job started on this GPU at 17:51 (pid start time); a second A/B pass overlapping that job was discarded
+## refit.csv, arena.csv, nsys/: 2026-10-22
+Thu Oct 22 07:04:01 AM UTC 2026
+name, driver_version, clocks.current.sm [MHz], utilization.gpu [%], power.draw [W], temperature.gpu
+NVIDIA GB10, 580.159.03, 2411 MHz, 1 %, 11.87 W, 42
+pid, process_name, used_gpu_memory [MiB]
+2687, python3, 9401 MiB
+838763, python3, 2153 MiB
+2931494, /home/core_ai/lprsm/inference-env/bin/python, 4521 MiB
+Thu Oct 22 07:04:58 AM UTC 2026
+utilization.gpu [%]
+1 %

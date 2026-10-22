@@ -11,7 +11,7 @@ backward and training; optional Python bindings expose the same implementation.
 | Orthogonal polynomials | Chebyshev T, Legendre P, Jacobi, physicists' Hermite or normalized Hermite functions (`HermiteConfig::normalization`) | Additional families |
 | Harmonic / wave | Fourier, normalized Mexican-hat wavelets (fixed dictionary or per-edge trainable, Wav-KAN) | Additional wavelets |
 | Radial / rational | Fixed or trainable Gaussian RBF centers/widths, nonlinear Padé-compatible rational edges | Additional rational parameterizations |
-| Local / adaptive | B-splines, exact adaptive knot refinement, coefficient L2 | Additional grid policies |
+| Local / adaptive | B-splines with shared or per-input grids, exact adaptive knot refinement, quantile grid refit (CPU and device), coefficient L2 | Additional grid policies |
 | Input maps | Explicit affine (fixed, from data range or moments), tanh, LayerNorm (trainable gain/bias) layers | — |
 | Initializers | Explicit seeded variance-preserving and pykan-style noise initialization, pole-free rational denominators | — |
 | Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
@@ -117,7 +117,8 @@ The network must have the structure the executor was built for (layer kinds and 
 carriers, basis and rational configuration including spline knots, fixed input maps);
 anything else, or a value the executor precision cannot represent, raises
 `std::invalid_argument` (`ValueError`) and changes nothing. After `insert_knot`/`adapt_grid`
-the structure differs: build a new executor. Uploading costs a host-to-device copy of the
+the structure differs: build a new executor (a device `refit_grids`, backlog M6, keeps the
+term count and updates the executor's structure in place). Uploading costs a host-to-device copy of the
 parameters, a small fraction of construction for small networks (see the contract).
 
 For training, `train_step` (backlog C9) runs forward, the loss gradient, backward and SGD
@@ -253,6 +254,32 @@ coefficient L2 gradients on the GPU; CPU callers explicitly add the regularizati
 VJP to their loss gradients. Python exposes the same operations (`kan.insert_knot(layer, x)`,
 `layer.carrier`); see
 [localized Python examples](tests/python/local_python_test.py).
+
+## Per-input grids and quantile refit (pykan's update_grid)
+
+```cpp
+// One knot vector per input (backlog M6): BSplineConfig{degree, knots, grids}
+// with grids = inputs; per_input_grids repeats a shared grid.
+kan::Layer layer(2, 3, kan::per_input_grids(kan::BSplineConfig{3, {-1,-1,-1,-1,0,1,1,1,1}}, 2));
+kan::refit_grid(layer, x, batch, kan::GridRefit{5});   // quantile knots + least-squares refit
+network.refit_grids(input, batch);                     // every spline layer, samples propagated
+network.adapt_grid(1, input, batch);                   // one knot per grid at layer 1's activations
+gpu.refit_grids();                                     // the same on the device, from the uploaded batch
+```
+
+`refit_grid` follows pykan's `update_grid_from_samples`: interior knots mix uniform and
+sample-quantile positions (`grid_eps`, default 0.02), the clamped domain extends a
+relative `margin` (default 0.01) beyond each input's extreme samples, and the
+coefficients are refit by banded least squares (`ridge`, default 1e-8) to the current
+edge functions at the samples; `intervals` changes the term count (pykan's `refine`).
+`Network::refit_grids` refits layer by layer on the activations of the already refit
+layers before it; `ResidentNetwork::refit_grids` does this on the device at the current
+term count, keeping the executor, its graphs and allocations (about 2 training steps
+for the 256-wide FP32 network, instead of hundreds for download, CPU refit and
+rebuild). `insert_knot`/`adapt_grid(layer, samples)` keep their shared-grid behavior;
+`insert_knots` and `adapt_grid(layer, input, batch)` insert one knot per grid. See the
+[contract](docs/CONTRACT.md#per-input-grids-and-quantile-refit-backlog-m6) and the
+[Python examples](tests/python/spline_grid_python_test.py).
 
 ## Per-edge trainable wavelets (Wav-KAN)
 

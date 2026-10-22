@@ -1,0 +1,2 @@
+name, driver_version, clocks.current.sm [MHz], clocks.max.sm [MHz], utilization.gpu [%], power.draw [W], temperature.gpu
+NVIDIA GB10, 580.159.03, 2405 MHz, 3003 MHz, 0 %, 11.07 W, 38

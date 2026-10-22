@@ -1,0 +1,16 @@
+# nsys kernel summary: device refit_grids, FP32 256x256x256x10 b2048 G5 degree 3 per-input, 4 refits (warm-up + 3) of 3 layers
+# share, total, launches, average, kernel
+ 29.1%     2.699 ms    12 x     224.9 us  void kan::cuda::<unnamed>::refit_run_kernel<(unsigned int)4, float>(const T2 *, kan::cuda::<unnamed>::RefitGri
+ 18.4%     1.703 ms    20 x      85.1 us  void kan::cuda::<unnamed>::refit_solve_kernel<float>(const unsigned long long *, const unsigned int *, const d
+ 15.3%     1.418 ms     8 x     177.3 us  void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+  9.1%     0.846 ms    48 x      17.6 us  void cub::CUB_300001_SM_1210::detail::radix_sort::DeviceSegmentedRadixSortKernel<cub::CUB_300001_SM_1210::deta
+  7.2%     0.671 ms     8 x      83.8 us  void kan::cuda::<unnamed>::basis_grid_kernel<(bool)0, (int)3, float>(const T3 *, T3 *, T3 *, unsigned long, ka
+  6.3%     0.588 ms    12 x      49.0 us  void cub::CUB_300001_SM_1210::detail::reduce::DeviceReduceByKeyKernel<cub::CUB_300001_SM_1210::detail::rle::en
+  6.3%     0.587 ms    24 x      24.5 us  void cub::CUB_300001_SM_1210::detail::radix_sort::DeviceSegmentedRadixSortKernel<cub::CUB_300001_SM_1210::deta
+  4.1%     0.381 ms    12 x      31.8 us  kan::cuda::<unnamed>::refit_factor_kernel(const unsigned long long *, const unsigned int *, const double *, un
+  1.5%     0.136 ms    12 x      11.3 us  void kan::cuda::<unnamed>::refit_knots_kernel<float>(const T1 *, unsigned long, unsigned long, unsigned long, 
+  1.4%     0.132 ms    12 x      11.0 us  void kan::cuda::<unnamed>::transpose_kernel<float>(const T1 *, T1 *, unsigned long, unsigned long, unsigned lo
+  0.4%     0.037 ms     8 x       4.6 us  void kan::cuda::<unnamed>::bias_kernel<float>(T1 *, const T1 *, unsigned long, unsigned long, int *)
+  0.3%     0.027 ms    12 x       2.3 us  void cub::CUB_300001_SM_1210::detail::scan::DeviceScanKernel<cub::CUB_300001_SM_1210::detail::scan::policy_hub
+  0.1%     0.012 ms    12 x       1.0 us  kan::cuda::<unnamed>::spline_segments_kernel(int *, unsigned long, unsigned long, unsigned long)
+  0.1%     0.009 ms    12 x       0.8 us  void cub::CUB_300001_SM_1210::detail::scan::DeviceScanInitKernel<cub::CUB_300001_SM_1210::ScanTileState<unsign
