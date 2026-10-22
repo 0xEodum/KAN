@@ -64,37 +64,77 @@ KAN_HOST_DEVICE inline std::size_t spline_first_term(const Scalar* t, std::size_
     return span - degree;
 }
 
-struct RefitGuard {
-    KAN_HOST_DEVICE double operator()(double v) const { return v; }
-};
+// The degree+1 values of spline_evaluate (the same operations, without the
+// derivative expressions) at x: returns the first term g and writes
+// v[0..degree] for terms g..g+degree, or returns `terms` outside the domain
+// (nothing written).
+template<class Scalar>
+KAN_HOST_DEVICE inline std::size_t spline_values(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x, Scalar* v) {
+    if (x < t[degree] || x > t[terms]) return terms;
+    std::size_t span = terms - 1;
+    if (x != t[terms]) {
+        std::size_t lo = degree, hi = terms;
+        while (lo < hi) {
+            const auto mid = lo + (hi - lo) / 2;
+            if (t[mid] <= x) lo = mid + 1;
+            else hi = mid;
+        }
+        span = lo - 1;
+    }
+    Scalar lower[max_spline_degree + 2] = {};
+    Scalar next[max_spline_degree + 2] = {};
+    lower[degree] = 1;
+    const auto start = span - degree;
+    for (std::size_t p = 1; p <= degree; ++p) {
+        for (std::size_t r = degree - p; r <= degree; ++r) {
+            const auto i = start + r;
+            Scalar value = 0;
+            if (lower[r] != 0) value += interval_ratio(x, t[i], t[i + p], t[i]) * lower[r];
+            if (lower[r + 1] != 0) value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
+            next[r] = value;
+        }
+        for (std::size_t r = degree - p; r <= degree; ++r) lower[r] = next[r];
+    }
+    for (std::size_t r = 0; r <= degree; ++r) v[r] = lower[r];
+    return start;
+}
 
-// Products of one run of samples x(begin..end-1) (sorted, one first term on
-// each grid): nn[r*P + q] += B_{g+r}(x) B_{g+q}(x) for q >= r and
-// no[r*P + q] += B_{g+r}(x) B'_{g'+q}(x) (B' the current basis; zero outside
-// its domain). P = degree + 1; Width: P at compile time, 0 for any degree.
-// The accumulators are zeroed first. Returns false if a sample's first terms
-// differ from the run's (not a run of the given keys).
-template<unsigned Width, class Load>
-KAN_HOST_DEVICE bool refit_run_sums(const double* fresh, std::size_t fresh_terms, const double* current, std::size_t current_terms,
+// Adds the products of one sample x (first terms g on the new grid, g' on
+// the current one, `current_terms` outside its domain) to nn[r*P + q] +=
+// B_{g+r}(x) B_{g+q}(x) (q >= r) and no[r*P + q] += B_{g+r}(x) B'_{g'+q}(x)
+// (B' the current basis; zero outside its domain). P = degree + 1; Width: P
+// at compile time, 0 for any degree. Scalar: the precision of the spline
+// values (the knots' type: double on the CPU and in FP64, float on the FP32
+// executor, whose samples and knots are float); products and sums in double.
+// Returns false if the sample's first terms are not (g, g').
+template<unsigned Width, class Scalar>
+KAN_HOST_DEVICE bool refit_sample(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current, std::size_t current_terms,
+                                  std::size_t degree, Scalar x, std::size_t g, std::size_t g_current, double* nn, double* no) {
+    constexpr std::size_t Most = Width ? Width : max_spline_degree + 1;
+    const std::size_t P = Width ? Width : degree + 1;
+    Scalar a[Most], c[Most];
+    const auto ga = spline_values(fresh, fresh_terms, degree, x, a);
+    const auto gc = spline_values(current, current_terms, degree, x, c);
+    if (gc == current_terms)
+        for (std::size_t q = 0; q < P; ++q) c[q] = 0;
+    for (std::size_t r = 0; r < P; ++r) {
+        const double ar = a[r];
+        for (std::size_t q = r; q < P; ++q) nn[r * P + q] += ar * static_cast<double>(a[q]);
+        for (std::size_t q = 0; q < P; ++q) no[r * P + q] += ar * static_cast<double>(c[q]);
+    }
+    return ga == g && gc == g_current;
+}
+// The products of one run of sorted samples x(begin..end-1) in sample order
+// (the accumulators are zeroed first); false if a sample is not of the run.
+template<unsigned Width, class Scalar, class Load>
+KAN_HOST_DEVICE bool refit_run_sums(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current, std::size_t current_terms,
                                     std::size_t degree, const Load& x, std::size_t begin, std::size_t end, std::size_t g,
                                     std::size_t g_current, double* nn, double* no) {
-    constexpr std::size_t Most = Width ? Width : max_spline_degree + 1;
     const std::size_t P = Width ? Width : degree + 1;
     for (std::size_t k = 0; k < P * P; ++k) { nn[k] = 0; no[k] = 0; }
     bool consistent = true;
-    for (std::size_t b = begin; b < end; ++b) {
-        const double v = x(b);
-        double a[Most], da[Most], c[Most], dc[Most];
-        const auto ga = spline_span_terms(fresh, fresh_terms, degree, v, a, da, RefitGuard{});
-        const auto gc = spline_span_terms(current, current_terms, degree, v, c, dc, RefitGuard{});
-        consistent = consistent && ga == g && gc == g_current;
-        if (gc == current_terms)
-            for (std::size_t q = 0; q < P; ++q) c[q] = 0;
-        for (std::size_t r = 0; r < P; ++r) {
-            for (std::size_t q = r; q < P; ++q) nn[r * P + q] += a[r] * a[q];
-            for (std::size_t q = 0; q < P; ++q) no[r * P + q] += a[r] * c[q];
-        }
-    }
+    for (std::size_t b = begin; b < end; ++b)
+        consistent = refit_sample<Width>(fresh, fresh_terms, current, current_terms, degree, x(b), g, g_current, nn, no) && consistent;
     return consistent;
 }
 
