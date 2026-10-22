@@ -107,10 +107,12 @@ void contract_vjp(const double* coefficients, const double* upstream, const Expa
 //   Phi' gives NaN, which the dense loop propagates (and Layer reports).
 //   fl(|u|*max_k |c|) overflows exactly when some fl(|u*c_k|) does (rounding is
 //   monotone), so a sample/edge whose bound overflows takes the dense loop.
+// Per-input grids (backlog M6): input i reads the knot vector at
+// view.knots + i * knot_stride (knot_stride 0: one grid shared by every input).
 class SplineExpansion {
 public:
-    SplineExpansion(const BasisView& view, std::size_t inputs)
-        : view_(view), inputs_(inputs), width_(view.degree + 1), first(inputs),
+    SplineExpansion(const BasisView& view, std::size_t inputs, std::size_t knot_stride = 0)
+        : view_(view), inputs_(inputs), width_(view.degree + 1), knot_stride_(knot_stride), first(inputs),
           values(checked_size(inputs, width_)), derivatives(checked_size(inputs, width_)) {}
     std::size_t terms() const noexcept { return view_.terms; }
     std::size_t width() const noexcept { return width_; } // degree + 1
@@ -118,7 +120,7 @@ public:
     // Expansion::expand (input by input, the same formula operations).
     void expand(const double* x) {
         for (std::size_t i = 0; i < inputs_; ++i)
-            first[i] = spline_span_terms(view_.knots, view_.terms, view_.degree, x[i], values.data() + i * width_,
+            first[i] = spline_span_terms(view_.knots + i * knot_stride_, view_.terms, view_.degree, x[i], values.data() + i * width_,
                                          derivatives.data() + i * width_, FiniteBasisGuard{});
     }
     // Dense Phi / Phi' entry k of input i (zero outside the span).
@@ -130,7 +132,7 @@ private:
         return first[i] != view_.terms && k >= first[i] && k - first[i] < width_ ? rows[i * width_ + k - first[i]] : 0.0;
     }
     BasisView view_;
-    std::size_t inputs_, width_;
+    std::size_t inputs_, width_, knot_stride_;
 
 public:
     std::vector<std::size_t> first; // first possibly nonzero term, `terms` outside the domain

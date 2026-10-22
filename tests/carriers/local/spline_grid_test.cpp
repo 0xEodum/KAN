@@ -300,8 +300,8 @@ TEST(refit_onto_a_refined_grid_preserves_the_function) {
     const auto shared = kan::BSplineConfig{3, clamped(3, -1, 1, uniform_interior(-1, 1, 4))};
     const auto layer = seeded(kan::Layer(2, 3, kan::per_input_grids(shared, 2)), 0.5);
     std::size_t batch = 200;
-    auto x = samples(batch, 2);
-    for (auto& v : x) v = std::clamp(v, -1.0, 1.0);
+    std::vector<double> x(batch * 2);
+    for (std::size_t k = 0; k < x.size(); ++k) x[k] = 0.999 * std::sin(0.71 * double(k) + 0.2);
     x[0] = -1; x[1] = 1; x[2] = 1; x[3] = -1;
     auto refit = layer;
     kan::refit_grid(refit, x, batch, kan::GridRefit{8, 1.0, 0.0});

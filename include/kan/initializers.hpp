@@ -74,7 +74,8 @@ using Initializer = std::variant<VarianceScaling, NoiseInit>;
 // Jacobi the normalized weight (1-x)^alpha (1+x)^beta, Hermite N(0, 1/2); the
 // normalized Hermite functions keep N(0, 1/2), the same input measure, backlog M5);
 // Fourier is uniform on one period [-pi/w, pi/w]; B-splines are uniform on
-// the domain [t_p, t_K]; Gaussian RBFs and Mexican hats are uniform on
+// the domain [t_p, t_K] (per-input grids, backlog M6: each input's own
+// domain; reference_moments takes one grid, see spline_grid); Gaussian RBFs and Mexican hats are uniform on
 // [min center, max center], or [c - h, c + h] for coincident centers with h
 // the largest width or scale.
 struct BasisMoments {

@@ -2183,6 +2183,8 @@ template<class T> detail::RationalScalars<T> device_scalars(const RationalConfig
 }
 
 template<class T> Plan<T> make_plan(const Layer& layer, const BasisEdges& edges, std::size_t offset) {
+    if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis); spline && spline->grids != 1)
+        throw std::invalid_argument("resident per-input spline grids are not supported yet");
     return BasisPlan<T>{{parameter_block(layer, 0, offset), device_view<T>(edges.basis)}};
 }
 template<class T> Plan<T> make_plan(const Layer& layer, const TrainableRbfEdges& edges, std::size_t offset) {

@@ -28,7 +28,17 @@ void expansion_forward(const Config& basis, const std::vector<double>& coefficie
     }
 }
 
+// Knots between the grids of consecutive inputs (backlog M6): 0 for one shared grid.
+std::size_t knot_stride(const BSplineConfig& spline) {
+    return spline.grids == 1 ? 0 : spline.knots.size() / spline.grids;
+}
+
 } // namespace
+
+void check_grids(const BasisConfig& basis, std::size_t inputs) {
+    if (const auto* spline = std::get_if<BSplineConfig>(&basis); spline && spline->grids != 1 && spline->grids != inputs)
+        throw std::invalid_argument("spline grids must be 1 (shared) or the layer's input count");
+}
 
 std::size_t terms(const BasisEdges& edges) noexcept { return basis_size(edges.basis); }
 std::size_t terms(const TrainableRbfEdges& edges) noexcept { return basis_size(edges.basis); }
@@ -37,6 +47,7 @@ void validate(const BasisEdges& edges, EdgeShape shape) {
     if (std::holds_alternative<TrainableRbfConfig>(edges.basis))
         throw std::invalid_argument("a trainable RBF basis requires TrainableRbfEdges");
     validate_basis(edges.basis);
+    check_grids(edges.basis, shape.inputs);
     require_coefficient_shape(edges.coefficients.size(), shape, terms(edges));
 }
 
@@ -50,7 +61,7 @@ void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> b
              std::span<const double> input, std::size_t batch, std::span<double> output) {
     if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
         if (batch == 0) return;
-        SplineExpansion expansion(basis_view(*spline), shape.inputs);
+        SplineExpansion expansion(basis_view(*spline), shape.inputs, knot_stride(*spline));
         for (std::size_t b = 0; b < batch; ++b) {
             expansion.expand(input.data() + b * shape.inputs);
             contract_sparse(edges.coefficients.data(), bias.data(), expansion, shape.inputs, shape.outputs,
@@ -73,7 +84,7 @@ void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> 
               std::span<double> coefficient_gradient, std::monostate&) {
     if (batch == 0) return;
     if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
-        SplineExpansion expansion(basis_view(*spline), shape.inputs);
+        SplineExpansion expansion(basis_view(*spline), shape.inputs, knot_stride(*spline));
         const auto magnitudes = edge_magnitudes(edges.coefficients.data(), shape.inputs * shape.outputs, expansion.terms());
         for (std::size_t b = 0; b < batch; ++b) {
             expansion.expand(input.data() + b * shape.inputs);

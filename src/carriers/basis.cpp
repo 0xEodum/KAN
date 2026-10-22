@@ -59,27 +59,35 @@ void validate(const TrainableRbfConfig& c) {
     }
 }
 
-void validate(const BSplineConfig& c) {
-    if (c.degree > detail::max_spline_degree) throw std::invalid_argument("spline degree must be in [0,16]");
-    const auto size = basis_size(c);
-    if (size < c.degree + 1)
+// One clamped knot vector t[0..n) of degree p.
+void validate_grid(std::size_t degree, const double* t, std::size_t n) {
+    const auto size = n > degree && n - degree > 1 ? n - degree - 1 : 0;
+    if (size < degree + 1)
         throw std::invalid_argument("spline needs at least 2*(degree+1) knots (degree+1 terms)");
-    const auto& t = c.knots;
-    for (std::size_t j = 0; j < t.size(); ++j)
+    for (std::size_t j = 0; j < n; ++j)
         if (!std::isfinite(t[j]) || (j && t[j] < t[j - 1]))
             throw std::invalid_argument("spline knots must be finite and nondecreasing");
-    if (!(t[c.degree] < t[size])) throw std::invalid_argument("spline domain must have positive length");
-    for (std::size_t j = 0; j <= c.degree; ++j)
-        if (t[j] != t[c.degree] || t[size + j] != t[size])
+    if (!(t[degree] < t[size])) throw std::invalid_argument("spline domain must have positive length");
+    for (std::size_t j = 0; j <= degree; ++j)
+        if (t[j] != t[degree] || t[size + j] != t[size])
             throw std::invalid_argument("spline endpoints must be clamped");
-    if (t[c.degree + 1] == t[c.degree] || t[size - 1] == t[size])
+    if (t[degree + 1] == t[degree] || t[size - 1] == t[size])
         throw std::invalid_argument("spline endpoint multiplicity must be exactly degree+1");
     std::size_t multiplicity = 1;
-    for (std::size_t j = c.degree + 2; j < size; ++j) {
+    for (std::size_t j = degree + 2; j < size; ++j) {
         multiplicity = t[j] == t[j - 1] ? multiplicity + 1 : 1;
-        if (multiplicity > c.degree + 1)
+        if (multiplicity > degree + 1)
             throw std::invalid_argument("spline interior multiplicity exceeds degree+1");
     }
+}
+
+// Backlog M6: `grids` knot vectors of equal length, each validated as before.
+void validate(const BSplineConfig& c) {
+    if (c.degree > detail::max_spline_degree) throw std::invalid_argument("spline degree must be in [0,16]");
+    if (c.grids == 0 || c.knots.size() % c.grids != 0)
+        throw std::invalid_argument("spline knots must hold `grids` knot vectors of equal length");
+    const auto n = c.knots.size() / c.grids;
+    for (std::size_t g = 0; g < c.grids; ++g) validate_grid(c.degree, c.knots.data() + g * n, n);
 }
 
 void validate(const MexicanHatConfig& c) {
@@ -99,11 +107,30 @@ void validate_basis(const BasisConfig& config) {
     std::visit([](const auto& c) { validate(c); }, config);
 }
 
-BSplineConfig spline_grid(const BSplineConfig&, std::size_t) { throw std::logic_error("spline_grid: not implemented"); }
-BSplineConfig per_input_grids(const BSplineConfig&, std::size_t) { throw std::logic_error("per_input_grids: not implemented"); }
+BSplineConfig spline_grid(const BSplineConfig& config, std::size_t grid) {
+    validate(config);
+    if (grid >= config.grids) throw std::invalid_argument("spline grid index out of range");
+    const auto n = config.knots.size() / config.grids;
+    const auto first = config.knots.begin() + static_cast<std::ptrdiff_t>(grid * n);
+    return {config.degree, std::vector<double>(first, first + static_cast<std::ptrdiff_t>(n)), 1};
+}
+
+BSplineConfig per_input_grids(const BSplineConfig& config, std::size_t inputs) {
+    validate(config);
+    if (config.grids != 1) throw std::invalid_argument("per_input_grids requires a single-grid configuration");
+    if (inputs == 0) throw std::invalid_argument("per_input_grids requires a positive input count");
+    if (config.knots.size() > std::vector<double>{}.max_size() / inputs)
+        throw std::overflow_error("spline knot count exceeds vector capacity");
+    BSplineConfig result{config.degree, {}, inputs};
+    result.knots.reserve(config.knots.size() * inputs);
+    for (std::size_t i = 0; i < inputs; ++i) result.knots.insert(result.knots.end(), config.knots.begin(), config.knots.end());
+    return result;
+}
 
 BasisValues evaluate_basis(const BasisConfig& config, double x) {
     validate_basis(config);
+    if (const auto* spline = std::get_if<BSplineConfig>(&config); spline && spline->grids != 1)
+        throw std::invalid_argument("a spline with several grids has no single evaluation; use spline_grid");
     if (!std::isfinite(x)) throw std::invalid_argument("basis input must be finite");
     const auto view = detail::basis_view(config);
     BasisValues result{std::vector<double>(view.terms), std::vector<double>(view.terms), {}, {}};

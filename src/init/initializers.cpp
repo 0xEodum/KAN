@@ -85,7 +85,21 @@ std::vector<double> term_factors(const Initializer& initializer, const BasisConf
 template<class Edges>
 Edges linear_edges(const Edges& edges, const Initializer& initializer, std::size_t inputs, std::size_t outputs,
                    Generator& generator, Distribution distribution) {
-    const auto factor = term_factors(initializer, BasisConfig(edges.basis), inputs, distribution);
+    // Per-input spline grids (backlog M6): input i's factors from its own grid
+    // (its reference measure: uniform on its domain).
+    const BasisConfig basis(edges.basis);
+    const auto* spline = std::get_if<BSplineConfig>(&basis);
+    if (spline && spline->grids != 1) {
+        std::vector<std::vector<double>> factors;
+        for (std::size_t i = 0; i < spline->grids; ++i)
+            factors.push_back(term_factors(initializer, spline_grid(*spline, i), inputs, distribution));
+        const auto terms = factors.front().size();
+        Edges next{edges.basis, std::vector<double>(inputs * outputs * terms)};
+        for (std::size_t j = 0; j < next.coefficients.size(); ++j)
+            next.coefficients[j] = factors[(j / terms) % inputs][j % terms] * raw_draw(generator, distribution);
+        return next;
+    }
+    const auto factor = term_factors(initializer, basis, inputs, distribution);
     const auto terms = factor.size();
     Edges next{edges.basis, std::vector<double>(inputs * outputs * terms)};
     for (std::size_t j = 0; j < next.coefficients.size(); ++j)

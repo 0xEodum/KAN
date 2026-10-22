@@ -2,12 +2,15 @@
 // maps). Each operation dispatches on a layer's kind once per call.
 #include "kan/network.hpp"
 #include "kan/families.hpp"
+#include "core/checks.hpp"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <type_traits>
 
 namespace kan {
 namespace {
+using detail::checked_size;
 std::size_t inputs_of(const NetworkLayer& layer) {
     return std::visit([](const auto& l) { return l.inputs(); }, layer);
 }
@@ -62,11 +65,39 @@ double Network::adapt_grid(std::size_t index, std::span<const double> samples) {
     return kan::adapt_grid(kan_layer(index), samples);
 }
 
-std::vector<double> Network::adapt_grid(std::size_t, std::span<const double>, std::size_t) {
-    throw std::logic_error("Network::adapt_grid: not implemented");
+// Backlog M6: samples propagated through the preceding layers.
+std::vector<double> Network::adapt_grid(std::size_t index, std::span<const double> input, std::size_t batch) {
+    auto& layer = kan_layer(index);
+    if (input.size() != checked_size(batch, inputs())) throw std::invalid_argument("network input shape mismatch");
+    std::vector<double> activations(input.begin(), input.end());
+    for (std::size_t j = 0; j < index; ++j)
+        activations = std::visit([&](const auto& l) { return l.forward(activations, batch); }, layers_[j]);
+    return kan::adapt_grid(layer, activations, batch);
 }
-std::size_t Network::refit_grids(std::span<const double>, std::size_t, const GridRefit&) {
-    throw std::logic_error("Network::refit_grids: not implemented");
+
+std::size_t Network::refit_grids(std::span<const double> input, std::size_t batch, const GridRefit& options) {
+    validate_state();
+    const auto spline = [](const NetworkLayer& layer) {
+        const auto* l = std::get_if<Layer>(&layer);
+        const auto* edges = l ? std::get_if<BasisEdges>(&l->carrier()) : nullptr;
+        return edges && std::holds_alternative<BSplineConfig>(edges->basis);
+    };
+    const auto last = std::find_if(layers_.rbegin(), layers_.rend(), spline);
+    if (last == layers_.rend()) throw std::invalid_argument("grid refit requires a network with B-spline layers");
+    if (input.size() != checked_size(batch, inputs())) throw std::invalid_argument("network input shape mismatch");
+    const auto end = static_cast<std::size_t>(layers_.rend() - last); // one past the last spline layer
+    auto next = layers_;
+    std::vector<double> activations(input.begin(), input.end());
+    std::size_t count = 0;
+    for (std::size_t j = 0; j < end; ++j) {
+        if (spline(next[j])) {
+            kan::refit_grid(std::get<Layer>(next[j]), activations, batch, options);
+            ++count;
+        }
+        if (j + 1 < end) activations = std::visit([&](const auto& l) { return l.forward(activations, batch); }, next[j]);
+    }
+    layers_.swap(next);
+    return count;
 }
 
 NetworkRegularizationResult Network::regularization(double lambda) const {

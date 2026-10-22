@@ -31,6 +31,9 @@ std::size_t terms(const TrainableRbfEdges& edges) noexcept;
 std::size_t terms(const RationalEdges& edges) noexcept;
 std::size_t terms(const WaveletEdges& edges) noexcept;
 
+// A spline basis has one grid or one per input (backlog M6; std::invalid_argument).
+void check_grids(const BasisConfig& basis, std::size_t inputs);
+
 // Configuration and parameter shapes for the given dimensions
 // (std::invalid_argument). Finiteness is checked separately.
 void validate(const BasisEdges& edges, EdgeShape shape);

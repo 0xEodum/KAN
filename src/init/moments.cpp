@@ -201,6 +201,8 @@ BasisMoments init::wavelet_moments(std::span<const double> translations, std::sp
 
 BasisMoments reference_moments(const BasisConfig& config) {
     validate_basis(config);
+    if (const auto* spline = std::get_if<BSplineConfig>(&config); spline && spline->grids != 1)
+        throw std::invalid_argument("reference moments of per-input spline grids: use spline_grid for one input");
     auto m = std::visit([](const auto& c) { return moments(c); }, config);
     bool finite = std::isfinite(m.variance) && m.variance > 0;
     for (double v : m.second_moments) finite = finite && std::isfinite(v);

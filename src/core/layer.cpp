@@ -83,6 +83,7 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, BasisConfig basis)
     std::visit([](const auto& edges) {
         if constexpr (requires { edges.basis; }) validate_basis(edges.basis);
     }, carrier_);
+    if (const auto* edges = std::get_if<BasisEdges>(&carrier_)) detail::check_grids(edges->basis, inputs);
     coefficients_of(carrier_).resize(checked_size(checked_size(inputs, outputs), terms()), 0.0);
     bias_.resize(checked_size(outputs, 1), 0.0);
 }
