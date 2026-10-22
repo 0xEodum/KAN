@@ -418,6 +418,13 @@ Tests mirror this layout and are named by feature (backlog R5): `tests/core/`,
 RBF) and `rational_benchmark`, formerly `m2/m3/m4_benchmark`; recorded CSVs with the old
 labels still compare through `docs/evidence/backlog/compare_bench.py`.
 
+C++ and CUDA sources in `include/`, `src/`, `tests/`, `benchmarks/`, `examples/` and
+`python/` follow `.clang-format` (backlog R6; evidence harnesses under `docs/` are not
+reformatted). The pinned formatter is clang-format 18.1.8 (`requirements-dev.txt`);
+`scripts/check_format.sh` checks the tree and `scripts/check_format.sh --fix` formats it.
+When bash and a clang-format are found at configure time, CTest also runs the check as
+the `format` test (skipped for a clang-format other than 18.x); no build requires the tool.
+
 ## Development evidence
 
 Tests use a small dependency-free C++ harness registered with CTest. They include

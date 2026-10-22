@@ -1,0 +1,7 @@
+# clang-format versions (PyPI wheels) against the formatted R6 tree: clang-format --dry-run --style=file over the 100 in-scope files
+clang-format version 17.0.6: 140 changed locations in 19 files
+clang-format version 18.1.0rc: 0 changed locations in 0 files
+clang-format version 18.1.3: 0 changed locations in 0 files
+clang-format version 18.1.8: 0 changed locations in 0 files
+clang-format version 19.1.7: 2 changed locations in 2 files
+clang-format version 20.1.8: 2 changed locations in 2 files

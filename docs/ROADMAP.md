@@ -43,15 +43,20 @@ independent source/evidence acceptance. Reviewed extreme derivative underflow is
 resolved; CPU per-edge allocations removed and GPU parameter reduction tuned.
 See [M4 evidence](evidence/M4.md) and [scope/defaults](evidence/M4-plan.md).
 
-## B: M1–M4 review backlog — NEXT
+## B: M1–M4 review backlog — DONE
 
 Close every item in [BACKLOG.md](BACKLOG.md) (carrier types R, mathematics and
 trainability M, CUDA efficiency C) before M5 starts. Items are taken in small
 batches (at most three per pass), dependency-free P0 items first. Each item
 needs a verified fix, its evidence and a status journal entry; contract changes
 are recorded in `docs/evidence`. See [stage decision](evidence/backlog-gate.md).
+Completed 2026-10-22: all 29 items closed in nine passes (R1–R9, M1–M7, C1–C13;
+C11 closed by the owner, C13 added by owner decision), each with a verified fix,
+its evidence and a journal entry. The last item, R6, formats the sources with a
+pinned clang-format and a CTest check; library and kernel code are
+instruction-identical. See the [stage closure](evidence/backlog-closure.md).
 
-## M5: experimental quantum carriers — PLANNED (depends on B)
+## M5: experimental quantum carriers — NEXT (depends on B, DONE)
 
 Typed PQC/Fock carrier interfaces and simulator adapters, physical normalization,
 measurement/gradient semantics and independently verified QUBO/quadratization.

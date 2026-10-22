@@ -1,0 +1,10 @@
+# golden dumps of the formatted tree (scripts/golden_dumps.sh <out> parity=build-cuda fma=build-cuda-fma) against the C13 reference (C13-bench/golden/sha256-linux.txt) and M6's record (M6-bench/golden-sha256.txt)
+716bd6dd45f3ca04fb3dcf0c8c41de1982fd6dbc127a57169139f611d091c7c1  golden-parity.txt
+525ebb7bff933b76f9370382071f33226e0880538fd7b7d4ee0d15392453dfbc  golden-layers-parity.txt
+2673219cc68241ab6cdaf6852bd5f77e7b212012b00bbe7fa69377e06027134f  f32-parity.txt
+57288d982a5efc82a8e41acb3731f16e309bea801e4d24aa051c7f2de69b7ba2  rational-parity.txt
+09fe89a5025be2668fe32ab9f49d5ab08f6182e4d9eb90fb41f7393897e1cf3f  golden-fma.txt
+525ebb7bff933b76f9370382071f33226e0880538fd7b7d4ee0d15392453dfbc  golden-layers-fma.txt
+f404d4efdaa66cc13dbebaee8d5baa78435cd9f99a709a0b93af751e21b17cab  f32-fma.txt
+815eb52a73502009caa5a6b20b2ad1f54b41f2d392454f2b4ef150ed164af7d0  rational-fma.txt
+all 8 dumps byte-identical to the C13 reference and to M6's record

@@ -1,0 +1,11 @@
+# objcmp.py negative control: a.cpp vs b.cpp (one table entry and one floating-point literal changed), g++ -O2 -c
+static const int t[4] = {1,2,3,4};
+double f(int i) { return t[i & 3] * 0.123456789; }
+# b.cpp:
+static const int t[4] = {1,2,3,5};
+double f(int i) { return t[i & 3] * 0.123456788; }
+$ objcmp.py a.o b.o
+DIFFER data section .rodata
+DIFFER data section .rodata.cst8
+1 / 1 functions: 1 identical, 0 strings-ws, 0 DIFFER | 3 data sections (24 bytes): 2 DIFFER
+exit 1

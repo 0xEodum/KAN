@@ -1,0 +1,279 @@
+# Backlog R6 generated code (codecmp.sh). A = d354453, B = d354453 + the R6 patch series. Release builds with the options of build-cpu / build-cuda / build-cuda-fma (scripts/build.sh).
+# 1. Primary: A and B built at the same source path (one scratch worktree; A's build directories moved aside, the patches applied, B built).
+#    Per object: functions (identical / strings-ws) and data sections; archives and module: functions and bytes; CUDA objects: SASS per kernel and whole.
+## build-cpu: d354453 and the R6 patch series built at the same source path, same options
+CMakeFiles/carrier_test.dir/tests/carriers/carrier_test.cpp.o:
+  strings-ws _Z36family_operations_are_free_functionsv: e.g. str'test::layer(network,0).terms() == 6' -> str'test::layer(network, 0).terms() == 6'
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+CMakeFiles/layer_test.dir/tests/core/layer_test.cpp.o:
+  strings-ws _Z27empty_batch_is_well_definedv: e.g. str'grad.coefficients.size()==layer.coefficients().size()' -> str'grad.coefficients.size() == layer.coefficients().size()'
+  strings-ws _Z28sgd_invalid_update_is_atomicv: e.g. str'std::vector<double>(layer.coefficients().begin(),layer.coefficient -> str'std::vector<double>(layer.coefficients().begin(), layer.coefficien
+  strings-ws _Z42parameter_set_is_validated_before_mutationv: e.g. str'layer.forward(std::vector<double>{0.1,0.2},1)==before' -> str'layer.forward(std::vector<double>{0.1, 0.2}, 1) == before'
+  strings-ws _Z56moved_from_layer_rejects_numerical_and_update_operationsv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==3' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 3'
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+CMakeFiles/local_basis_test.dir/tests/carriers/local/local_basis_test.cpp.o:
+  strings-ws _Z45localized_extreme_tails_and_explicit_overflowv: e.g. str'a.derivatives[0]!=0' -> str'a.derivatives[0] != 0'
+  strings-ws _Z45trainable_rbf_input_and_parameter_derivativesv: e.g. str'a.center_derivatives.size()==c.centers.size()' -> str'a.center_derivatives.size() == c.centers.size()'
+  strings-ws _Z52spline_partition_nonuniform_repeated_and_derivativesv: e.g. str'v>=0' -> str'v >= 0'
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+CMakeFiles/local_layer_test.dir/tests/carriers/local/local_layer_test.cpp.o:
+  strings-ws _Z32trainable_shared_rbf_vjp_and_sgdv: e.g. str'test::trainable(g).centers.size()==3' -> str'test::trainable(g).centers.size() == 3'
+  strings-ws _Z53exact_knot_insertion_preserves_values_and_derivativesv: e.g. str'l.terms()==before.terms()+1' -> str'l.terms() == before.terms() + 1'
+  strings-ws _ZN12_GLOBAL__N_19unchangedERKN3kan5LayerES3_: e.g. str'std::equal(a.coefficients().begin(),a.coefficients().end(),b.coeff -> str'std::equal(a.coefficients().begin(), a.coefficients().end(), b.coe
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+CMakeFiles/network_test.dir/tests/core/network_test.cpp.o:
+  strings-ws _Z28forward_is_layer_compositionv: e.g. str'actual==expected' -> str'actual == expected'
+  strings-ws _Z28sgd_training_fits_polynomialv: e.g. str'mse/y.size()<1e-12' -> str'mse / y.size() < 1e-12'
+  strings-ws _Z33empty_and_invalid_network_batchesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  strings-ws _Z34single_layer_network_matches_layerv: e.g. str'net.forward(x,2)==layer.forward(x,2)' -> str'net.forward(x, 2) == layer.forward(x, 2)'
+  strings-ws _Z35network_sgd_is_atomic_across_layersv: e.g. str'net.forward(x,1)==before' -> str'net.forward(x, 1) == before'
+  strings-ws _Z42moved_from_network_and_layers_are_rejectedv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==1' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 1'
+  strings-ws _Z42network_gradients_match_finite_differencesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+CMakeFiles/rational_allocation_test.dir/tests/carriers/rational/rational_allocation_test.cpp.o:
+  strings-ws _Z61complete_rational_layer_call_has_no_per_edge_heap_allocationsv: e.g. str'y.size()==width*batch' -> str'y.size() == width * batch'
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+CMakeFiles/rational_layer_test.dir/tests/carriers/rational/rational_layer_test.cpp.o:
+  strings-ws _Z41invalid_setters_sgd_and_network_atomicityv: e.g. str'std::vector<double>(test::denominators(l).begin(),test::denominato -> str'std::vector<double>(test::denominators(l).begin(), test::denominat
+  strings-ws _Z46rational_identity_shape_layout_and_empty_batchv: e.g. str'l.forward(std::vector<double>{1,2},1)==std::vector<double>({0,0})' -> str'l.forward(std::vector<double>{1, 2}, 1) == std::vector<double>({0,
+  strings-ws _Z56deterministic_rational_learning_with_independent_holdoutv: e.g. str'final<1e-7' -> str'final < 1e-7'
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+host: 37 object files, 1225 functions: identical instructions and data sections; 22 functions reference stringified test expressions that differ only in whitespace
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+python/_kan.cpython-312-aarch64-linux-gnu.so: 443 / 443 functions compared
+  bytes: identical
+exit status 0
+## build-cuda: d354453 and the R6 patch series built at the same source path, same options
+CMakeFiles/carrier_test.dir/tests/carriers/carrier_test.cpp.o:
+  strings-ws _Z36family_operations_are_free_functionsv: e.g. str'test::layer(network,0).terms() == 6' -> str'test::layer(network, 0).terms() == 6'
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+CMakeFiles/layer_test.dir/tests/core/layer_test.cpp.o:
+  strings-ws _Z27empty_batch_is_well_definedv: e.g. str'grad.coefficients.size()==layer.coefficients().size()' -> str'grad.coefficients.size() == layer.coefficients().size()'
+  strings-ws _Z28sgd_invalid_update_is_atomicv: e.g. str'std::vector<double>(layer.coefficients().begin(),layer.coefficient -> str'std::vector<double>(layer.coefficients().begin(), layer.coefficien
+  strings-ws _Z42parameter_set_is_validated_before_mutationv: e.g. str'layer.forward(std::vector<double>{0.1,0.2},1)==before' -> str'layer.forward(std::vector<double>{0.1, 0.2}, 1) == before'
+  strings-ws _Z56moved_from_layer_rejects_numerical_and_update_operationsv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==3' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 3'
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+CMakeFiles/local_basis_test.dir/tests/carriers/local/local_basis_test.cpp.o:
+  strings-ws _Z45localized_extreme_tails_and_explicit_overflowv: e.g. str'a.derivatives[0]!=0' -> str'a.derivatives[0] != 0'
+  strings-ws _Z45trainable_rbf_input_and_parameter_derivativesv: e.g. str'a.center_derivatives.size()==c.centers.size()' -> str'a.center_derivatives.size() == c.centers.size()'
+  strings-ws _Z52spline_partition_nonuniform_repeated_and_derivativesv: e.g. str'v>=0' -> str'v >= 0'
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+CMakeFiles/local_layer_test.dir/tests/carriers/local/local_layer_test.cpp.o:
+  strings-ws _Z32trainable_shared_rbf_vjp_and_sgdv: e.g. str'test::trainable(g).centers.size()==3' -> str'test::trainable(g).centers.size() == 3'
+  strings-ws _Z53exact_knot_insertion_preserves_values_and_derivativesv: e.g. str'l.terms()==before.terms()+1' -> str'l.terms() == before.terms() + 1'
+  strings-ws _ZN12_GLOBAL__N_19unchangedERKN3kan5LayerES3_: e.g. str'std::equal(a.coefficients().begin(),a.coefficients().end(),b.coeff -> str'std::equal(a.coefficients().begin(), a.coefficients().end(), b.coe
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+CMakeFiles/local_resident_test.dir/tests/backends/cuda/local_resident_test.cpp.o:
+  strings-ws _Z51local_resident_width_candidate_validation_is_atomicv: e.g. str'test::trainable(test::layer(gpu.download_parameters(),0)).log_widt -> str'test::trainable(test::layer(gpu.download_parameters(), 0)).log_wid
+  strings-ws _Z59local_resident_localized_extreme_tails_and_spline_contractsv: e.g. str'dx!=0' -> str'dx != 0'
+  strings-ws _ZN12_GLOBAL__N_16parityEN4test6FamilyE: e.g. str'test::grad(a,j).nonlinear.index()==test::grad(e,j).nonlinear.index -> str'test::grad(a, j).nonlinear.index() == test::grad(e, j).nonlinear.i
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1090 bytes): identical
+CMakeFiles/local_sparse_resident_test.dir/tests/backends/cuda/local_sparse_resident_test.cpp.o:
+  strings-ws _Z51selection_rule_picks_sparse_for_large_spline_layersv: e.g. str'!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{4 -> str'!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{4
+  57 / 57 functions: 56 identical, 1 strings-ws, 0 DIFFER | 14 data sections (922 bytes): identical
+CMakeFiles/network_test.dir/tests/core/network_test.cpp.o:
+  strings-ws _Z28forward_is_layer_compositionv: e.g. str'actual==expected' -> str'actual == expected'
+  strings-ws _Z28sgd_training_fits_polynomialv: e.g. str'mse/y.size()<1e-12' -> str'mse / y.size() < 1e-12'
+  strings-ws _Z33empty_and_invalid_network_batchesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  strings-ws _Z34single_layer_network_matches_layerv: e.g. str'net.forward(x,2)==layer.forward(x,2)' -> str'net.forward(x, 2) == layer.forward(x, 2)'
+  strings-ws _Z35network_sgd_is_atomic_across_layersv: e.g. str'net.forward(x,1)==before' -> str'net.forward(x, 1) == before'
+  strings-ws _Z42moved_from_network_and_layers_are_rejectedv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==1' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 1'
+  strings-ws _Z42network_gradients_match_finite_differencesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+CMakeFiles/rational_allocation_test.dir/tests/carriers/rational/rational_allocation_test.cpp.o:
+  strings-ws _Z61complete_rational_layer_call_has_no_per_edge_heap_allocationsv: e.g. str'y.size()==width*batch' -> str'y.size() == width * batch'
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+CMakeFiles/rational_layer_test.dir/tests/carriers/rational/rational_layer_test.cpp.o:
+  strings-ws _Z41invalid_setters_sgd_and_network_atomicityv: e.g. str'std::vector<double>(test::denominators(l).begin(),test::denominato -> str'std::vector<double>(test::denominators(l).begin(), test::denominat
+  strings-ws _Z46rational_identity_shape_layout_and_empty_batchv: e.g. str'l.forward(std::vector<double>{1,2},1)==std::vector<double>({0,0})' -> str'l.forward(std::vector<double>{1, 2}, 1) == std::vector<double>({0,
+  strings-ws _Z56deterministic_rational_learning_with_independent_holdoutv: e.g. str'final<1e-7' -> str'final < 1e-7'
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+CMakeFiles/rational_resident_test.dir/tests/backends/cuda/rational_resident_test.cpp.o:
+  strings-ws _Z46rational_resident_zero_batch_l2_and_atomic_sgdv: e.g. str'std::isfinite(test::denominators(test::layer(gpu.download_paramete -> str'std::isfinite(test::denominators(test::layer(gpu.download_paramete
+  strings-ws _Z55rational_resident_mixed_network_all_vjps_and_trajectoryv: e.g. str'count==gpu.workspace_allocations()' -> str'count == gpu.workspace_allocations()'
+  strings-ws _Z63rational_resident_representable_extreme_denominator_derivativesv: e.g. str'test::denominators(test::grad(g,0))[1]!=0' -> str'test::denominators(test::grad(g, 0))[1] != 0'
+  strings-ws _Z67rational_resident_capped_warp_launch_preserves_large_parameter_tailv: e.g. str'test::grad(g,0).bias.size()==600001' -> str'test::grad(g, 0).bias.size() == 600001'
+  strings-ws _ZN12_GLOBAL__N_17compareESt4spanIKdLm18446744073709551615EES2_: e.g. str'a.size()==b.size()' -> str'a.size() == b.size()'
+  strings-ws _ZN12_GLOBAL__N_19gradientsERKN3kan16NetworkGradientsES3_: e.g. str'a.layers.size()==b.layers.size()' -> str'a.layers.size() == b.layers.size()'
+  39 / 39 functions: 33 identical, 6 strings-ws, 0 DIFFER | 16 data sections (826 bytes): identical
+CMakeFiles/resident_fused_expansion_test.dir/tests/backends/cuda/resident_fused_expansion_test.cpp.o:
+  strings-ws _Z53float32_fixed_basis_layer_reserves_no_derivative_rowsv: e.g. str'growth >= 2*column' -> str'growth >= 2 * column'
+  20 / 20 functions: 19 identical, 1 strings-ws, 0 DIFFER | 7 data sections (75 bytes): identical
+CMakeFiles/resident_upload_test.dir/tests/backends/cuda/resident_upload_test.cpp.o:
+  strings-ws _ZN12_GLOBAL__N_146upload_of_parameter_regions_above_one_mebibyteEv: e.g. str'flat(initial).size()*sizeof(double) > (std::size_t{1} << 20)' -> str'flat(initial).size() * sizeof(double) > (std::size_t{1} << 20)'
+  110 / 110 functions: 109 identical, 1 strings-ws, 0 DIFFER | 16 data sections (2641 bytes): identical
+CMakeFiles/residual_resident_test.dir/tests/backends/cuda/residual_resident_test.cpp.o:
+  strings-ws _Z41noise_initialized_training_tracks_the_cpuv: e.g. str'expected.back() < 0.5*0.1205' -> str'expected.back() < 0.5 * 0.1205'
+  72 / 72 functions: 71 identical, 1 strings-ws, 0 DIFFER | 15 data sections (1050 bytes): identical
+host: 66 object files, 3216 functions: identical instructions and data sections; 35 functions reference stringified test expressions that differ only in whitespace
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+libkan_cuda.a: 726 / 726 functions compared
+  bytes: 12 differ, all within the strings ['tmpxft_001fe4c7_00000000-7_cuda.cudafe1.cpp', 'tmpxft_001fe4f9_00000000-7_resident.cudafe1.cpp']
+python/_kan.cpython-312-aarch64-linux-gnu.so: 630 / 630 functions compared
+  bytes: identical
+device CMakeFiles/kan_cuda.dir/src/backends/cuda/cuda.cu.o:
+  before 0 kernels, after 0, common 0, differing 0
+  only after: 0 e.g. []
+  only before: []
+  whole text: 0 kernels, 11 SASS lines: identical
+device CMakeFiles/kan_cuda.dir/src/backends/cuda/resident.cu.o:
+  before 292 kernels, after 292, common 292, differing 0
+  only after: 0 e.g. []
+  only before: []
+  whole text: 292 kernels, 1457088 SASS lines: identical
+exit status 0
+## build-cuda-fma: d354453 and the R6 patch series built at the same source path, same options
+CMakeFiles/carrier_test.dir/tests/carriers/carrier_test.cpp.o:
+  strings-ws _Z36family_operations_are_free_functionsv: e.g. str'test::layer(network,0).terms() == 6' -> str'test::layer(network, 0).terms() == 6'
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+CMakeFiles/layer_test.dir/tests/core/layer_test.cpp.o:
+  strings-ws _Z27empty_batch_is_well_definedv: e.g. str'grad.coefficients.size()==layer.coefficients().size()' -> str'grad.coefficients.size() == layer.coefficients().size()'
+  strings-ws _Z28sgd_invalid_update_is_atomicv: e.g. str'std::vector<double>(layer.coefficients().begin(),layer.coefficient -> str'std::vector<double>(layer.coefficients().begin(), layer.coefficien
+  strings-ws _Z42parameter_set_is_validated_before_mutationv: e.g. str'layer.forward(std::vector<double>{0.1,0.2},1)==before' -> str'layer.forward(std::vector<double>{0.1, 0.2}, 1) == before'
+  strings-ws _Z56moved_from_layer_rejects_numerical_and_update_operationsv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==3' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 3'
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+CMakeFiles/local_basis_test.dir/tests/carriers/local/local_basis_test.cpp.o:
+  strings-ws _Z45localized_extreme_tails_and_explicit_overflowv: e.g. str'a.derivatives[0]!=0' -> str'a.derivatives[0] != 0'
+  strings-ws _Z45trainable_rbf_input_and_parameter_derivativesv: e.g. str'a.center_derivatives.size()==c.centers.size()' -> str'a.center_derivatives.size() == c.centers.size()'
+  strings-ws _Z52spline_partition_nonuniform_repeated_and_derivativesv: e.g. str'v>=0' -> str'v >= 0'
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+CMakeFiles/local_layer_test.dir/tests/carriers/local/local_layer_test.cpp.o:
+  strings-ws _Z32trainable_shared_rbf_vjp_and_sgdv: e.g. str'test::trainable(g).centers.size()==3' -> str'test::trainable(g).centers.size() == 3'
+  strings-ws _Z53exact_knot_insertion_preserves_values_and_derivativesv: e.g. str'l.terms()==before.terms()+1' -> str'l.terms() == before.terms() + 1'
+  strings-ws _ZN12_GLOBAL__N_19unchangedERKN3kan5LayerES3_: e.g. str'std::equal(a.coefficients().begin(),a.coefficients().end(),b.coeff -> str'std::equal(a.coefficients().begin(), a.coefficients().end(), b.coe
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+CMakeFiles/local_resident_test.dir/tests/backends/cuda/local_resident_test.cpp.o:
+  strings-ws _Z51local_resident_width_candidate_validation_is_atomicv: e.g. str'test::trainable(test::layer(gpu.download_parameters(),0)).log_widt -> str'test::trainable(test::layer(gpu.download_parameters(), 0)).log_wid
+  strings-ws _Z59local_resident_localized_extreme_tails_and_spline_contractsv: e.g. str'dx!=0' -> str'dx != 0'
+  strings-ws _ZN12_GLOBAL__N_16parityEN4test6FamilyE: e.g. str'test::grad(a,j).nonlinear.index()==test::grad(e,j).nonlinear.index -> str'test::grad(a, j).nonlinear.index() == test::grad(e, j).nonlinear.i
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1090 bytes): identical
+CMakeFiles/local_sparse_resident_test.dir/tests/backends/cuda/local_sparse_resident_test.cpp.o:
+  strings-ws _Z51selection_rule_picks_sparse_for_large_spline_layersv: e.g. str'!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{4 -> str'!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{4
+  57 / 57 functions: 56 identical, 1 strings-ws, 0 DIFFER | 14 data sections (922 bytes): identical
+CMakeFiles/network_test.dir/tests/core/network_test.cpp.o:
+  strings-ws _Z28forward_is_layer_compositionv: e.g. str'actual==expected' -> str'actual == expected'
+  strings-ws _Z28sgd_training_fits_polynomialv: e.g. str'mse/y.size()<1e-12' -> str'mse / y.size() < 1e-12'
+  strings-ws _Z33empty_and_invalid_network_batchesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  strings-ws _Z34single_layer_network_matches_layerv: e.g. str'net.forward(x,2)==layer.forward(x,2)' -> str'net.forward(x, 2) == layer.forward(x, 2)'
+  strings-ws _Z35network_sgd_is_atomic_across_layersv: e.g. str'net.forward(x,1)==before' -> str'net.forward(x, 1) == before'
+  strings-ws _Z42moved_from_network_and_layers_are_rejectedv: e.g. str'destination.forward(std::vector<double>{0.1,0.2},1).size()==1' -> str'destination.forward(std::vector<double>{0.1, 0.2}, 1).size() == 1'
+  strings-ws _Z42network_gradients_match_finite_differencesv: e.g. str'grad.layers.size()==2' -> str'grad.layers.size() == 2'
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+CMakeFiles/rational_allocation_test.dir/tests/carriers/rational/rational_allocation_test.cpp.o:
+  strings-ws _Z61complete_rational_layer_call_has_no_per_edge_heap_allocationsv: e.g. str'y.size()==width*batch' -> str'y.size() == width * batch'
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+CMakeFiles/rational_layer_test.dir/tests/carriers/rational/rational_layer_test.cpp.o:
+  strings-ws _Z41invalid_setters_sgd_and_network_atomicityv: e.g. str'std::vector<double>(test::denominators(l).begin(),test::denominato -> str'std::vector<double>(test::denominators(l).begin(), test::denominat
+  strings-ws _Z46rational_identity_shape_layout_and_empty_batchv: e.g. str'l.forward(std::vector<double>{1,2},1)==std::vector<double>({0,0})' -> str'l.forward(std::vector<double>{1, 2}, 1) == std::vector<double>({0,
+  strings-ws _Z56deterministic_rational_learning_with_independent_holdoutv: e.g. str'final<1e-7' -> str'final < 1e-7'
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+CMakeFiles/rational_resident_test.dir/tests/backends/cuda/rational_resident_test.cpp.o:
+  strings-ws _Z46rational_resident_zero_batch_l2_and_atomic_sgdv: e.g. str'std::isfinite(test::denominators(test::layer(gpu.download_paramete -> str'std::isfinite(test::denominators(test::layer(gpu.download_paramete
+  strings-ws _Z55rational_resident_mixed_network_all_vjps_and_trajectoryv: e.g. str'count==gpu.workspace_allocations()' -> str'count == gpu.workspace_allocations()'
+  strings-ws _Z63rational_resident_representable_extreme_denominator_derivativesv: e.g. str'test::denominators(test::grad(g,0))[1]!=0' -> str'test::denominators(test::grad(g, 0))[1] != 0'
+  strings-ws _Z67rational_resident_capped_warp_launch_preserves_large_parameter_tailv: e.g. str'test::grad(g,0).bias.size()==600001' -> str'test::grad(g, 0).bias.size() == 600001'
+  strings-ws _ZN12_GLOBAL__N_17compareESt4spanIKdLm18446744073709551615EES2_: e.g. str'a.size()==b.size()' -> str'a.size() == b.size()'
+  strings-ws _ZN12_GLOBAL__N_19gradientsERKN3kan16NetworkGradientsES3_: e.g. str'a.layers.size()==b.layers.size()' -> str'a.layers.size() == b.layers.size()'
+  39 / 39 functions: 33 identical, 6 strings-ws, 0 DIFFER | 16 data sections (826 bytes): identical
+CMakeFiles/resident_fused_expansion_test.dir/tests/backends/cuda/resident_fused_expansion_test.cpp.o:
+  strings-ws _Z53float32_fixed_basis_layer_reserves_no_derivative_rowsv: e.g. str'growth >= 2*column' -> str'growth >= 2 * column'
+  20 / 20 functions: 19 identical, 1 strings-ws, 0 DIFFER | 7 data sections (75 bytes): identical
+CMakeFiles/resident_upload_test.dir/tests/backends/cuda/resident_upload_test.cpp.o:
+  strings-ws _ZN12_GLOBAL__N_146upload_of_parameter_regions_above_one_mebibyteEv: e.g. str'flat(initial).size()*sizeof(double) > (std::size_t{1} << 20)' -> str'flat(initial).size() * sizeof(double) > (std::size_t{1} << 20)'
+  110 / 110 functions: 109 identical, 1 strings-ws, 0 DIFFER | 16 data sections (2641 bytes): identical
+CMakeFiles/residual_resident_test.dir/tests/backends/cuda/residual_resident_test.cpp.o:
+  strings-ws _Z41noise_initialized_training_tracks_the_cpuv: e.g. str'expected.back() < 0.5*0.1205' -> str'expected.back() < 0.5 * 0.1205'
+  72 / 72 functions: 71 identical, 1 strings-ws, 0 DIFFER | 15 data sections (1050 bytes): identical
+host: 66 object files, 3216 functions: identical instructions and data sections; 35 functions reference stringified test expressions that differ only in whitespace
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+libkan_cuda.a: 726 / 726 functions compared
+  bytes: 12 differ, all within the strings ['tmpxft_001fede3_00000000-7_cuda.cudafe1.cpp', 'tmpxft_001fee1a_00000000-7_resident.cudafe1.cpp']
+python/_kan.cpython-312-aarch64-linux-gnu.so: 630 / 630 functions compared
+  bytes: identical
+device CMakeFiles/kan_cuda.dir/src/backends/cuda/cuda.cu.o:
+  before 0 kernels, after 0, common 0, differing 0
+  only after: 0 e.g. []
+  only before: []
+  whole text: 0 kernels, 11 SASS lines: identical
+device CMakeFiles/kan_cuda.dir/src/backends/cuda/resident.cu.o:
+  before 292 kernels, after 292, common 292, differing 0
+  only after: 0 e.g. []
+  only before: []
+  whole text: 292 kernels, 1410576 SASS lines: identical
+exit status 0
+
+# 2. The CTest trees: A (scratch worktree) against B = the main tree's build-* (different source paths). Summary lines only.
+#    Host instructions, data sections and SASS are identical as in 1. Differences, all from the source path: resident.cu.o's .nv_fatbin (the
+#    compressed device image embeds nvcc's path-derived names; its SASS, decompressed by cuobjdump, is identical), hence the byte layout of
+#    libkan_cuda.a and of the CUDA Python modules (whose functions differ only in GOT slot offsets, e.g. ldr x3, [x3, #2800] -> #2792).
+## build-cpu: d354453 built in a scratch worktree vs the formatted main tree's build-cpu (different source paths)
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+host: 37 object files, 1225 functions: identical instructions and data sections; 22 functions reference stringified test expressions that differ only in whitespace
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+python/_kan.cpython-312-aarch64-linux-gnu.so: 443 / 443 functions compared
+  bytes: identical
+exit status 0
+## build-cuda: d354453 built in a scratch worktree vs the formatted main tree's build-cuda (different source paths)
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+host DIFFER: CMakeFiles/kan_cuda.dir/src/backends/cuda/resident.cu.o
+  DIFFER data section .nv_fatbin
+  720 / 720 functions: 720 identical, 0 strings-ws, 0 DIFFER | 72 data sections (1610207 bytes): 1 DIFFER
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1090 bytes): identical
+  57 / 57 functions: 56 identical, 1 strings-ws, 0 DIFFER | 14 data sections (922 bytes): identical
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+  39 / 39 functions: 33 identical, 6 strings-ws, 0 DIFFER | 16 data sections (826 bytes): identical
+  20 / 20 functions: 19 identical, 1 strings-ws, 0 DIFFER | 7 data sections (75 bytes): identical
+  110 / 110 functions: 109 identical, 1 strings-ws, 0 DIFFER | 16 data sections (2641 bytes): identical
+  72 / 72 functions: 71 identical, 1 strings-ws, 0 DIFFER | 15 data sections (1050 bytes): identical
+host: 66 object files, 3216 functions: DIFFER
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+libkan_cuda.a: 726 / 726 functions compared
+  bytes: 1610774 differ (layout differs; no string list)
+python/_kan.cpython-312-aarch64-linux-gnu.so: 630 / 630 functions compared DIFFER
+  bytes: 1598790 differ (layout differs; no string list)
+  whole text: 0 kernels, 11 SASS lines: identical
+  whole text: 292 kernels, 1457088 SASS lines: identical
+exit status 1
+## build-cuda-fma: d354453 built in a scratch worktree vs the formatted main tree's build-cuda-fma (different source paths)
+  46 / 46 functions: 45 identical, 1 strings-ws, 0 DIFFER | 14 data sections (738 bytes): identical
+host DIFFER: CMakeFiles/kan_cuda.dir/src/backends/cuda/resident.cu.o
+  DIFFER data section .nv_fatbin
+  720 / 720 functions: 720 identical, 0 strings-ws, 0 DIFFER | 72 data sections (1587399 bytes): 1 DIFFER
+  40 / 40 functions: 36 identical, 4 strings-ws, 0 DIFFER | 12 data sections (667 bytes): identical
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 12 data sections (1323 bytes): identical
+  71 / 71 functions: 68 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1002 bytes): identical
+  41 / 41 functions: 38 identical, 3 strings-ws, 0 DIFFER | 15 data sections (1090 bytes): identical
+  57 / 57 functions: 56 identical, 1 strings-ws, 0 DIFFER | 14 data sections (922 bytes): identical
+  55 / 55 functions: 48 identical, 7 strings-ws, 0 DIFFER | 15 data sections (850 bytes): identical
+  15 / 15 functions: 14 identical, 1 strings-ws, 0 DIFFER | 10 data sections (211 bytes): identical
+  52 / 52 functions: 49 identical, 3 strings-ws, 0 DIFFER | 16 data sections (818 bytes): identical
+  39 / 39 functions: 33 identical, 6 strings-ws, 0 DIFFER | 16 data sections (826 bytes): identical
+  20 / 20 functions: 19 identical, 1 strings-ws, 0 DIFFER | 7 data sections (75 bytes): identical
+  110 / 110 functions: 109 identical, 1 strings-ws, 0 DIFFER | 16 data sections (2641 bytes): identical
+  72 / 72 functions: 71 identical, 1 strings-ws, 0 DIFFER | 15 data sections (1050 bytes): identical
+host: 66 object files, 3216 functions: DIFFER
+libkan.a: 158 / 158 functions compared
+  bytes: identical
+libkan_cuda.a: 726 / 726 functions compared
+  bytes: sizes differ (3571334 vs 3571350)
+python/_kan.cpython-312-aarch64-linux-gnu.so: 630 / 630 functions compared DIFFER
+  bytes: 1736390 differ (layout differs; no string list)
+  whole text: 0 kernels, 11 SASS lines: identical
+  whole text: 292 kernels, 1410576 SASS lines: identical
+exit status 1

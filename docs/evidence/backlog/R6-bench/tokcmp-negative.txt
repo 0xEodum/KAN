@@ -1,0 +1,11 @@
+# tokcmp.py negative controls: deliberate non-whitespace edits on top of the formatted tree (then reverted). Run 1:
+#  resident.cu: one '>>>' launch closer written '>> >'; test.hpp: the TEST macro's last line moved out of the #define (backslash removed);
+#  host_device.hpp: last digit of the FP32 ln2 literal changed; layer.cpp: '#include <cmath>' written '#include < cmath >'
+DIFFER src/backends/cuda/resident.cu: token 37228: [('greatergreatergreater', '>>>'), ('l_paren', '('), ('raw_identifier', 'c')] -> [('greatergreater', '>>'), ('greater', '>'), ('l_paren', '(')]
+DIFFER tests/support/test.hpp: token 451: [('raw_identifier', 'void'), ('raw_identifier', 'name'), ('l_paren', '(')] -> [('eod', ''), ('raw_identifier', 'void'), ('raw_identifier', 'name')]
+DIFFER src/core/host_device.hpp: token 233: [('numeric_constant', '0.693147180559945309417232121458f'), ('semi', ';'), ('r_brace', '}')] -> [('numeric_constant', '0.693147180559945309417232121459f'), ('semi', ';'), ('r_brace', '}')]
+DIFFER src/core/layer.cpp: token 26: [('include-space', 'none'), ('raw_identifier', 'cmath'), ('include-space', 'none')] -> [('include-space', 'space'), ('raw_identifier', 'cmath'), ('include-space', 'space')]
+4 files, 65782 tokens compared: TOKENS DIFFER
+# Run 2: test.hpp: '#define REQUIRE(expression)' written '#define REQUIRE (expression)' (function-like -> object-like macro)
+DIFFER tests/support/test.hpp: token 459: [('define-paren', 'attached'), ('l_paren', '('), ('raw_identifier', 'expression')] -> [('define-paren', 'space'), ('l_paren', '('), ('raw_identifier', 'expression')]
+1 files, 479 tokens compared: TOKENS DIFFER

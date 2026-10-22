@@ -1,0 +1,10 @@
+# dense_lines.py over the 100 in-scope files, base d354453 and the formatted tree
+d354453: 215 lines with more than one statement in 100 files
+formatted: 0 lines with more than one statement in 100 files
+# per directory at d354453
+include: d354453: 0 lines with more than one statement in 12 files
+src: d354453: 65 lines with more than one statement in 35 files
+tests: d354453: 137 lines with more than one statement in 47 files
+benchmarks: d354453: 7 lines with more than one statement in 3 files
+examples: d354453: 0 lines with more than one statement in 1 files
+python: d354453: 6 lines with more than one statement in 2 files

@@ -1,0 +1,93 @@
+Internal ctest changing into directory: /home/core_ai/PyProjects/KAN/build-cpu
+Test project /home/core_ai/PyProjects/KAN/build-cpu
+      Start  1: layer
+ 1/37 Test  #1: layer ............................   Passed    0.00 sec
+      Start  2: network
+ 2/37 Test  #2: network ..........................   Passed    0.00 sec
+      Start  3: input_map
+ 3/37 Test  #3: input_map ........................   Passed    0.02 sec
+      Start  4: residual
+ 4/37 Test  #4: residual .........................   Passed    0.00 sec
+      Start  5: residual_formula
+ 5/37 Test  #5: residual_formula .................   Passed    0.00 sec
+      Start  6: residual_training
+ 6/37 Test  #6: residual_training ................   Passed   33.10 sec
+      Start  7: basis
+ 7/37 Test  #7: basis ............................   Passed    0.00 sec
+      Start  8: basis_config
+ 8/37 Test  #8: basis_config .....................   Passed    0.00 sec
+      Start  9: carrier
+ 9/37 Test  #9: carrier ..........................   Passed    0.00 sec
+      Start 10: hermite_function
+10/37 Test #10: hermite_function .................   Passed    0.00 sec
+      Start 11: local_basis
+11/37 Test #11: local_basis ......................   Passed    0.00 sec
+      Start 12: local_layer
+12/37 Test #12: local_layer ......................   Passed    0.00 sec
+      Start 13: wavelet
+13/37 Test #13: wavelet ..........................   Passed    0.01 sec
+      Start 14: spline_grid
+14/37 Test #14: spline_grid ......................   Passed    0.00 sec
+      Start 15: spline_derivative_formula
+15/37 Test #15: spline_derivative_formula ........   Passed    0.00 sec
+      Start 16: rational
+16/37 Test #16: rational .........................   Passed    0.00 sec
+      Start 17: rational_layer
+17/37 Test #17: rational_layer ...................   Passed    0.03 sec
+      Start 18: rational_allocation
+18/37 Test #18: rational_allocation ..............   Passed    0.01 sec
+      Start 19: rational_policy
+19/37 Test #19: rational_policy ..................   Passed    0.00 sec
+      Start 20: initializer
+20/37 Test #20: initializer ......................   Passed    1.09 sec
+      Start 21: initializer_training
+21/37 Test #21: initializer_training .............   Passed   22.32 sec
+      Start 22: package_custom_include
+22/37 Test #22: package_custom_include ...........   Passed    0.17 sec
+      Start 23: package_default_configuration
+23/37 Test #23: package_default_configuration ....   Passed    0.14 sec
+      Start 24: format
+24/37 Test #24: format ...........................   Passed    0.38 sec
+      Start 25: fit_polynomial
+25/37 Test #25: fit_polynomial ...................   Passed    0.00 sec
+      Start 26: python
+26/37 Test #26: python ...........................   Passed    0.14 sec
+      Start 27: local_python
+27/37 Test #27: local_python .....................   Passed    0.14 sec
+      Start 28: rational_python
+28/37 Test #28: rational_python ..................   Passed    0.11 sec
+      Start 29: input_map_python
+29/37 Test #29: input_map_python .................   Passed    0.13 sec
+      Start 30: residual_python
+30/37 Test #30: residual_python ..................   Passed    0.14 sec
+      Start 31: initializer_python
+31/37 Test #31: initializer_python ...............   Passed    0.24 sec
+      Start 32: hermite_function_python
+32/37 Test #32: hermite_function_python ..........   Passed    0.12 sec
+      Start 33: wavelet_python
+33/37 Test #33: wavelet_python ...................   Passed    0.14 sec
+      Start 34: spline_grid_python
+34/37 Test #34: spline_grid_python ...............   Passed    0.12 sec
+      Start 35: precision_python
+35/37 Test #35: precision_python .................   Passed    0.10 sec
+      Start 36: resident_upload_python
+36/37 Test #36: resident_upload_python ...........   Passed    0.11 sec
+      Start 37: training_python
+37/37 Test #37: training_python ..................   Passed    0.11 sec
+
+100% tests passed, 0 tests failed out of 37
+
+Label Time Summary:
+build          =   0.38 sec*proc (1 test)
+carriers       =   0.13 sec*proc (5 tests)
+core           =  33.40 sec*proc (8 tests)
+cpu            =  56.93 sec*proc (24 tests)
+format         =   0.38 sec*proc (1 test)
+init           =  23.65 sec*proc (3 tests)
+integration    =   1.91 sec*proc (15 tests)
+local          =   0.42 sec*proc (8 tests)
+python         =   1.59 sec*proc (12 tests)
+rational       =   0.15 sec*proc (5 tests)
+resident       =   0.31 sec*proc (3 tests)
+
+Total Test time (real) =  58.92 sec

@@ -1,0 +1,57 @@
+$ scripts/check_format.sh        # formatted tree, .venv/bin/clang-format
+check_format: 100 files formatted (clang-format 18.1.8)
+exit 0
+
+$ scripts/check_format.sh        # in a d354453 worktree with only the new .clang-format and the script added (the unformatted base)
+12506 violations (error: code should be clang-formatted) reported in 86 files; last line: check_format: files above need formatting; run scripts/check_format.sh --fix
+exit 1
+
+$ scripts/check_format.sh        # same worktree, an untracked file src/new.cpp added: it is checked too (its violations, filtered from the list)
+src/new.cpp:1:8: error: code should be clang-formatted [-Wclang-format-violations]
+src/new.cpp:1:9: error: code should be clang-formatted [-Wclang-format-violations]
+src/new.cpp:1:18: error: code should be clang-formatted [-Wclang-format-violations]
+
+$ scripts/check_format.sh        # .clang-format missing; then invalid (an unknown option value)
+check_format: <scratch>/wt-exp/.clang-format is missing or invalid for clang-format 18.1.8
+exit 2
+check_format: <scratch>/wt-exp/.clang-format is missing or invalid for clang-format 18.1.8
+exit 2
+
+$ CLANG_FORMAT=<19.1.7 wheel> scripts/check_format.sh
+check_format: <scratch>/venv-19.1.7/bin/clang-format is version '19.1.7', the pinned major version is 18; skipped
+exit 77
+
+$ CHECK_FORMAT_STRICT=1 CLANG_FORMAT=<19.1.7 wheel> scripts/check_format.sh   # CI mode
+check_format: <scratch>/venv-19.1.7/bin/clang-format is version '19.1.7', the pinned major version is 18; skipped
+check_format: CHECK_FORMAT_STRICT=1, failing
+exit 1
+
+$ CLANG_FORMAT=/nonexistent/clang-format scripts/check_format.sh
+check_format: clang-format not found (pip install -r requirements-dev.txt); skipped
+exit 77
+
+$ PATH=/usr/bin:/bin scripts/check_format.sh   # .venv/bin/clang-format temporarily renamed, so no tool anywhere
+check_format: clang-format not found (pip install -r requirements-dev.txt); skipped
+exit 77
+
+$ git blame --ignore-revs-file .git-blame-ignore-revs -L1,1 src/core/layer.cpp   # file with comment lines only
+exit 0
+
+# CMake registration, CPU-only configurations of the patched tree in a scratch worktree (no .venv, PATH=/usr/bin:/bin: no clang-format)
+$ cmake -S . -B <cpu-noformat> -DCMAKE_BUILD_TYPE=Release && ctest --test-dir <cpu-noformat> -N
+configure exit 0; KAN_CLANG_FORMAT=KAN_CLANG_FORMAT-NOTFOUND
+Total Tests: 24
+format test registered: 0
+$ cmake --build <cpu-noformat> && ctest --test-dir <cpu-noformat>
+build exit 0
+100% tests passed, 0 tests failed out of 24
+
+$ cmake -S . -B <cpu-format19> -DCMAKE_BUILD_TYPE=Release -DKAN_CLANG_FORMAT=<clang-format 19.1.7 wheel> && ctest --test-dir <cpu-format19> -R format
+configure exit 0
+1/1 Test #24: format ...........................***Skipped   0.03 sec
+100% tests passed, 0 tests failed out of 1
+
+$ ... -DKAN_CLANG_FORMAT=<clang-format 18.1.3 wheel> && ctest -R format   (the version Ubuntu 24.04 packages)
+configure exit 0
+1/1 Test #24: format ...........................   Passed    0.40 sec
+100% tests passed, 0 tests failed out of 1
