@@ -46,8 +46,8 @@ KAN_HOST_DEVICE void basis_terms_for(const BasisViewOf<Scalar>& basis, Scalar x,
     else if constexpr (Kind == BasisKind::HermiteFunction)
         hermite_function_terms(basis.terms, x, row.values, row.derivatives, guard);
     else {
-        static_assert(Kind == BasisKind::Chebyshev || Kind == BasisKind::Legendre ||
-                      Kind == BasisKind::Jacobi || Kind == BasisKind::Hermite,
+        static_assert(Kind == BasisKind::Chebyshev || Kind == BasisKind::Legendre || Kind == BasisKind::Jacobi ||
+                          Kind == BasisKind::Hermite,
                       "basis family without an evaluator");
         polynomial_terms(Kind, basis.alpha, basis.beta, basis.terms, x, row.values, row.derivatives, guard);
     }
@@ -56,13 +56,11 @@ KAN_HOST_DEVICE void basis_terms_for(const BasisViewOf<Scalar>& basis, Scalar x,
 // Host-side runtime family dispatch over the compile-time evaluators: CPU
 // evaluation and kernel launch selection. `visit` receives a tag whose `value`
 // is the family.
-template<BasisKind Kind>
-struct BasisFamilyTag {
+template<BasisKind Kind> struct BasisFamilyTag {
     static constexpr BasisKind value = Kind;
 };
 
-template<class Visitor>
-void visit_basis_family(BasisKind kind, Visitor&& visit) {
+template<class Visitor> void visit_basis_family(BasisKind kind, Visitor&& visit) {
     switch (kind) {
     case BasisKind::Chebyshev: visit(BasisFamilyTag<BasisKind::Chebyshev>{}); return;
     case BasisKind::Legendre: visit(BasisFamilyTag<BasisKind::Legendre>{}); return;
@@ -80,9 +78,8 @@ void visit_basis_family(BasisKind kind, Visitor&& visit) {
 
 template<class Scalar, class Guard>
 void basis_terms(const BasisViewOf<Scalar>& basis, Scalar x, const BasisRowOf<Scalar>& row, const Guard& guard) {
-    visit_basis_family(basis.kind, [&](auto family) {
-        basis_terms_for<decltype(family)::value>(basis, x, row, guard);
-    });
+    visit_basis_family(basis.kind,
+                       [&](auto family) { basis_terms_for<decltype(family)::value>(basis, x, row, guard); });
 }
 
 } // namespace kan::detail

@@ -28,21 +28,23 @@ void require_positive(double value, const char* message) {
 }
 
 Common validate(const Initializer& initializer) {
-    return std::visit([](const auto& i) {
-        if constexpr (std::is_same_v<std::decay_t<decltype(i)>, VarianceScaling>)
-            require_positive(i.gain, "variance scaling gain must be finite and positive");
-        else {
-            require_positive(i.scale, "noise scale must be finite and positive");
-            if (!std::isfinite(i.residual_mean) || !std::isfinite(i.residual_spread) || i.residual_spread < 0)
-                throw std::invalid_argument("noise residual mean must be finite and spread finite and nonnegative");
-        }
-        if (i.distribution != Distribution::Uniform && i.distribution != Distribution::Normal)
-            throw std::invalid_argument("invalid initializer distribution");
-        const auto& d = i.denominators;
-        if (!(d.bound > 0 && d.bound < 1)) throw std::invalid_argument("denominator bound must be in (0, 1)");
-        require_positive(d.radius, "denominator radius must be finite and positive");
-        return Common{i.distribution, i.seed, d};
-    }, initializer);
+    return std::visit(
+        [](const auto& i) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(i)>, VarianceScaling>)
+                require_positive(i.gain, "variance scaling gain must be finite and positive");
+            else {
+                require_positive(i.scale, "noise scale must be finite and positive");
+                if (!std::isfinite(i.residual_mean) || !std::isfinite(i.residual_spread) || i.residual_spread < 0)
+                    throw std::invalid_argument("noise residual mean must be finite and spread finite and nonnegative");
+            }
+            if (i.distribution != Distribution::Uniform && i.distribution != Distribution::Normal)
+                throw std::invalid_argument("invalid initializer distribution");
+            const auto& d = i.denominators;
+            if (!(d.bound > 0 && d.bound < 1)) throw std::invalid_argument("denominator bound must be in (0, 1)");
+            require_positive(d.radius, "denominator radius must be finite and positive");
+            return Common{i.distribution, i.seed, d};
+        },
+        initializer);
 }
 
 // Raw draws: U[-1, 1) for Uniform, N(0, 1) for Normal. Every parameter is a
@@ -69,8 +71,10 @@ std::vector<double> term_factors(const Initializer& initializer, const BasisConf
     if (const auto* v = std::get_if<VarianceScaling>(&initializer)) {
         const auto m = reference_moments(basis);
         for (std::size_t k = 0; k < terms; ++k) {
-            const double sigma = m.second_moments[k] == 0 ? 0
-                : std::sqrt(v->gain * v->gain * m.variance / (double(inputs) * double(terms) * m.second_moments[k]));
+            const double sigma = m.second_moments[k] == 0
+                                     ? 0
+                                     : std::sqrt(v->gain * v->gain * m.variance /
+                                                 (double(inputs) * double(terms) * m.second_moments[k]));
             factor[k] = uniform ? std::sqrt(3.0) * sigma : sigma;
         }
     } else {
@@ -164,7 +168,8 @@ WaveletEdges wavelet_edges(const WaveletEdges& edges, const Initializer& initial
     if (const auto* v = std::get_if<VarianceScaling>(&initializer)) {
         const auto m = init::wavelet_moments(edges.translations, edges.log_scales);
         for (std::size_t j = 0; j < count; ++j) {
-            const double sigma = std::sqrt(v->gain * v->gain * m.variance / (double(inputs) * double(size) * m.second_moments[j]));
+            const double sigma =
+                std::sqrt(v->gain * v->gain * m.variance / (double(inputs) * double(size) * m.second_moments[j]));
             next.coefficients[j] = (uniform ? std::sqrt(3.0) * sigma : sigma) * raw_draw(generator, distribution);
         }
     } else {
@@ -184,8 +189,8 @@ std::vector<double> residual_weights(const Initializer& initializer, std::size_t
     std::vector<double> w(inputs * outputs, 0.0);
     if (const auto* noise = std::get_if<NoiseInit>(&initializer)) {
         const double root = std::sqrt(double(inputs));
-        const double factor = distribution == Distribution::Uniform ? noise->residual_spread
-                                                                    : noise->residual_spread / std::sqrt(3.0);
+        const double factor =
+            distribution == Distribution::Uniform ? noise->residual_spread : noise->residual_spread / std::sqrt(3.0);
         for (auto& v : w) v = noise->residual_mean / root + factor * raw_draw(generator, distribution) / root;
     }
     finite_parameters(w);
@@ -198,19 +203,24 @@ void initialize(Layer& layer, const Initializer& initializer) {
     if (layer.inputs() == 0 || layer.outputs() == 0 || layer.bias().size() != layer.outputs())
         throw std::invalid_argument("layer is uninitialized or moved from");
     Generator generator(common.seed);
-    Carrier next = std::visit([&](const auto& edges) -> Carrier {
-        using Edges = std::decay_t<decltype(edges)>;
-        if constexpr (std::is_same_v<Edges, RationalEdges>)
-            return rational_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common);
-        else if constexpr (std::is_same_v<Edges, WaveletEdges>)
-            return wavelet_edges(edges, initializer, layer.inputs(), generator, common.distribution);
-        else
-            return linear_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common.distribution);
-    }, layer.carrier());
-    std::visit([](const auto& edges) {
-        finite_parameters(edges.coefficients);
-        if constexpr (requires { edges.denominators; }) finite_parameters(edges.denominators);
-    }, next);
+    Carrier next = std::visit(
+        [&](const auto& edges) -> Carrier {
+            using Edges = std::decay_t<decltype(edges)>;
+            if constexpr (std::is_same_v<Edges, RationalEdges>)
+                return rational_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common);
+            else if constexpr (std::is_same_v<Edges, WaveletEdges>)
+                return wavelet_edges(edges, initializer, layer.inputs(), generator, common.distribution);
+            else
+                return linear_edges(edges, initializer, layer.inputs(), layer.outputs(), generator,
+                                    common.distribution);
+        },
+        layer.carrier());
+    std::visit(
+        [](const auto& edges) {
+            finite_parameters(edges.coefficients);
+            if constexpr (requires { edges.denominators; }) finite_parameters(edges.denominators);
+        },
+        next);
     const std::vector<double> bias(layer.outputs(), 0.0);
     if (!layer.residual()) {
         layer.set_carrier(std::move(next), bias);

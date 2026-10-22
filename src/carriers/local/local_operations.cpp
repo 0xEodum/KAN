@@ -52,7 +52,8 @@ void insert_into_grids(Layer& layer, const BasisEdges& edges, std::span<const do
     for (std::size_t g = 0; g < spline.grids; ++g) {
         const auto t = grid_knots(spline, g);
         const double x = knots[g];
-        if (!std::isfinite(x) || x <= t[p] || x >= t[size]) throw std::invalid_argument("knot must be strictly inside a spline domain");
+        if (!std::isfinite(x) || x <= t[p] || x >= t[size])
+            throw std::invalid_argument("knot must be strictly inside a spline domain");
         multiplicities[g] = static_cast<std::size_t>(std::count(t.begin(), t.end(), x));
         if (multiplicities[g] >= p + 1) throw std::invalid_argument("knot multiplicity exceeds degree+1");
         spans[g] = static_cast<std::size_t>(std::upper_bound(t.begin(), t.end(), x) - t.begin() - 1);
@@ -74,8 +75,10 @@ void insert_into_grids(Layer& layer, const BasisEdges& edges, std::span<const do
         const auto* c = edges.coefficients.data() + edge * size;
         auto* q = next.data() + edge * next_size;
         for (std::size_t j = 0; j < next_size; ++j) {
-            if (j <= span - p) q[j] = c[j];
-            else if (j >= span - multiplicity + 1) q[j] = c[j - 1];
+            if (j <= span - p)
+                q[j] = c[j];
+            else if (j >= span - multiplicity + 1)
+                q[j] = c[j - 1];
             else {
                 const double denominator = t[j + p] - t[j], numerator = x - t[j];
                 const double alpha = std::isfinite(denominator) ? numerator / denominator
@@ -91,14 +94,13 @@ void insert_into_grids(Layer& layer, const BasisEdges& edges, std::span<const do
 // adapt_grid's rule on one grid: the median of the samples in the most
 // populated span (ties: the lowest), its midpoint if the median is not
 // strictly inside. `each(f)` calls f(x) for every sample.
-template<class Each>
-double adapted_knot(std::span<const double> t, std::size_t degree, Each&& each) {
+template<class Each> double adapted_knot(std::span<const double> t, std::size_t degree, Each&& each) {
     const auto size = t.size() - degree - 1;
     std::vector<std::vector<double>> spans(size);
     each([&](double x) {
         if (x < t[degree] || x > t[size]) return;
-        auto index = x == t[size] ? size - 1
-                                  : static_cast<std::size_t>(std::upper_bound(t.begin(), t.end(), x) - t.begin() - 1);
+        auto index =
+            x == t[size] ? size - 1 : static_cast<std::size_t>(std::upper_bound(t.begin(), t.end(), x) - t.begin() - 1);
         spans[index].push_back(x);
     });
     std::size_t best = degree;
@@ -136,7 +138,9 @@ double adapt_grid(Layer& layer, std::span<const double> samples) {
     const auto& spline = std::get<BSplineConfig>(edges->basis);
     if (spline.grids != 1)
         throw std::invalid_argument("a layer with per-input grids adapts from layer inputs (batch x inputs)");
-    const double x = adapted_knot(spline.knots, spline.degree, [&](auto&& f) { for (double v : samples) f(v); });
+    const double x = adapted_knot(spline.knots, spline.degree, [&](auto&& f) {
+        for (double v : samples) f(v);
+    });
     insert_knot(layer, x);
     return x;
 }
@@ -151,8 +155,10 @@ std::vector<double> adapt_grid(Layer& layer, std::span<const double> input, std:
     std::vector<double> knots(spline.grids);
     for (std::size_t g = 0; g < spline.grids; ++g)
         knots[g] = adapted_knot(grid_knots(spline, g), spline.degree, [&](auto&& f) {
-            if (spline.grids == 1) for (double v : input) f(v);
-            else for (std::size_t b = 0; b < batch; ++b) f(input[b * inputs + g]);
+            if (spline.grids == 1)
+                for (double v : input) f(v);
+            else
+                for (std::size_t b = 0; b < batch; ++b) f(input[b * inputs + g]);
         });
     insert_into_grids(layer, *edges, knots);
     return knots;
@@ -162,8 +168,10 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
     const auto* edges = spline_edges(layer);
     if (!edges) throw std::invalid_argument("grid refit requires splines");
     if (!(options.grid_eps >= 0 && options.grid_eps <= 1)) throw std::invalid_argument("grid_eps must be in [0, 1]");
-    if (!(options.ridge >= 0) || !std::isfinite(options.ridge)) throw std::invalid_argument("refit ridge must be finite and nonnegative");
-    if (!(options.margin >= 0) || !std::isfinite(options.margin)) throw std::invalid_argument("refit margin must be finite and nonnegative");
+    if (!(options.ridge >= 0) || !std::isfinite(options.ridge))
+        throw std::invalid_argument("refit ridge must be finite and nonnegative");
+    if (!(options.margin >= 0) || !std::isfinite(options.margin))
+        throw std::invalid_argument("refit margin must be finite and nonnegative");
     const auto inputs = layer.inputs(), outputs = layer.outputs();
     if (input.size() != checked_size(batch, inputs)) throw std::invalid_argument("refit input shape mismatch");
     require_finite(input);
@@ -210,7 +218,10 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
     const auto P = p + 1;
     std::vector<double> next(checked_size(checked_size(inputs, outputs), next_terms));
     std::vector<double> band(checked_size(next_terms, P)), nn(P * P), no(P * P), rhs(next_terms);
-    struct Run { std::size_t g, current; std::vector<double> no; };
+    struct Run {
+        std::size_t g, current;
+        std::vector<double> no;
+    };
     std::vector<Run> runs;
     for (std::size_t i = 0; i < inputs; ++i) {
         const auto fresh = grid_knots(next_basis, grids == 1 ? 0 : i);
@@ -224,8 +235,10 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
             const auto gc = detail::spline_first_term(current.data(), terms, p, x[begin]);
             auto end = begin + 1;
             while (end < batch && detail::spline_first_term(fresh.data(), next_terms, p, x[end]) == g &&
-                   detail::spline_first_term(current.data(), terms, p, x[end]) == gc) ++end;
-            if (!detail::refit_run_sums<0>(fresh.data(), next_terms, current.data(), terms, p, load, begin, end, g, gc, nn.data(), no.data()))
+                   detail::spline_first_term(current.data(), terms, p, x[end]) == gc)
+                ++end;
+            if (!detail::refit_run_sums<0>(fresh.data(), next_terms, current.data(), terms, p, load, begin, end, g, gc,
+                                           nn.data(), no.data()))
                 throw std::logic_error("grid refit: inconsistent spline spans");
             for (std::size_t r = 0; r < P; ++r)
                 for (std::size_t q = r; q < P; ++q) band[(g + q) * P + (q - r)] += nn[r * P + q];
@@ -245,7 +258,8 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
                     rhs[run.g + r] = sum;
                 }
             detail::band_solve(band.data(), next_terms, p, rhs.data(), 1);
-            std::copy(rhs.begin(), rhs.end(), next.begin() + static_cast<std::ptrdiff_t>((o * inputs + i) * next_terms));
+            std::copy(rhs.begin(), rhs.end(),
+                      next.begin() + static_cast<std::ptrdiff_t>((o * inputs + i) * next_terms));
         }
     }
     result_finite(next);
@@ -268,8 +282,10 @@ void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients, 
     const auto* edges = std::get_if<WaveletEdges>(&layer.carrier());
     if (!edges) throw std::invalid_argument("wavelet parameters require a wavelet layer");
     // set_carrier validates the shapes for the layer, finiteness and the log scales.
-    layer.set_carrier(WaveletEdges{edges->config, {coefficients.begin(), coefficients.end()},
-                                   {translations.begin(), translations.end()}, {log_scales.begin(), log_scales.end()}},
+    layer.set_carrier(WaveletEdges{edges->config,
+                                   {coefficients.begin(), coefficients.end()},
+                                   {translations.begin(), translations.end()},
+                                   {log_scales.begin(), log_scales.end()}},
                       bias);
 }
 

@@ -12,13 +12,21 @@ namespace kan::detail {
 // configuration type; trainable RBFs are GaussianRbf with BasisView::trainable,
 // and HermiteFunction is HermiteConfig with the Function normalization (backlog
 // M5; appended so the existing tags and kernel instantiations keep their values).
-enum class BasisKind { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, BSpline, MexicanHat,
-                       HermiteFunction };
+enum class BasisKind {
+    Chebyshev,
+    Legendre,
+    Jacobi,
+    Hermite,
+    Fourier,
+    GaussianRbf,
+    BSpline,
+    MexicanHat,
+    HermiteFunction
+};
 
 // Non-owning view of one validated basis. Pointer fields are read only for the
 // families that use them; `log_widths` is read only when `trainable` is set.
-template<class Scalar>
-struct BasisViewOf {
+template<class Scalar> struct BasisViewOf {
     BasisKind kind;
     std::size_t terms;
     Scalar alpha, beta, frequency, width;
@@ -32,8 +40,7 @@ struct BasisViewOf {
 using BasisView = BasisViewOf<double>;
 
 // Output rows of length `terms`. The nonlinear RBF rows may be null.
-template<class Scalar>
-struct BasisRowOf {
+template<class Scalar> struct BasisRowOf {
     Scalar* values;
     Scalar* derivatives;
     Scalar* center_derivatives;

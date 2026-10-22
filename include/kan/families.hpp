@@ -47,17 +47,15 @@ void refit_grid(Layer& layer, std::span<const double> input, std::size_t batch, 
 
 // Shared trainable RBF centers and log widths (TrainableRbfEdges), of the
 // layer's current term count.
-void set_rbf_parameters(Layer& layer, std::span<const double> centers,
-                        std::span<const double> log_widths);
+void set_rbf_parameters(Layer& layer, std::span<const double> centers, std::span<const double> log_widths);
 
 // Rational numerator coefficients, denominators and bias (RationalEdges).
-void set_rational_parameters(Layer& layer, std::span<const double> numerator,
-                             std::span<const double> denominators, std::span<const double> bias);
+void set_rational_parameters(Layer& layer, std::span<const double> numerator, std::span<const double> denominators,
+                             std::span<const double> bias);
 
 // Per-edge wavelet coefficients, translations, log scales and bias
 // (WaveletEdges, backlog M7); log scales must satisfy valid_log_scale.
-void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients,
-                            std::span<const double> translations, std::span<const double> log_scales,
-                            std::span<const double> bias);
+void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients, std::span<const double> translations,
+                            std::span<const double> log_scales, std::span<const double> bias);
 
 } // namespace kan

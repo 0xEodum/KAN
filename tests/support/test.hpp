@@ -24,18 +24,30 @@ inline void near(double actual, double expected, double tolerance = 1e-10) {
         throw std::runtime_error("actual=" + std::to_string(actual) + " expected=" + std::to_string(expected));
 }
 template<class Exception, class Fn> void throws(Fn fn) {
-    try { fn(); } catch (const Exception&) { return; }
+    try {
+        fn();
+    } catch (const Exception&) {
+        return;
+    }
     throw std::runtime_error("expected exception was not thrown");
 }
 inline int run() {
     int failed = 0;
     for (const auto& [name, fn] : cases()) {
-        try { fn(); std::cout << "PASS " << name << '\n'; }
-        catch (const std::exception& ex) { ++failed; std::cout << "FAIL " << name << ": " << ex.what() << '\n'; }
+        try {
+            fn();
+            std::cout << "PASS " << name << '\n';
+        } catch (const std::exception& ex) {
+            ++failed;
+            std::cout << "FAIL " << name << ": " << ex.what() << '\n';
+        }
     }
     std::cout << cases().size() - static_cast<std::size_t>(failed) << '/' << cases().size() << " passed\n";
     return failed == 0 ? 0 : 1;
 }
 } // namespace test
-#define TEST(name) void name(); static test::Register reg_##name(#name, name); void name()
+#define TEST(name)                                 \
+    void name();                                   \
+    static test::Register reg_##name(#name, name); \
+    void name()
 #define REQUIRE(expression) test::require(static_cast<bool>(expression), #expression)

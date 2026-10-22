@@ -31,7 +31,8 @@ void validate(const WaveletEdges& edges, EdgeShape shape) {
 void require_finite_nonlinear(const WaveletEdges& edges) {
     require_finite(edges.translations);
     for (double l : edges.log_scales)
-        if (!valid_log_scale(l)) throw std::invalid_argument("wavelet log scales must be finite with finite nonzero exp(+-l)");
+        if (!valid_log_scale(l))
+            throw std::invalid_argument("wavelet log scales must be finite with finite nonzero exp(+-l)");
 }
 
 // output[b,o] = bias[o] + sum_i sum_k w * psi, accumulated in ascending i,
@@ -91,7 +92,8 @@ WaveletGradients zero_nonlinear(const WaveletEdges& edges) {
 }
 
 void check_gradient(const WaveletEdges& edges, const WaveletGradients& gradient) {
-    if (gradient.translations.size() != edges.translations.size() || gradient.log_scales.size() != edges.log_scales.size())
+    if (gradient.translations.size() != edges.translations.size() ||
+        gradient.log_scales.size() != edges.log_scales.size())
         throw std::invalid_argument("wavelet gradient shape mismatch");
     require_finite(gradient.translations);
     require_finite(gradient.log_scales);

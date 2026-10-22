@@ -35,15 +35,17 @@ template<class Scalar> void bitwise_value_matches(Scalar x) {
 } // namespace
 
 TEST(silu_matches_reference_at_ordinary_arguments_double) {
-    for (double x : {-30.0, -20.0, -5.0, -1.2784645427610738, -1.0, -0.1, -1e-300, 0.0, 1e-300, 0.1, 1.0, 2.5, 5.0, 20.0, 30.0}) {
+    for (double x :
+         {-30.0, -20.0, -5.0, -1.2784645427610738, -1.0, -0.1, -1e-300, 0.0, 1e-300, 0.1, 1.0, 2.5, 5.0, 20.0, 30.0}) {
         const auto s = kan::detail::silu(x, ThrowingGuard{});
         test::near(s.value, double(reference_value(x)), 4e-16);
         test::near(s.derivative, double(reference_derivative(x)), 4e-16);
         bitwise_value_matches(x);
         // The derivative is the derivative of the value.
         const double h = 1e-6;
-        const double fd = (kan::detail::silu_value(x + h, ThrowingGuard{}) -
-                           kan::detail::silu_value(x - h, ThrowingGuard{})) / (2 * h);
+        const double fd =
+            (kan::detail::silu_value(x + h, ThrowingGuard{}) - kan::detail::silu_value(x - h, ThrowingGuard{})) /
+            (2 * h);
         test::near(s.derivative, fd, 1e-8);
     }
     // Known values: silu(0) = 0, silu'(0) = 1/2, silu(1) = 1/(1+e^-1).
@@ -63,7 +65,8 @@ TEST(silu_matches_reference_at_ordinary_arguments_float) {
 
 TEST(silu_is_finite_at_extreme_double_arguments) {
     const double max = std::numeric_limits<double>::max(), tiny = std::numeric_limits<double>::denorm_min();
-    for (double x : {1e3, -1e3, 709.0, -709.0, 746.0, -746.0, 1e300, -1e300, max, -max, DBL_MIN, -DBL_MIN, tiny, -tiny, -0.0})
+    for (double x :
+         {1e3, -1e3, 709.0, -709.0, 746.0, -746.0, 1e300, -1e300, max, -max, DBL_MIN, -DBL_MIN, tiny, -tiny, -0.0})
         bitwise_value_matches(x);
     const auto positive = kan::detail::silu(max, ThrowingGuard{});
     REQUIRE(positive.value == max);

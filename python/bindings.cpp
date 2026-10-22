@@ -31,8 +31,7 @@ py::ssize_t axis(std::size_t value) {
 std::span<const double> array_data(const py::array& array) {
     if (!array.dtype().is(py::dtype::of<double>()))
         throw py::type_error("expected a native-endian float64 NumPy array");
-    if (!(array.flags() & py::array::c_style))
-        throw py::value_error("expected a C-contiguous NumPy array");
+    if (!(array.flags() & py::array::c_style)) throw py::value_error("expected a C-contiguous NumPy array");
     if (reinterpret_cast<std::uintptr_t>(array.data()) % alignof(double) != 0)
         throw py::value_error("expected a double-aligned NumPy array");
     return {static_cast<const double*>(array.data()), static_cast<std::size_t>(array.size())};
@@ -40,16 +39,13 @@ std::span<const double> array_data(const py::array& array) {
 
 std::span<const double> shaped(const py::array& array, const Shape& shape) {
     const auto data = array_data(array);
-    if (array.ndim() != static_cast<py::ssize_t>(shape.size()))
-        throw py::value_error("array rank mismatch");
+    if (array.ndim() != static_cast<py::ssize_t>(shape.size())) throw py::value_error("array rank mismatch");
     for (py::ssize_t i = 0; i < array.ndim(); ++i)
-        if (array.shape(i) != shape[static_cast<std::size_t>(i)])
-            throw py::value_error("array shape mismatch");
+        if (array.shape(i) != shape[static_cast<std::size_t>(i)]) throw py::value_error("array shape mismatch");
     return data;
 }
 
-std::size_t input_batch(const py::array& input, std::size_t inputs,
-                        std::optional<std::size_t> requested) {
+std::size_t input_batch(const py::array& input, std::size_t inputs, std::optional<std::size_t> requested) {
     array_data(input);
     if (input.ndim() != 2 || input.shape(1) != axis(inputs))
         throw py::value_error("input must have shape (batch, inputs)");
@@ -76,7 +72,7 @@ std::size_t denominator_degree(const kan::Layer& layer) {
 }
 
 // Value-semantics Python class for one basis configuration type.
-template <typename Config, typename... Extra>
+template<typename Config, typename... Extra>
 py::class_<Config> config_class(py::module_& module, const char* name, Extra&&... extra) {
     py::class_<Config> result(module, name, std::forward<Extra>(extra)...);
     result.def(py::self == py::self);
@@ -84,8 +80,7 @@ py::class_<Config> config_class(py::module_& module, const char* name, Extra&&..
 }
 
 // Localized families derive their term count from their parameter vectors.
-template <typename Config>
-void derived_size(py::class_<Config>& config) {
+template<typename Config> void derived_size(py::class_<Config>& config) {
     config.def_property_readonly("size", [](const Config& c) { return kan::basis_size(c); });
 }
 Shape denominator_shape(const kan::Layer& layer) {
@@ -100,13 +95,13 @@ struct Topology {
     bool operator==(const Topology&) const = default;
 };
 Topology topology(const kan::Layer& layer) {
-    return {layer.inputs(), layer.outputs(), layer.terms(), layer.carrier().index(), denominator_degree(layer),
-            layer.residual().has_value()};
+    return {layer.inputs(),          layer.outputs(),           layer.terms(),
+            layer.carrier().index(), denominator_degree(layer), layer.residual().has_value()};
 }
 
 // Read-only snapshot of one carrier alternative with its layer's dimensions,
 // so parameter arrays keep their (outputs, inputs, terms) shape.
-template <typename Edges> struct CarrierView {
+template<typename Edges> struct CarrierView {
     Edges value;
     std::size_t inputs, outputs;
     py::array_t<double> coefficients() const {
@@ -115,10 +110,12 @@ template <typename Edges> struct CarrierView {
     }
 };
 py::object carrier_view(const kan::Layer& layer) {
-    return std::visit([&](const auto& edges) -> py::object {
-        using Edges = std::decay_t<decltype(edges)>;
-        return py::cast(CarrierView<Edges>{edges, layer.inputs(), layer.outputs()});
-    }, layer.carrier());
+    return std::visit(
+        [&](const auto& edges) -> py::object {
+            using Edges = std::decay_t<decltype(edges)>;
+            return py::cast(CarrierView<Edges>{edges, layer.inputs(), layer.outputs()});
+        },
+        layer.carrier());
 }
 
 struct LayerGradient {
@@ -154,13 +151,16 @@ MapGradient wrap(kan::InputMapGradients value, std::size_t batch, const kan::Inp
 }
 // Python view of one network layer's gradients (LayerGradients or InputMapGradients).
 py::object wrap(const kan::NetworkLayerGradients& value, std::size_t batch, const kan::NetworkLayer& layer) {
-    return std::visit([&](const auto& stage) -> py::object {
-        using Stage = std::decay_t<decltype(stage)>;
-        using Gradients = std::conditional_t<std::is_same_v<Stage, kan::Layer>, kan::LayerGradients, kan::InputMapGradients>;
-        const auto* gradients = std::get_if<Gradients>(&value);
-        if (!gradients) throw std::logic_error("internal gradient kind mismatch");
-        return py::cast(wrap(*gradients, batch, stage));
-    }, layer);
+    return std::visit(
+        [&](const auto& stage) -> py::object {
+            using Stage = std::decay_t<decltype(stage)>;
+            using Gradients =
+                std::conditional_t<std::is_same_v<Stage, kan::Layer>, kan::LayerGradients, kan::InputMapGradients>;
+            const auto* gradients = std::get_if<Gradients>(&value);
+            if (!gradients) throw std::logic_error("internal gradient kind mismatch");
+            return py::cast(wrap(*gradients, batch, stage));
+        },
+        layer);
 }
 // Network layers from a Python sequence of Layer and InputMap objects
 // (pybind11's variant caster needs a default-constructible variant).
@@ -168,9 +168,12 @@ std::vector<kan::NetworkLayer> network_layers(const py::sequence& layers) {
     std::vector<kan::NetworkLayer> result;
     result.reserve(layers.size());
     for (const auto& item : layers) {
-        if (py::isinstance<kan::Layer>(item)) result.emplace_back(item.cast<kan::Layer>());
-        else if (py::isinstance<kan::InputMap>(item)) result.emplace_back(item.cast<kan::InputMap>());
-        else throw py::type_error("network layers must be kan.Layer or kan.InputMap objects");
+        if (py::isinstance<kan::Layer>(item))
+            result.emplace_back(item.cast<kan::Layer>());
+        else if (py::isinstance<kan::InputMap>(item))
+            result.emplace_back(item.cast<kan::InputMap>());
+        else
+            throw py::type_error("network layers must be kan.Layer or kan.InputMap objects");
     }
     return result;
 }
@@ -182,17 +185,16 @@ bool same_topology(const kan::NetworkLayer& a, const kan::NetworkLayer& b) {
 }
 
 // A nonlinear gradient vector of one carrier; empty for the other carriers.
-template <typename Gradients>
+template<typename Gradients>
 std::span<const double> nonlinear_field(const LayerGradient& g, std::vector<double> Gradients::*field) {
     const auto* nonlinear = std::get_if<Gradients>(&g.value.nonlinear);
     return nonlinear ? std::span<const double>(nonlinear->*field) : std::span<const double>();
 }
 
-template <typename Model> std::size_t input_count(const Model& model) { return model.inputs(); }
-template <typename Model> std::size_t output_count(const Model& model) { return model.outputs(); }
+template<typename Model> std::size_t input_count(const Model& model) { return model.inputs(); }
+template<typename Model> std::size_t output_count(const Model& model) { return model.outputs(); }
 
-template <typename Model> auto forward(const Model& model, py::array input,
-                                       std::optional<std::size_t> requested) {
+template<typename Model> auto forward(const Model& model, py::array input, std::optional<std::size_t> requested) {
     const auto batch = input_batch(input, input_count(model), requested);
     const auto data = array_data(input);
     std::vector<double> output;
@@ -203,8 +205,8 @@ template <typename Model> auto forward(const Model& model, py::array input,
     return owned(output, {axis(batch), axis(output_count(model))});
 }
 
-template <typename Model> auto backward(const Model& model, py::array input,
-                                        py::array upstream, std::optional<std::size_t> requested) {
+template<typename Model>
+auto backward(const Model& model, py::array input, py::array upstream, std::optional<std::size_t> requested) {
     const auto batch = input_batch(input, input_count(model), requested);
     const auto data = array_data(input);
     const auto gradient_data = shaped(upstream, {axis(batch), axis(output_count(model))});
@@ -216,7 +218,8 @@ template <typename Model> auto backward(const Model& model, py::array input,
     }
     if constexpr (std::is_same_v<Model, kan::Network>)
         return NetworkGradient{std::move(gradient), batch, {model.layers().begin(), model.layers().end()}};
-    else return wrap(std::move(gradient), batch, model);
+    else
+        return wrap(std::move(gradient), batch, model);
 }
 
 #ifdef KAN_PYTHON_CUDA
@@ -257,9 +260,11 @@ PYBIND11_MODULE(_kan, module) {
         .value("FLOAT32", kan::cuda::Precision::Float32, "single precision for training")
         .value("TF32", kan::cuda::Precision::TensorFloat32, "single precision with TF32 tensor-core contractions")
         .finalize();
-    py::native_enum<kan::cuda::Loss>(module, "Loss", "enum.Enum", "Loss whose gradient a resident training step computes")
+    py::native_enum<kan::cuda::Loss>(module, "Loss", "enum.Enum",
+                                     "Loss whose gradient a resident training step computes")
         .value("OUTPUT_GRADIENT", kan::cuda::Loss::OutputGradient, "the uploaded output gradient of the caller's loss")
-        .value("MEAN_SQUARED_ERROR", kan::cuda::Loss::MeanSquaredError, "mean squared error against the resident target")
+        .value("MEAN_SQUARED_ERROR", kan::cuda::Loss::MeanSquaredError,
+               "mean squared error against the resident target")
         .finalize();
 #ifdef KAN_PYTHON_CUDA
     module.attr("cuda_enabled") = true;
@@ -282,7 +287,8 @@ PYBIND11_MODULE(_kan, module) {
         .finalize();
     config_class<kan::HermiteConfig>(module, "HermiteConfig")
         .def(py::init([](std::size_t size, kan::HermiteNormalization normalization) {
-            return kan::HermiteConfig{size, normalization}; }),
+                 return kan::HermiteConfig{size, normalization};
+             }),
              py::arg("size") = 4, py::arg("normalization") = kan::HermiteNormalization::Physicists)
         .def_readwrite("size", &kan::HermiteConfig::size)
         .def_readwrite("normalization", &kan::HermiteConfig::normalization);
@@ -301,7 +307,8 @@ PYBIND11_MODULE(_kan, module) {
     derived_size(gaussian);
     gaussian
         .def(py::init([](std::vector<double> centers, double width) {
-            return kan::GaussianRbfConfig{std::move(centers), width}; }),
+                 return kan::GaussianRbfConfig{std::move(centers), width};
+             }),
              py::arg("centers") = std::vector<double>{}, py::arg("width") = 1.0)
         .def_readwrite("centers", &kan::GaussianRbfConfig::centers)
         .def_readwrite("width", &kan::GaussianRbfConfig::width);
@@ -309,17 +316,20 @@ PYBIND11_MODULE(_kan, module) {
     derived_size(trainable);
     trainable
         .def(py::init([](std::vector<double> centers, std::vector<double> log_widths) {
-            return kan::TrainableRbfConfig{std::move(centers), std::move(log_widths)}; }),
+                 return kan::TrainableRbfConfig{std::move(centers), std::move(log_widths)};
+             }),
              py::arg("centers") = std::vector<double>{}, py::arg("log_widths") = std::vector<double>{})
         .def_readwrite("centers", &kan::TrainableRbfConfig::centers)
         .def_readwrite("log_widths", &kan::TrainableRbfConfig::log_widths);
     auto spline = config_class<kan::BSplineConfig>(module, "BSplineConfig");
     derived_size(spline);
     spline
-        .def(py::init([](std::size_t degree, std::vector<double> knots, std::size_t grids) {
-            return kan::BSplineConfig{degree, std::move(knots), grids}; }),
-             py::arg("degree") = 3, py::arg("knots") = std::vector<double>{}, py::arg("grids") = 1,
-             "knots holds `grids` knot vectors of equal length; grids = inputs gives every input its own grid (backlog M6).")
+        .def(
+            py::init([](std::size_t degree, std::vector<double> knots, std::size_t grids) {
+                return kan::BSplineConfig{degree, std::move(knots), grids};
+            }),
+            py::arg("degree") = 3, py::arg("knots") = std::vector<double>{}, py::arg("grids") = 1,
+            "knots holds `grids` knot vectors of equal length; grids = inputs gives every input its own grid (backlog M6).")
         .def_readwrite("degree", &kan::BSplineConfig::degree)
         .def_readwrite("knots", &kan::BSplineConfig::knots)
         .def_readwrite("grids", &kan::BSplineConfig::grids);
@@ -327,7 +337,8 @@ PYBIND11_MODULE(_kan, module) {
     module.def("per_input_grids", &kan::per_input_grids, py::arg("config"), py::arg("inputs"));
     py::class_<kan::GridRefit>(module, "GridRefit")
         .def(py::init([](std::size_t intervals, double grid_eps, double ridge, bool per_input, double margin) {
-            return kan::GridRefit{intervals, grid_eps, ridge, per_input, margin}; }),
+                 return kan::GridRefit{intervals, grid_eps, ridge, per_input, margin};
+             }),
              py::arg("intervals") = 0, py::arg("grid_eps") = 0.02, py::arg("ridge") = 1e-8, py::arg("per_input") = true,
              py::arg("margin") = 0.01)
         .def_readwrite("intervals", &kan::GridRefit::intervals)
@@ -340,12 +351,12 @@ PYBIND11_MODULE(_kan, module) {
     derived_size(wavelet);
     wavelet
         .def(py::init([](std::vector<double> centers, std::vector<double> scales) {
-            return kan::MexicanHatConfig{std::move(centers), std::move(scales)}; }),
+                 return kan::MexicanHatConfig{std::move(centers), std::move(scales)};
+             }),
              py::arg("centers") = std::vector<double>{}, py::arg("scales") = std::vector<double>{})
         .def_readwrite("centers", &kan::MexicanHatConfig::centers)
         .def_readwrite("scales", &kan::MexicanHatConfig::scales);
-    module.def("basis_size", [](const kan::BasisConfig& config) { return kan::basis_size(config); },
-               py::arg("config"));
+    module.def("basis_size", [](const kan::BasisConfig& config) { return kan::basis_size(config); }, py::arg("config"));
     module.def("cuda_available", [] {
 #ifdef KAN_PYTHON_CUDA
         return kan::cuda::available();
@@ -353,30 +364,42 @@ PYBIND11_MODULE(_kan, module) {
         return false;
 #endif
     });
-    module.def("evaluate_basis", [](kan::BasisConfig config, double x) {
-        kan::BasisValues basis;
-        {
-            py::gil_scoped_release release;
-            basis = kan::evaluate_basis(config, x);
-        }
-        return py::make_tuple(owned(basis.values, {axis(basis.values.size())}),
-                              owned(basis.derivatives, {axis(basis.derivatives.size())}));
-    }, py::arg("config"), py::arg("x"));
-    module.def("evaluate_rational", [](kan::RationalConfig config, double x, py::array numerator, py::array denominator) {
-        kan::validate_rational(config);
-        const auto a = shaped(numerator, {axis(config.numerator_degree+1)});
-        const auto b = shaped(denominator, {axis(config.denominator_degree)});
-        kan::RationalEvaluation r;
-        { py::gil_scoped_release release; r=kan::evaluate_rational(config,x,a,b); }
-        return py::make_tuple(r.value,r.input_derivative,
-            owned(r.numerator_derivatives,{axis(r.numerator_derivatives.size())}),
-            owned(r.denominator_derivatives,{axis(r.denominator_derivatives.size())}));
-    }, py::arg("config"), py::arg("x"), py::arg("numerator").noconvert(), py::arg("denominator").noconvert());
-    module.def("evaluate_wavelet", [](double x, double translation, double log_scale) {
-        const auto r = kan::evaluate_wavelet(x, translation, log_scale);
-        return py::make_tuple(r.value, r.input_derivative, r.translation_derivative, r.log_scale_derivative);
-    }, py::arg("x"), py::arg("translation"), py::arg("log_scale"),
-       "(value, d/dx, d/dtranslation, d/dlog_scale) of one wavelet with unit coefficient");
+    module.def(
+        "evaluate_basis",
+        [](kan::BasisConfig config, double x) {
+            kan::BasisValues basis;
+            {
+                py::gil_scoped_release release;
+                basis = kan::evaluate_basis(config, x);
+            }
+            return py::make_tuple(owned(basis.values, {axis(basis.values.size())}),
+                                  owned(basis.derivatives, {axis(basis.derivatives.size())}));
+        },
+        py::arg("config"), py::arg("x"));
+    module.def(
+        "evaluate_rational",
+        [](kan::RationalConfig config, double x, py::array numerator, py::array denominator) {
+            kan::validate_rational(config);
+            const auto a = shaped(numerator, {axis(config.numerator_degree + 1)});
+            const auto b = shaped(denominator, {axis(config.denominator_degree)});
+            kan::RationalEvaluation r;
+            {
+                py::gil_scoped_release release;
+                r = kan::evaluate_rational(config, x, a, b);
+            }
+            return py::make_tuple(r.value, r.input_derivative,
+                                  owned(r.numerator_derivatives, {axis(r.numerator_derivatives.size())}),
+                                  owned(r.denominator_derivatives, {axis(r.denominator_derivatives.size())}));
+        },
+        py::arg("config"), py::arg("x"), py::arg("numerator").noconvert(), py::arg("denominator").noconvert());
+    module.def(
+        "evaluate_wavelet",
+        [](double x, double translation, double log_scale) {
+            const auto r = kan::evaluate_wavelet(x, translation, log_scale);
+            return py::make_tuple(r.value, r.input_derivative, r.translation_derivative, r.log_scale_derivative);
+        },
+        py::arg("x"), py::arg("translation"), py::arg("log_scale"),
+        "(value, d/dx, d/dtranslation, d/dlog_scale) of one wavelet with unit coefficient");
     module.def("valid_log_scale", &kan::valid_log_scale, py::arg("log_scale"));
 
     // Read-only carrier snapshots returned by Layer.carrier, one class per carrier.
@@ -390,14 +413,17 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("config", [](const CarrierView<kan::RationalEdges>& c) { return c.value.config; })
         .def_property_readonly("coefficients", &CarrierView<kan::RationalEdges>::coefficients)
         .def_property_readonly("denominators", [](const CarrierView<kan::RationalEdges>& c) {
-            return owned(c.value.denominators, {axis(c.outputs), axis(c.inputs), axis(c.value.config.denominator_degree)});
+            return owned(c.value.denominators,
+                         {axis(c.outputs), axis(c.inputs), axis(c.value.config.denominator_degree)});
         });
     py::class_<CarrierView<kan::WaveletEdges>>(module, "WaveletEdges")
         .def_property_readonly("config", [](const CarrierView<kan::WaveletEdges>& c) { return c.value.config; })
         .def_property_readonly("coefficients", &CarrierView<kan::WaveletEdges>::coefficients)
-        .def_property_readonly("translations", [](const CarrierView<kan::WaveletEdges>& c) {
-            return owned(c.value.translations, {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
-        })
+        .def_property_readonly("translations",
+                               [](const CarrierView<kan::WaveletEdges>& c) {
+                                   return owned(c.value.translations,
+                                                {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
+                               })
         .def_property_readonly("log_scales", [](const CarrierView<kan::WaveletEdges>& c) {
             return owned(c.value.log_scales, {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
         });
@@ -406,188 +432,243 @@ PYBIND11_MODULE(_kan, module) {
                py::call_guard<py::gil_scoped_release>());
     // samples: a vector (one shared grid), or layer inputs (batch, inputs)
     // returning the inserted knot of every grid (backlog M6).
-    module.def("adapt_grid", [](kan::Layer& layer, py::array samples) -> py::object {
-        const auto data = array_data(samples);
-        if (samples.ndim() == 2) {
-            const auto batch = input_batch(samples, layer.inputs(), std::nullopt);
-            std::vector<double> knots;
+    module.def(
+        "adapt_grid",
+        [](kan::Layer& layer, py::array samples) -> py::object {
+            const auto data = array_data(samples);
+            if (samples.ndim() == 2) {
+                const auto batch = input_batch(samples, layer.inputs(), std::nullopt);
+                std::vector<double> knots;
+                {
+                    py::gil_scoped_release release;
+                    knots = kan::adapt_grid(layer, data, batch);
+                }
+                return owned(knots, {axis(knots.size())});
+            }
+            if (samples.ndim() != 1) throw py::value_error("samples must be a vector or have shape (batch, inputs)");
+            double knot = 0;
             {
                 py::gil_scoped_release release;
-                knots = kan::adapt_grid(layer, data, batch);
+                knot = kan::adapt_grid(layer, data);
             }
-            return owned(knots, {axis(knots.size())});
-        }
-        if (samples.ndim() != 1) throw py::value_error("samples must be a vector or have shape (batch, inputs)");
-        double knot = 0;
-        {
+            return py::float_(knot);
+        },
+        py::arg("layer"), py::arg("samples").noconvert());
+    module.def(
+        "insert_knots",
+        [](kan::Layer& layer, py::array knots) {
+            const auto data = array_data(knots);
+            if (knots.ndim() != 1) throw py::value_error("knots must be a vector");
             py::gil_scoped_release release;
-            knot = kan::adapt_grid(layer, data);
-        }
-        return py::float_(knot);
-    }, py::arg("layer"), py::arg("samples").noconvert());
-    module.def("insert_knots", [](kan::Layer& layer, py::array knots) {
-        const auto data = array_data(knots);
-        if (knots.ndim() != 1) throw py::value_error("knots must be a vector");
-        py::gil_scoped_release release;
-        kan::insert_knots(layer, data);
-    }, py::arg("layer"), py::arg("knots").noconvert());
-    module.def("refit_grid", [](kan::Layer& layer, py::array input, const kan::GridRefit& options) {
-        const auto batch = input_batch(input, layer.inputs(), std::nullopt);
-        const auto data = array_data(input);
-        py::gil_scoped_release release;
-        kan::refit_grid(layer, data, batch, options);
-    }, py::arg("layer"), py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{});
-    module.def("set_rbf_parameters", [](kan::Layer& layer, py::array centers, py::array log_widths) {
-        if (!std::holds_alternative<kan::TrainableRbfEdges>(layer.carrier()))
-            throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");
-        const auto c = shaped(centers, {axis(layer.terms())});
-        const auto w = shaped(log_widths, {axis(layer.terms())});
-        py::gil_scoped_release release;
-        kan::set_rbf_parameters(layer, c, w);
-    }, py::arg("layer"), py::arg("centers").noconvert(), py::arg("log_widths").noconvert());
-    module.def("set_rational_parameters", [](kan::Layer& layer, py::array coefficients, py::array denominators, py::array bias) {
-        if (!std::holds_alternative<kan::RationalEdges>(layer.carrier()))
-            throw std::invalid_argument("rational parameter shape or layer type mismatch");
-        const auto c = shaped(coefficients, coefficient_shape(layer));
-        const auto d = shaped(denominators, denominator_shape(layer));
-        const auto b = shaped(bias, {axis(layer.outputs())});
-        py::gil_scoped_release release;
-        kan::set_rational_parameters(layer, c, d, b);
-    }, py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("denominators").noconvert(),
-       py::arg("bias").noconvert());
-    module.def("set_wavelet_parameters", [](kan::Layer& layer, py::array coefficients, py::array translations,
-                                            py::array log_scales, py::array bias) {
-        if (!std::holds_alternative<kan::WaveletEdges>(layer.carrier()))
-            throw std::invalid_argument("wavelet parameters require a wavelet layer");
-        const auto shape = coefficient_shape(layer);
-        const auto c = shaped(coefficients, shape);
-        const auto t = shaped(translations, shape);
-        const auto l = shaped(log_scales, shape);
-        const auto b = shaped(bias, {axis(layer.outputs())});
-        py::gil_scoped_release release;
-        kan::set_wavelet_parameters(layer, c, t, l, b);
-    }, py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("translations").noconvert(),
-       py::arg("log_scales").noconvert(), py::arg("bias").noconvert());
+            kan::insert_knots(layer, data);
+        },
+        py::arg("layer"), py::arg("knots").noconvert());
+    module.def(
+        "refit_grid",
+        [](kan::Layer& layer, py::array input, const kan::GridRefit& options) {
+            const auto batch = input_batch(input, layer.inputs(), std::nullopt);
+            const auto data = array_data(input);
+            py::gil_scoped_release release;
+            kan::refit_grid(layer, data, batch, options);
+        },
+        py::arg("layer"), py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{});
+    module.def(
+        "set_rbf_parameters",
+        [](kan::Layer& layer, py::array centers, py::array log_widths) {
+            if (!std::holds_alternative<kan::TrainableRbfEdges>(layer.carrier()))
+                throw std::invalid_argument("RBF parameters require a trainable Gaussian basis");
+            const auto c = shaped(centers, {axis(layer.terms())});
+            const auto w = shaped(log_widths, {axis(layer.terms())});
+            py::gil_scoped_release release;
+            kan::set_rbf_parameters(layer, c, w);
+        },
+        py::arg("layer"), py::arg("centers").noconvert(), py::arg("log_widths").noconvert());
+    module.def(
+        "set_rational_parameters",
+        [](kan::Layer& layer, py::array coefficients, py::array denominators, py::array bias) {
+            if (!std::holds_alternative<kan::RationalEdges>(layer.carrier()))
+                throw std::invalid_argument("rational parameter shape or layer type mismatch");
+            const auto c = shaped(coefficients, coefficient_shape(layer));
+            const auto d = shaped(denominators, denominator_shape(layer));
+            const auto b = shaped(bias, {axis(layer.outputs())});
+            py::gil_scoped_release release;
+            kan::set_rational_parameters(layer, c, d, b);
+        },
+        py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("denominators").noconvert(),
+        py::arg("bias").noconvert());
+    module.def(
+        "set_wavelet_parameters",
+        [](kan::Layer& layer, py::array coefficients, py::array translations, py::array log_scales, py::array bias) {
+            if (!std::holds_alternative<kan::WaveletEdges>(layer.carrier()))
+                throw std::invalid_argument("wavelet parameters require a wavelet layer");
+            const auto shape = coefficient_shape(layer);
+            const auto c = shaped(coefficients, shape);
+            const auto t = shaped(translations, shape);
+            const auto l = shaped(log_scales, shape);
+            const auto b = shaped(bias, {axis(layer.outputs())});
+            py::gil_scoped_release release;
+            kan::set_wavelet_parameters(layer, c, t, l, b);
+        },
+        py::arg("layer"), py::arg("coefficients").noconvert(), py::arg("translations").noconvert(),
+        py::arg("log_scales").noconvert(), py::arg("bias").noconvert());
 
     py::class_<LayerGradient>(module, "LayerGradients")
-        .def_property_readonly("input", [](const LayerGradient& g) {
-            return owned(g.value.input, {axis(g.batch), axis(g.topology.inputs)});
-        })
-        .def_property_readonly("coefficients", [](const LayerGradient& g) {
-            const auto& t = g.topology;
-            return owned(g.value.coefficients, {axis(t.outputs), axis(t.inputs), axis(t.terms)});
-        })
-        .def_property_readonly("bias", [](const LayerGradient& g) {
-            return owned(g.value.bias, {axis(g.topology.outputs)});
-        })
-        .def_property_readonly("centers", [](const LayerGradient& g) {
-            const auto v = nonlinear_field(g, &kan::TrainableRbfGradients::centers);
-            return owned(v, {axis(v.size())});
-        })
-        .def_property_readonly("log_widths", [](const LayerGradient& g) {
-            const auto v = nonlinear_field(g, &kan::TrainableRbfGradients::log_widths);
-            return owned(v, {axis(v.size())});
-        })
-        .def_property_readonly("denominators", [](const LayerGradient& g) {
-            const auto& t = g.topology;
-            const auto v = nonlinear_field(g, &kan::RationalGradients::denominators);
-            return owned(v, std::holds_alternative<kan::RationalGradients>(g.value.nonlinear) ?
-                Shape{axis(t.outputs), axis(t.inputs), axis(t.denominator_size)} : Shape{0});
-        })
-        .def_property_readonly("translations", [](const LayerGradient& g) {
-            const auto& t = g.topology;
-            const auto v = nonlinear_field(g, &kan::WaveletGradients::translations);
-            return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear) ?
-                Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)} : Shape{0});
-        }, "Wavelet translation gradient (outputs, inputs, terms); shape (0,) for other carriers.")
-        .def_property_readonly("log_scales", [](const LayerGradient& g) {
-            const auto& t = g.topology;
-            const auto v = nonlinear_field(g, &kan::WaveletGradients::log_scales);
-            return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear) ?
-                Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)} : Shape{0});
-        }, "Wavelet log-scale gradient (outputs, inputs, terms); shape (0,) for other carriers.")
-        .def_property_readonly("residual", [](const LayerGradient& g) {
-            const auto& t = g.topology;
-            return owned(g.value.residual, t.residual ? Shape{axis(t.outputs), axis(t.inputs)} : Shape{0});
-        }, "Residual-branch weight gradient (outputs, inputs); shape (0,) without the branch.");
+        .def_property_readonly(
+            "input",
+            [](const LayerGradient& g) { return owned(g.value.input, {axis(g.batch), axis(g.topology.inputs)}); })
+        .def_property_readonly("coefficients",
+                               [](const LayerGradient& g) {
+                                   const auto& t = g.topology;
+                                   return owned(g.value.coefficients, {axis(t.outputs), axis(t.inputs), axis(t.terms)});
+                               })
+        .def_property_readonly("bias",
+                               [](const LayerGradient& g) { return owned(g.value.bias, {axis(g.topology.outputs)}); })
+        .def_property_readonly("centers",
+                               [](const LayerGradient& g) {
+                                   const auto v = nonlinear_field(g, &kan::TrainableRbfGradients::centers);
+                                   return owned(v, {axis(v.size())});
+                               })
+        .def_property_readonly("log_widths",
+                               [](const LayerGradient& g) {
+                                   const auto v = nonlinear_field(g, &kan::TrainableRbfGradients::log_widths);
+                                   return owned(v, {axis(v.size())});
+                               })
+        .def_property_readonly("denominators",
+                               [](const LayerGradient& g) {
+                                   const auto& t = g.topology;
+                                   const auto v = nonlinear_field(g, &kan::RationalGradients::denominators);
+                                   return owned(v,
+                                                std::holds_alternative<kan::RationalGradients>(g.value.nonlinear)
+                                                    ? Shape{axis(t.outputs), axis(t.inputs), axis(t.denominator_size)}
+                                                    : Shape{0});
+                               })
+        .def_property_readonly(
+            "translations",
+            [](const LayerGradient& g) {
+                const auto& t = g.topology;
+                const auto v = nonlinear_field(g, &kan::WaveletGradients::translations);
+                return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear)
+                                    ? Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)}
+                                    : Shape{0});
+            },
+            "Wavelet translation gradient (outputs, inputs, terms); shape (0,) for other carriers.")
+        .def_property_readonly(
+            "log_scales",
+            [](const LayerGradient& g) {
+                const auto& t = g.topology;
+                const auto v = nonlinear_field(g, &kan::WaveletGradients::log_scales);
+                return owned(v, std::holds_alternative<kan::WaveletGradients>(g.value.nonlinear)
+                                    ? Shape{axis(t.outputs), axis(t.inputs), axis(t.terms)}
+                                    : Shape{0});
+            },
+            "Wavelet log-scale gradient (outputs, inputs, terms); shape (0,) for other carriers.")
+        .def_property_readonly(
+            "residual",
+            [](const LayerGradient& g) {
+                const auto& t = g.topology;
+                return owned(g.value.residual, t.residual ? Shape{axis(t.outputs), axis(t.inputs)} : Shape{0});
+            },
+            "Residual-branch weight gradient (outputs, inputs); shape (0,) without the branch.");
     py::class_<MapGradient>(module, "InputMapGradients")
-        .def_property_readonly("input", [](const MapGradient& g) {
-            return owned(g.value.input, {axis(g.batch), axis(g.topology.features)});
-        })
-        .def_property_readonly("gain", [](const MapGradient& g) {
-            return owned(g.value.gain, {axis(g.value.gain.size())});
-        })
-        .def_property_readonly("bias", [](const MapGradient& g) {
-            return owned(g.value.bias, {axis(g.value.bias.size())});
-        });
+        .def_property_readonly(
+            "input",
+            [](const MapGradient& g) { return owned(g.value.input, {axis(g.batch), axis(g.topology.features)}); })
+        .def_property_readonly("gain",
+                               [](const MapGradient& g) { return owned(g.value.gain, {axis(g.value.gain.size())}); })
+        .def_property_readonly("bias",
+                               [](const MapGradient& g) { return owned(g.value.bias, {axis(g.value.bias.size())}); });
     py::class_<NetworkGradient>(module, "NetworkGradients")
-        .def_property_readonly("input", [](const NetworkGradient& g) {
-            const auto inputs = std::visit([](const auto& l) { return l.inputs(); }, g.topology.front());
-            return owned(g.value.input, {axis(g.batch), axis(inputs)});
-        })
-        .def_property_readonly("layers", [](const NetworkGradient& g) {
-            py::list layers;
-            for (std::size_t i = 0; i < g.topology.size(); ++i)
-                layers.append(wrap(g.value.layers[i], g.batch, g.topology[i]));
-            return layers;
-        }, "LayerGradients for KAN layers and InputMapGradients for input maps, in layer order.");
+        .def_property_readonly("input",
+                               [](const NetworkGradient& g) {
+                                   const auto inputs =
+                                       std::visit([](const auto& l) { return l.inputs(); }, g.topology.front());
+                                   return owned(g.value.input, {axis(g.batch), axis(inputs)});
+                               })
+        .def_property_readonly(
+            "layers",
+            [](const NetworkGradient& g) {
+                py::list layers;
+                for (std::size_t i = 0; i < g.topology.size(); ++i)
+                    layers.append(wrap(g.value.layers[i], g.batch, g.topology[i]));
+                return layers;
+            },
+            "LayerGradients for KAN layers and InputMapGradients for input maps, in layer order.");
     py::class_<kan::Layer>(module, "Layer")
-        .def(py::init<std::size_t, std::size_t, kan::BasisConfig>(),
-             py::arg("inputs"), py::arg("outputs"), py::arg("basis"))
-        .def(py::init<std::size_t, std::size_t, kan::RationalConfig>(),
-             py::arg("inputs"), py::arg("outputs"), py::arg("rational"))
-        .def(py::init<std::size_t, std::size_t, kan::WaveletConfig>(),
-             py::arg("inputs"), py::arg("outputs"), py::arg("wavelet"))
+        .def(py::init<std::size_t, std::size_t, kan::BasisConfig>(), py::arg("inputs"), py::arg("outputs"),
+             py::arg("basis"))
+        .def(py::init<std::size_t, std::size_t, kan::RationalConfig>(), py::arg("inputs"), py::arg("outputs"),
+             py::arg("rational"))
+        .def(py::init<std::size_t, std::size_t, kan::WaveletConfig>(), py::arg("inputs"), py::arg("outputs"),
+             py::arg("wavelet"))
         .def_property_readonly("inputs", &kan::Layer::inputs)
         .def_property_readonly("outputs", &kan::Layer::outputs)
         .def_property_readonly("carrier", &carrier_view,
-            "Owned read-only snapshot of the layer's carrier (BasisEdges, TrainableRbfEdges, "
-            "RationalEdges or WaveletEdges); every access copies the parameters.")
+                               "Owned read-only snapshot of the layer's carrier (BasisEdges, TrainableRbfEdges, "
+                               "RationalEdges or WaveletEdges); every access copies the parameters.")
         .def_property_readonly("terms", &kan::Layer::terms)
-        .def_property_readonly("coefficients", [](const kan::Layer& layer) {
-            return owned(layer.coefficients(), coefficient_shape(layer));
-        })
-        .def_property_readonly("bias", [](const kan::Layer& layer) {
-            return owned(layer.bias(), {axis(layer.outputs())});
-        })
-        .def("set_parameters", [](kan::Layer& layer, py::array coefficients, py::array bias) {
-            const auto c = shaped(coefficients, coefficient_shape(layer));
-            const auto b = shaped(bias, {axis(layer.outputs())});
-            py::gil_scoped_release release;
-            layer.set_parameters(c, b);
-        }, py::arg("coefficients").noconvert(), py::arg("bias").noconvert())
-        .def_property_readonly("residual", [](const kan::Layer& layer) -> py::object {
-            if (!layer.residual()) return py::none();
-            return owned(layer.residual()->weights, {axis(layer.outputs()), axis(layer.inputs())});
-        }, "Owned copy of the SiLU residual-branch weights (outputs, inputs), or None without the branch.")
-        .def("set_residual", [](kan::Layer& layer, py::object weights) {
-            std::optional<kan::SiluResidual> residual;
-            if (!weights.is_none()) {
-                if (!py::isinstance<py::array>(weights)) throw py::type_error("expected a float64 NumPy array or None");
-                const auto w = shaped(weights.cast<py::array>(), {axis(layer.outputs()), axis(layer.inputs())});
-                residual = kan::SiluResidual{{w.begin(), w.end()}};
-            }
-            py::gil_scoped_release release;
-            layer.set_residual(std::move(residual));
-        }, py::arg("weights"),
-           "Enables or replaces the SiLU residual branch with weights (outputs, inputs); None disables it.")
-        .def("regularization", [](const kan::Layer& layer, double lambda) {
-            kan::RegularizationResult r;
-            {py::gil_scoped_release release;r=layer.regularization(lambda);}
-            return py::make_tuple(r.value,wrap(std::move(r.gradients),0,layer));
-        }, py::arg("coefficient_l2"))
+        .def_property_readonly(
+            "coefficients",
+            [](const kan::Layer& layer) { return owned(layer.coefficients(), coefficient_shape(layer)); })
+        .def_property_readonly("bias",
+                               [](const kan::Layer& layer) { return owned(layer.bias(), {axis(layer.outputs())}); })
+        .def(
+            "set_parameters",
+            [](kan::Layer& layer, py::array coefficients, py::array bias) {
+                const auto c = shaped(coefficients, coefficient_shape(layer));
+                const auto b = shaped(bias, {axis(layer.outputs())});
+                py::gil_scoped_release release;
+                layer.set_parameters(c, b);
+            },
+            py::arg("coefficients").noconvert(), py::arg("bias").noconvert())
+        .def_property_readonly(
+            "residual",
+            [](const kan::Layer& layer) -> py::object {
+                if (!layer.residual()) return py::none();
+                return owned(layer.residual()->weights, {axis(layer.outputs()), axis(layer.inputs())});
+            },
+            "Owned copy of the SiLU residual-branch weights (outputs, inputs), or None without the branch.")
+        .def(
+            "set_residual",
+            [](kan::Layer& layer, py::object weights) {
+                std::optional<kan::SiluResidual> residual;
+                if (!weights.is_none()) {
+                    if (!py::isinstance<py::array>(weights))
+                        throw py::type_error("expected a float64 NumPy array or None");
+                    const auto w = shaped(weights.cast<py::array>(), {axis(layer.outputs()), axis(layer.inputs())});
+                    residual = kan::SiluResidual{{w.begin(), w.end()}};
+                }
+                py::gil_scoped_release release;
+                layer.set_residual(std::move(residual));
+            },
+            py::arg("weights"),
+            "Enables or replaces the SiLU residual branch with weights (outputs, inputs); None disables it.")
+        .def(
+            "regularization",
+            [](const kan::Layer& layer, double lambda) {
+                kan::RegularizationResult r;
+                {
+                    py::gil_scoped_release release;
+                    r = layer.regularization(lambda);
+                }
+                return py::make_tuple(r.value, wrap(std::move(r.gradients), 0, layer));
+            },
+            py::arg("coefficient_l2"))
         .def("forward", &forward<kan::Layer>, py::arg("input").noconvert(), py::arg("batch") = py::none())
-        .def("backward", &backward<kan::Layer>, py::arg("input").noconvert(),
-             py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
-        .def("sgd", [](kan::Layer& layer, const LayerGradient& gradient, double learning_rate) {
-            if (gradient.topology != topology(layer)) throw py::value_error("gradient topology mismatch");
-            py::gil_scoped_release release;
-            layer.sgd(gradient.value, learning_rate);
-        }, py::arg("gradients"), py::arg("learning_rate"));
+        .def("backward", &backward<kan::Layer>, py::arg("input").noconvert(), py::arg("output_gradient").noconvert(),
+             py::arg("batch") = py::none())
+        .def(
+            "sgd",
+            [](kan::Layer& layer, const LayerGradient& gradient, double learning_rate) {
+                if (gradient.topology != topology(layer)) throw py::value_error("gradient topology mismatch");
+                py::gil_scoped_release release;
+                layer.sgd(gradient.value, learning_rate);
+            },
+            py::arg("gradients"), py::arg("learning_rate"));
     // Input maps (backlog M1): value classes per map kind and the InputMap layer kind.
     config_class<kan::AffineMap>(module, "AffineMap")
         .def(py::init([](std::vector<double> scale, std::vector<double> shift) {
-            return kan::AffineMap{std::move(scale), std::move(shift)}; }),
+                 return kan::AffineMap{std::move(scale), std::move(shift)};
+             }),
              py::arg("scale") = std::vector<double>{}, py::arg("shift") = std::vector<double>{})
         .def_readwrite("scale", &kan::AffineMap::scale)
         .def_readwrite("shift", &kan::AffineMap::shift);
@@ -596,8 +677,10 @@ PYBIND11_MODULE(_kan, module) {
         .def_readwrite("scale", &kan::TanhMap::scale);
     config_class<kan::LayerNormMap>(module, "LayerNormMap")
         .def(py::init([](double epsilon, std::vector<double> gain, std::vector<double> bias) {
-            return kan::LayerNormMap{epsilon, std::move(gain), std::move(bias)}; }),
-             py::arg("epsilon") = 1e-5, py::arg("gain") = std::vector<double>{}, py::arg("bias") = std::vector<double>{})
+                 return kan::LayerNormMap{epsilon, std::move(gain), std::move(bias)};
+             }),
+             py::arg("epsilon") = 1e-5, py::arg("gain") = std::vector<double>{},
+             py::arg("bias") = std::vector<double>{})
         .def_readwrite("epsilon", &kan::LayerNormMap::epsilon)
         .def_readwrite("gain", &kan::LayerNormMap::gain)
         .def_readwrite("bias", &kan::LayerNormMap::bias);
@@ -606,168 +689,236 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("features", &kan::InputMap::features)
         .def_property_readonly("inputs", &kan::InputMap::inputs)
         .def_property_readonly("outputs", &kan::InputMap::outputs)
-        .def_property_readonly("map", [](const kan::InputMap& map) { return map.map(); },
+        .def_property_readonly(
+            "map", [](const kan::InputMap& map) { return map.map(); },
             "Owned snapshot of the map (AffineMap, TanhMap or LayerNormMap).")
-        .def("set_map", [](kan::InputMap& map, kan::InputMapKind kind) {
-            py::gil_scoped_release release;
-            map.set_map(std::move(kind));
-        }, py::arg("map"))
+        .def(
+            "set_map",
+            [](kan::InputMap& map, kan::InputMapKind kind) {
+                py::gil_scoped_release release;
+                map.set_map(std::move(kind));
+            },
+            py::arg("map"))
         .def("forward", &forward<kan::InputMap>, py::arg("input").noconvert(), py::arg("batch") = py::none())
-        .def("backward", &backward<kan::InputMap>, py::arg("input").noconvert(),
-             py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
-        .def("sgd", [](kan::InputMap& map, const MapGradient& gradient, double learning_rate) {
-            if (gradient.topology != map_topology(map)) throw py::value_error("gradient topology mismatch");
+        .def("backward", &backward<kan::InputMap>, py::arg("input").noconvert(), py::arg("output_gradient").noconvert(),
+             py::arg("batch") = py::none())
+        .def(
+            "sgd",
+            [](kan::InputMap& map, const MapGradient& gradient, double learning_rate) {
+                if (gradient.topology != map_topology(map)) throw py::value_error("gradient topology mismatch");
+                py::gil_scoped_release release;
+                map.sgd(gradient.value, learning_rate);
+            },
+            py::arg("gradients"), py::arg("learning_rate"));
+    module.def(
+        "affine_from_range",
+        [](py::array samples, double lower, double upper) {
+            const auto data = array_data(samples);
+            if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
+            const auto batch = static_cast<std::size_t>(samples.shape(0)),
+                       features = static_cast<std::size_t>(samples.shape(1));
             py::gil_scoped_release release;
-            map.sgd(gradient.value, learning_rate);
-        }, py::arg("gradients"), py::arg("learning_rate"));
-    module.def("affine_from_range", [](py::array samples, double lower, double upper) {
-        const auto data = array_data(samples);
-        if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
-        const auto batch = static_cast<std::size_t>(samples.shape(0)), features = static_cast<std::size_t>(samples.shape(1));
-        py::gil_scoped_release release;
-        return kan::affine_from_range(data, batch, features, lower, upper);
-    }, py::arg("samples").noconvert(), py::arg("lower") = -1.0, py::arg("upper") = 1.0);
-    module.def("affine_from_moments", [](py::array samples) {
-        const auto data = array_data(samples);
-        if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
-        const auto batch = static_cast<std::size_t>(samples.shape(0)), features = static_cast<std::size_t>(samples.shape(1));
-        py::gil_scoped_release release;
-        return kan::affine_from_moments(data, batch, features);
-    }, py::arg("samples").noconvert());
+            return kan::affine_from_range(data, batch, features, lower, upper);
+        },
+        py::arg("samples").noconvert(), py::arg("lower") = -1.0, py::arg("upper") = 1.0);
+    module.def(
+        "affine_from_moments",
+        [](py::array samples) {
+            const auto data = array_data(samples);
+            if (samples.ndim() != 2) throw py::value_error("samples must have shape (batch, features)");
+            const auto batch = static_cast<std::size_t>(samples.shape(0)),
+                       features = static_cast<std::size_t>(samples.shape(1));
+            py::gil_scoped_release release;
+            return kan::affine_from_moments(data, batch, features);
+        },
+        py::arg("samples").noconvert());
     py::class_<kan::Network>(module, "Network")
-        .def(py::init([](const py::sequence& layers) { return kan::Network(network_layers(layers)); }), py::arg("layers"),
-             "A sequence of Layer and InputMap objects with matching adjacent dimensions.")
-        .def_property_readonly("layers", [](const kan::Network& model) {
-            py::list result;
-            for (const auto& layer : model.layers())
-                result.append(std::visit([](const auto& l) { return py::cast(l); }, layer));
-            return result;
-        }, "Copies of the network layers (Layer or InputMap) in order.")
+        .def(py::init([](const py::sequence& layers) { return kan::Network(network_layers(layers)); }),
+             py::arg("layers"), "A sequence of Layer and InputMap objects with matching adjacent dimensions.")
+        .def_property_readonly(
+            "layers",
+            [](const kan::Network& model) {
+                py::list result;
+                for (const auto& layer : model.layers())
+                    result.append(std::visit([](const auto& l) { return py::cast(l); }, layer));
+                return result;
+            },
+            "Copies of the network layers (Layer or InputMap) in order.")
         .def_property_readonly("inputs", &kan::Network::inputs)
         .def_property_readonly("outputs", &kan::Network::outputs)
         .def("insert_knot", &kan::Network::insert_knot, py::arg("layer_index"), py::arg("x"),
              py::call_guard<py::gil_scoped_release>())
         // samples: a vector in that layer's input domain (not propagated).
-        .def("adapt_grid", [](kan::Network& model, std::size_t index, py::array samples) {
-            const auto data=array_data(samples);
-            if(samples.ndim()!=1)throw py::value_error("samples must be a vector (network input: adapt_grid_from_input)");
-            py::gil_scoped_release release;return model.adapt_grid(index,data);
-        }, py::arg("layer_index"), py::arg("samples").noconvert())
+        .def(
+            "adapt_grid",
+            [](kan::Network& model, std::size_t index, py::array samples) {
+                const auto data = array_data(samples);
+                if (samples.ndim() != 1)
+                    throw py::value_error("samples must be a vector (network input: adapt_grid_from_input)");
+                py::gil_scoped_release release;
+                return model.adapt_grid(index, data);
+            },
+            py::arg("layer_index"), py::arg("samples").noconvert())
         // Backlog M6: a network input batch (batch, inputs) propagated to the
         // layer; returns the inserted knot of every grid.
-        .def("adapt_grid_from_input", [](kan::Network& model, std::size_t index, py::array input) {
-            const auto batch = input_batch(input, model.inputs(), std::nullopt);
-            const auto data = array_data(input);
-            std::vector<double> knots;
-            {
+        .def(
+            "adapt_grid_from_input",
+            [](kan::Network& model, std::size_t index, py::array input) {
+                const auto batch = input_batch(input, model.inputs(), std::nullopt);
+                const auto data = array_data(input);
+                std::vector<double> knots;
+                {
+                    py::gil_scoped_release release;
+                    knots = model.adapt_grid(index, data, batch);
+                }
+                return owned(knots, {axis(knots.size())});
+            },
+            py::arg("layer_index"), py::arg("input").noconvert())
+        .def(
+            "refit_grids",
+            [](kan::Network& model, py::array input, const kan::GridRefit& options) {
+                const auto batch = input_batch(input, model.inputs(), std::nullopt);
+                const auto data = array_data(input);
                 py::gil_scoped_release release;
-                knots = model.adapt_grid(index, data, batch);
-            }
-            return owned(knots, {axis(knots.size())});
-        }, py::arg("layer_index"), py::arg("input").noconvert())
-        .def("refit_grids", [](kan::Network& model, py::array input, const kan::GridRefit& options) {
-            const auto batch = input_batch(input, model.inputs(), std::nullopt);
-            const auto data = array_data(input);
-            py::gil_scoped_release release;
-            return model.refit_grids(data, batch, options);
-        }, py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{})
-        .def("regularization", [](const kan::Network& model, double lambda) {
-            kan::NetworkRegularizationResult r;
-            {py::gil_scoped_release release;r=model.regularization(lambda);}
-            return py::make_tuple(r.value,NetworkGradient{std::move(r.gradients),0,
-                {model.layers().begin(),model.layers().end()}});
-        }, py::arg("coefficient_l2"))
+                return model.refit_grids(data, batch, options);
+            },
+            py::arg("input").noconvert(), py::arg("options") = kan::GridRefit{})
+        .def(
+            "regularization",
+            [](const kan::Network& model, double lambda) {
+                kan::NetworkRegularizationResult r;
+                {
+                    py::gil_scoped_release release;
+                    r = model.regularization(lambda);
+                }
+                return py::make_tuple(
+                    r.value,
+                    NetworkGradient{std::move(r.gradients), 0, {model.layers().begin(), model.layers().end()}});
+            },
+            py::arg("coefficient_l2"))
         .def("forward", &forward<kan::Network>, py::arg("input").noconvert(), py::arg("batch") = py::none())
-        .def("backward", &backward<kan::Network>, py::arg("input").noconvert(),
-             py::arg("output_gradient").noconvert(), py::arg("batch") = py::none())
-        .def("sgd", [](kan::Network& model, const NetworkGradient& gradient, double learning_rate) {
-            if (model.layers().size() != gradient.topology.size())
-                throw py::value_error("gradient topology mismatch");
-            for (std::size_t i = 0; i < gradient.topology.size(); ++i) {
-                if (!same_topology(model.layers()[i], gradient.topology[i]))
+        .def("backward", &backward<kan::Network>, py::arg("input").noconvert(), py::arg("output_gradient").noconvert(),
+             py::arg("batch") = py::none())
+        .def(
+            "sgd",
+            [](kan::Network& model, const NetworkGradient& gradient, double learning_rate) {
+                if (model.layers().size() != gradient.topology.size())
                     throw py::value_error("gradient topology mismatch");
-            }
-            py::gil_scoped_release release;
-            model.sgd(gradient.value, learning_rate);
-        }, py::arg("gradients"), py::arg("learning_rate"));
+                for (std::size_t i = 0; i < gradient.topology.size(); ++i) {
+                    if (!same_topology(model.layers()[i], gradient.topology[i]))
+                        throw py::value_error("gradient topology mismatch");
+                }
+                py::gil_scoped_release release;
+                model.sgd(gradient.value, learning_rate);
+            },
+            py::arg("gradients"), py::arg("learning_rate"));
     bind_initializers(module);
 #ifdef KAN_PYTHON_CUDA
     py::class_<Resident>(module, "ResidentNetwork")
         .def(py::init([](const kan::Network& network, std::size_t capacity, kan::cuda::Precision precision) {
-            py::gil_scoped_release release;
-            return std::make_unique<Resident>(network, capacity, precision);
-        }), py::arg("network"), py::arg("capacity"), py::arg("precision") = kan::cuda::Precision::Float64)
+                 py::gil_scoped_release release;
+                 return std::make_unique<Resident>(network, capacity, precision);
+             }),
+             py::arg("network"), py::arg("capacity"), py::arg("precision") = kan::cuda::Precision::Float64)
         .def_property_readonly("precision", [](const Resident& model) { return model.value.precision(); })
         .def_property_readonly("capacity", [](const Resident& model) { return model.value.capacity(); })
         .def_property_readonly("batch", [](const Resident& model) { return model.value.batch(); })
-        .def_property_readonly("workspace_allocations", [](const Resident& model) {
-            return model.value.workspace_allocations();
-        })
-        .def("upload_input", [](Resident& model, py::array input, std::optional<std::size_t> requested) {
-            const auto batch = input_batch(input, model.inputs, requested);
-            const auto data = array_data(input);
-            py::gil_scoped_release release;
-            model.value.upload_input(data, batch);
-        }, py::arg("input").noconvert(), py::arg("batch") = py::none())
-        .def("upload_output_gradient", [](Resident& model, py::array gradient) {
-            const auto data = shaped(gradient, {axis(model.value.batch()), axis(model.outputs)});
-            py::gil_scoped_release release;
-            model.value.upload_output_gradient(data);
-        }, py::arg("output_gradient").noconvert())
-        .def("forward", [](Resident& model) { model.value.forward(); }, py::call_guard<py::gil_scoped_release>())
-        .def("backward", [](Resident& model, double lambda) { model.value.backward(lambda); },
-             py::arg("coefficient_l2")=0.0, py::call_guard<py::gil_scoped_release>())
-        .def("sgd", [](Resident& model, double learning_rate) { model.value.sgd(learning_rate); },
-             py::arg("learning_rate"), py::call_guard<py::gil_scoped_release>())
-        .def("synchronize", [](Resident& model) { model.value.synchronize(); }, py::call_guard<py::gil_scoped_release>())
-        .def("download_output", [](Resident& model) {
-            std::vector<double> output;
-            {
+        .def_property_readonly("workspace_allocations",
+                               [](const Resident& model) { return model.value.workspace_allocations(); })
+        .def(
+            "upload_input",
+            [](Resident& model, py::array input, std::optional<std::size_t> requested) {
+                const auto batch = input_batch(input, model.inputs, requested);
+                const auto data = array_data(input);
                 py::gil_scoped_release release;
-                output = model.value.download_output();
-            }
-            return owned(output, {axis(model.value.batch()), axis(model.outputs)});
-        })
-        .def("download_gradients", [](Resident& model) {
-            kan::NetworkGradients gradient;
-            {
+                model.value.upload_input(data, batch);
+            },
+            py::arg("input").noconvert(), py::arg("batch") = py::none())
+        .def(
+            "upload_output_gradient",
+            [](Resident& model, py::array gradient) {
+                const auto data = shaped(gradient, {axis(model.value.batch()), axis(model.outputs)});
                 py::gil_scoped_release release;
-                gradient = model.value.download_gradients();
-            }
-            return NetworkGradient{std::move(gradient), model.value.batch(), model.topology};
-        })
-        .def("upload_parameters", [](Resident& model, const kan::Network& network) { model.value.upload_parameters(network); },
-             py::arg("network"), py::call_guard<py::gil_scoped_release>())
-        .def("download_parameters", [](Resident& model) { return model.value.download_parameters(); },
-             py::call_guard<py::gil_scoped_release>())
-        .def("refit_grids", [](Resident& model, const kan::GridRefit& options) { model.value.refit_grids(options); },
-             py::arg("options") = kan::GridRefit{}, py::call_guard<py::gil_scoped_release>())
+                model.value.upload_output_gradient(data);
+            },
+            py::arg("output_gradient").noconvert())
+        .def(
+            "forward", [](Resident& model) { model.value.forward(); }, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "backward", [](Resident& model, double lambda) { model.value.backward(lambda); },
+            py::arg("coefficient_l2") = 0.0, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "sgd", [](Resident& model, double learning_rate) { model.value.sgd(learning_rate); },
+            py::arg("learning_rate"), py::call_guard<py::gil_scoped_release>())
+        .def(
+            "synchronize", [](Resident& model) { model.value.synchronize(); }, py::call_guard<py::gil_scoped_release>())
+        .def("download_output",
+             [](Resident& model) {
+                 std::vector<double> output;
+                 {
+                     py::gil_scoped_release release;
+                     output = model.value.download_output();
+                 }
+                 return owned(output, {axis(model.value.batch()), axis(model.outputs)});
+             })
+        .def("download_gradients",
+             [](Resident& model) {
+                 kan::NetworkGradients gradient;
+                 {
+                     py::gil_scoped_release release;
+                     gradient = model.value.download_gradients();
+                 }
+                 return NetworkGradient{std::move(gradient), model.value.batch(), model.topology};
+             })
+        .def(
+            "upload_parameters",
+            [](Resident& model, const kan::Network& network) { model.value.upload_parameters(network); },
+            py::arg("network"), py::call_guard<py::gil_scoped_release>())
+        .def(
+            "download_parameters", [](Resident& model) { return model.value.download_parameters(); },
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "refit_grids", [](Resident& model, const kan::GridRefit& options) { model.value.refit_grids(options); },
+            py::arg("options") = kan::GridRefit{}, py::call_guard<py::gil_scoped_release>())
         // Backlog C9: graph-captured training steps and deferred status.
-        .def("upload_target", [](Resident& model, py::array target) {
-            const auto data = shaped(target, {axis(model.value.batch()), axis(model.outputs)});
-            py::gil_scoped_release release;
-            model.value.upload_target(data);
-        }, py::arg("target").noconvert())
-        .def("train_step", [](Resident& model, double learning_rate, double coefficient_l2, kan::cuda::Loss loss) {
-            model.value.train_step(learning_rate, coefficient_l2, loss);
-        }, py::arg("learning_rate"), py::arg("coefficient_l2") = 0.0, py::arg("loss") = kan::cuda::Loss::OutputGradient,
-           py::call_guard<py::gil_scoped_release>())
-        .def("train_step", [](Resident& model, py::array input, py::array target, double learning_rate, double coefficient_l2) {
-            const auto batch = input_batch(input, model.inputs, std::nullopt);
-            const auto data = array_data(input);
-            const auto target_data = shaped(target, {axis(batch), axis(model.outputs)});
-            py::gil_scoped_release release;
-            model.value.train_step(data, target_data, batch, learning_rate, coefficient_l2);
-        }, py::arg("input").noconvert(), py::arg("target").noconvert(), py::arg("learning_rate"),
-           py::arg("coefficient_l2") = 0.0)
-        .def("download_loss", [](Resident& model) { return model.value.download_loss(); },
-             py::call_guard<py::gil_scoped_release>())
-        .def_property("status_interval", [](const Resident& model) { return model.value.status_interval(); },
-                      [](Resident& model, std::size_t steps) {
-                          py::gil_scoped_release release;
-                          model.value.set_status_interval(steps);
-                      })
-        .def("check_status", [](Resident& model) { model.value.check_status(); }, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "upload_target",
+            [](Resident& model, py::array target) {
+                const auto data = shaped(target, {axis(model.value.batch()), axis(model.outputs)});
+                py::gil_scoped_release release;
+                model.value.upload_target(data);
+            },
+            py::arg("target").noconvert())
+        .def(
+            "train_step",
+            [](Resident& model, double learning_rate, double coefficient_l2, kan::cuda::Loss loss) {
+                model.value.train_step(learning_rate, coefficient_l2, loss);
+            },
+            py::arg("learning_rate"), py::arg("coefficient_l2") = 0.0,
+            py::arg("loss") = kan::cuda::Loss::OutputGradient, py::call_guard<py::gil_scoped_release>())
+        .def(
+            "train_step",
+            [](Resident& model, py::array input, py::array target, double learning_rate, double coefficient_l2) {
+                const auto batch = input_batch(input, model.inputs, std::nullopt);
+                const auto data = array_data(input);
+                const auto target_data = shaped(target, {axis(batch), axis(model.outputs)});
+                py::gil_scoped_release release;
+                model.value.train_step(data, target_data, batch, learning_rate, coefficient_l2);
+            },
+            py::arg("input").noconvert(), py::arg("target").noconvert(), py::arg("learning_rate"),
+            py::arg("coefficient_l2") = 0.0)
+        .def(
+            "download_loss", [](Resident& model) { return model.value.download_loss(); },
+            py::call_guard<py::gil_scoped_release>())
+        .def_property(
+            "status_interval", [](const Resident& model) { return model.value.status_interval(); },
+            [](Resident& model, std::size_t steps) {
+                py::gil_scoped_release release;
+                model.value.set_status_interval(steps);
+            })
+        .def(
+            "check_status", [](Resident& model) { model.value.check_status(); },
+            py::call_guard<py::gil_scoped_release>())
         .def_property_readonly("trained_steps", [](const Resident& model) { return model.value.trained_steps(); });
 #endif
 }

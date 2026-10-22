@@ -69,10 +69,8 @@ void parity(const kan::Layer& layer, std::size_t batch, double input_scale = 0.9
 void parity(std::size_t inputs, std::size_t outputs, std::size_t terms, std::size_t batch) {
     auto layer = make_layer(inputs, outputs, terms);
     std::vector<double> input(batch * inputs), upstream(batch * outputs);
-    for (std::size_t j = 0; j < input.size(); ++j)
-        input[j] = (static_cast<double>(j % 19) - 9.0) / 7.0;
-    for (std::size_t j = 0; j < upstream.size(); ++j)
-        upstream[j] = (static_cast<double>(j % 11) - 5.0) / 9.0;
+    for (std::size_t j = 0; j < input.size(); ++j) input[j] = (static_cast<double>(j % 19) - 9.0) / 7.0;
+    for (std::size_t j = 0; j < upstream.size(); ++j) upstream[j] = (static_cast<double>(j % 11) - 5.0) / 9.0;
     compare(kan::cuda::forward(layer, input, batch), layer.forward(input, batch));
     compare(kan::cuda::backward(layer, input, batch, upstream), layer.backward(input, batch, upstream));
 }
@@ -82,7 +80,10 @@ kan::Layer with_parameters(kan::Layer layer) {
 }
 kan::Layer rational_layer(std::size_t inputs, std::size_t outputs, kan::DenominatorPolicy policy) {
     kan::RationalConfig config;
-    config.numerator_degree = 3; config.denominator_degree = 2; config.center = 0.1; config.scale = 1.3;
+    config.numerator_degree = 3;
+    config.denominator_degree = 2;
+    config.center = 0.1;
+    config.scale = 1.3;
     config.denominator_policy = policy;
     kan::Layer layer(inputs, outputs, config);
     const auto denominators = inputs * outputs * config.denominator_degree;
@@ -99,14 +100,16 @@ std::vector<kan::Layer> every_carrier(std::size_t inputs, std::size_t outputs) {
     layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::HermiteConfig{4})));
     layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::FourierConfig{5, 1.5})));
     layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::GaussianRbfConfig{{-0.8, -0.2, 0.3, 0.9}, 0.6})));
-    layers.push_back(with_parameters(kan::Layer(inputs, outputs,
-                                                kan::BSplineConfig{3, {-1, -1, -1, -1, -0.4, 0.2, 0.7, 1, 1, 1, 1}})));
-    layers.push_back(with_parameters(kan::Layer(inputs, outputs, kan::MexicanHatConfig{{-0.5, 0.0, 0.6}, {0.4, 0.7, 0.5}})));
-    auto rbf = with_parameters(kan::Layer(inputs, outputs, kan::TrainableRbfConfig{{-0.6, 0.1, 0.7}, {-0.5, -0.2, 0.1}}));
+    layers.push_back(with_parameters(
+        kan::Layer(inputs, outputs, kan::BSplineConfig{3, {-1, -1, -1, -1, -0.4, 0.2, 0.7, 1, 1, 1, 1}})));
+    layers.push_back(
+        with_parameters(kan::Layer(inputs, outputs, kan::MexicanHatConfig{{-0.5, 0.0, 0.6}, {0.4, 0.7, 0.5}})));
+    auto rbf =
+        with_parameters(kan::Layer(inputs, outputs, kan::TrainableRbfConfig{{-0.6, 0.1, 0.7}, {-0.5, -0.2, 0.1}}));
     kan::set_rbf_parameters(rbf, std::vector<double>{-0.55, 0.15, 0.65}, std::vector<double>{-0.4, -0.3, 0.2});
     layers.push_back(std::move(rbf));
-    for (const auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute,
-                              kan::DenominatorPolicy::Smooth})
+    for (const auto policy :
+         {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
         layers.push_back(rational_layer(inputs, outputs, policy));
     return layers;
 }
@@ -153,9 +156,8 @@ TEST(cuda_rejects_invalid_shapes_and_nonfinite_data) {
     test::throws<std::invalid_argument>([&] { kan::cuda::forward(layer, std::vector<double>{1.0}, 0); });
     test::throws<std::invalid_argument>([&] { kan::cuda::backward(layer, std::vector<double>(2), 1, {}); });
     test::throws<std::invalid_argument>([&] { kan::cuda::backward(layer, {}, 0, std::vector<double>{1.0}); });
-    test::throws<std::invalid_argument>([&] {
-        kan::cuda::forward(layer, std::vector<double>{0.0, std::numeric_limits<double>::quiet_NaN()}, 1);
-    });
+    test::throws<std::invalid_argument>(
+        [&] { kan::cuda::forward(layer, std::vector<double>{0.0, std::numeric_limits<double>::quiet_NaN()}, 1); });
     test::throws<std::invalid_argument>([&] {
         kan::cuda::backward(layer, std::vector<double>(2), 1,
                             std::vector<double>{0.0, std::numeric_limits<double>::infinity(), 0.0});
@@ -164,12 +166,9 @@ TEST(cuda_rejects_invalid_shapes_and_nonfinite_data) {
 
 TEST(cuda_checks_dimension_multiplication_before_allocation) {
     auto layer = make_layer(2, 3, 4);
-    test::throws<std::overflow_error>([&] {
-        kan::cuda::forward(layer, {}, std::numeric_limits<std::size_t>::max());
-    });
-    test::throws<std::overflow_error>([&] {
-        kan::cuda::backward(layer, {}, std::numeric_limits<std::size_t>::max(), {});
-    });
+    test::throws<std::overflow_error>([&] { kan::cuda::forward(layer, {}, std::numeric_limits<std::size_t>::max()); });
+    test::throws<std::overflow_error>(
+        [&] { kan::cuda::backward(layer, {}, std::numeric_limits<std::size_t>::max(), {}); });
 }
 
 // R7 contract change: the legacy API runs every carrier through the resident
@@ -191,7 +190,8 @@ TEST(cuda_legacy_empty_batch_shapes_every_carrier) {
 
 TEST(cuda_legacy_reports_unsafe_rational_denominator) {
     kan::RationalConfig config;
-    config.numerator_degree = 1; config.denominator_degree = 1;
+    config.numerator_degree = 1;
+    config.denominator_degree = 1;
     kan::Layer layer(1, 1, config);
     kan::set_rational_parameters(layer, std::vector<double>{1, -1}, std::vector<double>{-1}, std::vector<double>{0});
     const std::vector<double> pole{1.0}, upstream{1.0};
@@ -209,14 +209,13 @@ TEST(cuda_reports_nonfinite_computed_results) {
     kan::Layer linear(1, 1, kan::ChebyshevConfig{2});
     linear.set_parameters(std::vector<double>{0.0, 1e308}, std::vector<double>{0.0});
     test::throws<std::overflow_error>([&] { kan::cuda::forward(linear, std::vector<double>{2.0}, 1); });
-    test::throws<std::overflow_error>([&] { kan::cuda::backward(linear, std::vector<double>{0.0}, 1, std::vector<double>{2.0}); });
+    test::throws<std::overflow_error>(
+        [&] { kan::cuda::backward(linear, std::vector<double>{0.0}, 1, std::vector<double>{2.0}); });
     kan::Layer zero(1, 1, kan::ChebyshevConfig{2});
-    test::throws<std::overflow_error>([&] {
-        kan::cuda::backward(zero, std::vector<double>{2.0}, 1, std::vector<double>{1e308});
-    });
-    test::throws<std::overflow_error>([&] {
-        kan::cuda::backward(zero, std::vector<double>{0.0, 0.0}, 2, std::vector<double>{1e308, 1e308});
-    });
+    test::throws<std::overflow_error>(
+        [&] { kan::cuda::backward(zero, std::vector<double>{2.0}, 1, std::vector<double>{1e308}); });
+    test::throws<std::overflow_error>(
+        [&] { kan::cuda::backward(zero, std::vector<double>{0.0, 0.0}, 2, std::vector<double>{1e308, 1e308}); });
     // At x=2 these terms have finite values but high-order derivatives
     // overflow. Forward must retain the CPU evaluator's derivative checks.
     const kan::Layer high_degree(1, 1, kan::ChebyshevConfig{539});
@@ -228,7 +227,9 @@ TEST(cuda_repeated_and_concurrent_calls_have_independent_storage) {
     for (int repeat = 0; repeat < 3; ++repeat) parity(3, 2, 6, 41);
     auto first = std::async(std::launch::async, [] { parity(2, 3, 5, 79); });
     auto second = std::async(std::launch::async, [] { parity(5, 1, 9, 53); });
-    auto third = std::async(std::launch::async, [] { for (const auto& l : every_carrier(2, 3)) parity(l, 17); });
+    auto third = std::async(std::launch::async, [] {
+        for (const auto& l : every_carrier(2, 3)) parity(l, 17);
+    });
     first.get();
     second.get();
     third.get();
@@ -263,7 +264,8 @@ TEST(cuda_legacy_calls_release_device_storage) {
 void cuda_no_device_failure_is_explicit() {
     const auto layer = make_layer(1, 1, 2);
     test::throws<std::runtime_error>([&] { kan::cuda::forward(layer, std::vector<double>{0.0}, 1); });
-    test::throws<std::runtime_error>([&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
+    test::throws<std::runtime_error>(
+        [&] { kan::cuda::backward(layer, std::vector<double>{0.0}, 1, std::vector<double>{1.0}); });
 }
 
 int main(int argc, char** argv) {

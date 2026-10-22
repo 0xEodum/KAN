@@ -20,7 +20,9 @@ constexpr DenominatorPolicy safe_policies[] = {DenominatorPolicy::Absolute, Deno
 
 kan::RationalConfig config(DenominatorPolicy policy, std::size_t m, std::size_t n) {
     kan::RationalConfig c;
-    c.numerator_degree = m; c.denominator_degree = n; c.denominator_policy = policy;
+    c.numerator_degree = m;
+    c.denominator_degree = n;
+    c.denominator_policy = policy;
     return c;
 }
 double value(const kan::RationalConfig& c, double x, const std::vector<double>& a, const std::vector<double>& b) {
@@ -34,11 +36,15 @@ void check_edge(const kan::RationalConfig& c, double x, const std::vector<double
     const auto r = kan::evaluate_rational(c, x, a, b);
     test::near(r.input_derivative, (value(c, x + h, a, b) - value(c, x - h, a, b)) / (2 * h), tolerance);
     for (std::size_t i = 0; i < a.size(); ++i) {
-        auto p = a, q = a; p[i] += h; q[i] -= h;
+        auto p = a, q = a;
+        p[i] += h;
+        q[i] -= h;
         test::near(r.numerator_derivatives[i], (value(c, x, p, b) - value(c, x, q, b)) / (2 * h), tolerance);
     }
     for (std::size_t i = 0; i < b.size(); ++i) {
-        auto p = b, q = b; p[i] += h; q[i] -= h;
+        auto p = b, q = b;
+        p[i] += h;
+        q[i] -= h;
         test::near(r.denominator_derivatives[i], (value(c, x, a, p) - value(c, x, a, q)) / (2 * h), tolerance);
     }
 }
@@ -52,7 +58,8 @@ TEST(default_policy_is_guarded_and_invalid_policy_is_rejected) {
     test::throws<std::invalid_argument>([&] { kan::Layer(1, 1, bad); });
     // Epsilon is validated for every policy, used only by the guarded one.
     for (auto policy : safe_policies) {
-        auto c = config(policy, 1, 1); c.epsilon = 0;
+        auto c = config(policy, 1, 1);
+        c.epsilon = 0;
         test::throws<std::invalid_argument>([&] { kan::validate_rational(c); });
     }
 }
@@ -63,7 +70,9 @@ TEST(independent_closed_forms_per_policy) {
     for (double x : {-1.7, -0.3, 0.9, 2.6}) {
         const double z = (x - 0.25) / 2, s = -0.5 * z, p = 1 + 0.5 * z;
         {
-            auto c = config(DenominatorPolicy::Absolute, 1, 1); c.center = 0.25; c.scale = 2;
+            auto c = config(DenominatorPolicy::Absolute, 1, 1);
+            c.center = 0.25;
+            c.scale = 2;
             const auto r = kan::evaluate_rational(c, x, a, b);
             const double q = 1 + std::abs(s), sign = s > 0 ? 1 : -1, dq = sign * -0.5;
             test::near(r.value, p / q);
@@ -73,7 +82,9 @@ TEST(independent_closed_forms_per_policy) {
             test::near(r.denominator_derivatives[0], -p / q * sign * z / q);
         }
         {
-            auto c = config(DenominatorPolicy::Smooth, 1, 1); c.center = 0.25; c.scale = 2;
+            auto c = config(DenominatorPolicy::Smooth, 1, 1);
+            c.center = 0.25;
+            c.scale = 2;
             const auto r = kan::evaluate_rational(c, x, a, b);
             const double q = 1 + s * s, dq = 2 * s * -0.5;
             test::near(r.value, p / q);
@@ -87,8 +98,11 @@ TEST(independent_closed_forms_per_policy) {
 
 TEST(finite_difference_vjps_all_policies_and_orders) {
     for (auto policy : all_policies)
-        for (auto orders : {std::pair{0u, 3u}, std::pair{4u, 1u}, std::pair{3u, 5u}, std::pair{2u, 2u}, std::pair{16u, 16u}}) {
-            auto c = config(policy, orders.first, orders.second); c.center = 0.1; c.scale = 1.4;
+        for (auto orders :
+             {std::pair{0u, 3u}, std::pair{4u, 1u}, std::pair{3u, 5u}, std::pair{2u, 2u}, std::pair{16u, 16u}}) {
+            auto c = config(policy, orders.first, orders.second);
+            c.center = 0.1;
+            c.scale = 1.4;
             std::vector<double> a(c.numerator_degree + 1), b(c.denominator_degree);
             for (std::size_t i = 0; i < a.size(); ++i) a[i] = 0.07 * static_cast<double>(i + 1);
             for (std::size_t i = 0; i < b.size(); ++i) b[i] = (i % 2 ? -0.13 : 0.11) * static_cast<double>(i + 1);
@@ -99,11 +113,13 @@ TEST(finite_difference_vjps_all_policies_and_orders) {
 TEST(safe_policies_never_report_a_pole) {
     // Guarded: Q = 1 - z = 0 at x = 1 (exact pole).
     test::throws<std::domain_error>([] {
-        kan::evaluate_rational(config(DenominatorPolicy::Guarded, 1, 1), 1, std::vector<double>{1, -1}, std::vector<double>{-1});
+        kan::evaluate_rational(config(DenominatorPolicy::Guarded, 1, 1), 1, std::vector<double>{1, -1},
+                               std::vector<double>{-1});
     });
     for (auto policy : safe_policies)
         for (double x : {1.0, 1.0 - 1e-9, 1e-3, -4.0}) {
-            auto c = config(policy, 1, 1); c.epsilon = 0.5; // a huge epsilon must not matter
+            auto c = config(policy, 1, 1);
+            c.epsilon = 0.5; // a huge epsilon must not matter
             const auto r = kan::evaluate_rational(c, x, std::vector<double>{1, -1}, std::vector<double>{-1});
             const double s = -x, q = policy == DenominatorPolicy::Absolute ? 1 + std::abs(s) : 1 + s * s;
             test::near(r.value, (1 - x) / q);
@@ -128,20 +144,21 @@ TEST(absolute_subgradient_is_zero_where_the_sum_vanishes) {
     const double h = 1e-7;
     const double right = (value(c, 2, a, {h}) - value(c, 2, a, {0})) / h;
     const double left = (value(c, 2, a, {0}) - value(c, 2, a, {-h})) / h;
-    test::near(right, -2, 1e-6); test::near(left, 2, 1e-6);
+    test::near(right, -2, 1e-6);
+    test::near(left, 2, 1e-6);
     REQUIRE(kan::evaluate_rational(c, 2, a, std::vector<double>{0}).denominator_derivatives[0] == 0);
 }
 
 TEST(safe_policies_keep_overflow_checks) {
     for (auto policy : all_policies) {
         auto c = config(policy, 3, 2);
-        test::throws<std::overflow_error>([&] {
-            kan::evaluate_rational(c, 1e200, std::vector<double>{0, 0, 0, 1}, std::vector<double>{0, 0});
-        });
+        test::throws<std::overflow_error>(
+            [&] { kan::evaluate_rational(c, 1e200, std::vector<double>{0, 0, 0, 1}, std::vector<double>{0, 0}); });
     }
     // S^2 overflows although S is finite.
     test::throws<std::overflow_error>([] {
-        kan::evaluate_rational(config(DenominatorPolicy::Smooth, 0, 1), 1e10, std::vector<double>{1}, std::vector<double>{1e200});
+        kan::evaluate_rational(config(DenominatorPolicy::Smooth, 0, 1), 1e10, std::vector<double>{1},
+                               std::vector<double>{1e200});
     });
     const auto r = kan::evaluate_rational(config(DenominatorPolicy::Absolute, 0, 1), 1e10, std::vector<double>{1},
                                           std::vector<double>{1e200});
@@ -202,8 +219,8 @@ struct Pinned {
 void require_bits(double actual, double expected) {
     REQUIRE(std::bit_cast<std::uint64_t>(actual) == std::bit_cast<std::uint64_t>(expected));
 }
-void require_pinned(const kan::RationalConfig& c, double x, const std::vector<double>& a,
-                    const std::vector<double>& b, const Pinned& expected) {
+void require_pinned(const kan::RationalConfig& c, double x, const std::vector<double>& a, const std::vector<double>& b,
+                    const Pinned& expected) {
     REQUIRE(c.denominator_policy == DenominatorPolicy::Guarded);
     const auto r = kan::evaluate_rational(c, x, a, b);
     require_bits(r.value, expected.value);
@@ -216,22 +233,27 @@ void require_pinned(const kan::RationalConfig& c, double x, const std::vector<do
 TEST(default_policy_is_bit_identical_to_pre_m2_formulas) {
     const kan::RationalConfig c{3, 2, 0.1, 1.3, 1e-8};
     const std::vector<double> a{0.3, -0.2, 0.11, 0.05}, b{0.4, -0.25};
-    require_pinned(c, 0.7, a, b, {0x1.ab48294361de5p-3, -0x1.1b8d2fcf27fd6p-4,
-        {0x1.c48d639d74c0dp-1, 0x1.a1bd97077f76ep-2, 0x1.819b5055b0bc8p-3, 0x1.63f1d400545f3p-4},
-        {-0x1.5c9e7dc8a69ccp-4, -0x1.41cd606a72695p-5}});
-    require_pinned(c, -1.9, a, b, {-0x1.a7f9b2ce60195p+1, -0x1.b683912ed57cep+3,
-        {-0x1.3507507507509p+2, 0x1.db6db6db6db6fp+2, -0x1.6db6db6db6db8p+3, 0x1.1951951951952p+4},
-        {0x1.89b101767dce7p+4, -0x1.2ed6ed6ed6ed9p+5}});
+    require_pinned(c, 0.7, a, b,
+                   {0x1.ab48294361de5p-3,
+                    -0x1.1b8d2fcf27fd6p-4,
+                    {0x1.c48d639d74c0dp-1, 0x1.a1bd97077f76ep-2, 0x1.819b5055b0bc8p-3, 0x1.63f1d400545f3p-4},
+                    {-0x1.5c9e7dc8a69ccp-4, -0x1.41cd606a72695p-5}});
+    require_pinned(c, -1.9, a, b,
+                   {-0x1.a7f9b2ce60195p+1,
+                    -0x1.b683912ed57cep+3,
+                    {-0x1.3507507507509p+2, 0x1.db6db6db6db6fp+2, -0x1.6db6db6db6db8p+3, 0x1.1951951951952p+4},
+                    {0x1.89b101767dce7p+4, -0x1.2ed6ed6ed6ed9p+5}});
     // Log-space paths (underflowing powers and quotients).
     require_pinned({0, 2, 0, 1, 1e-8}, 1e-200, {1e300}, {0, 0},
-        {0x1.7e43c8800759cp+996, 0, {1}, {-0x1.249ad2594c37dp+332, -0x1.bff2ee48e0319p-333}});
+                   {0x1.7e43c8800759cp+996, 0, {1}, {-0x1.249ad2594c37dp+332, -0x1.bff2ee48e0319p-333}});
     require_pinned({0, 1, 0, 1, 1e-8}, 1e300, {1e-300}, {1e-270},
-        {0, 0, {0x1.4484bfeebc29fp-100}, {-0x1.9b604aaaca649p-200}});
+                   {0, 0, {0x1.4484bfeebc29fp-100}, {-0x1.9b604aaaca649p-200}});
     require_pinned({6, 4, -0.2, 0.9, 1e-8}, 1.3, {0.1, 0.2, -0.3, 0.05, 0.01, -0.02, 0.003}, {0.1, -0.05, 0.02, 0.01},
-        {-0x1.e622d64d105cap-3, -0x1.3e8eff2a8dccap-1,
-         {0x1.ab8be054741fbp-1, 0x1.6449e59bb61a6p+0, 0x1.28e83f5717c0ap+1, 0x1.eed8699127964p+1,
-          0x1.9c5f02a3a0fd3p+2, 0x1.57a4823306285p+3, 0x1.1e5e6c7fda76ep+4},
-         {0x1.524a62fb90aa0p-2, 0x1.19e8a7d1a3385p-1, 0x1.d5d917b2bab31p-1, 0x1.878a3e6a463fep+0}});
+                   {-0x1.e622d64d105cap-3,
+                    -0x1.3e8eff2a8dccap-1,
+                    {0x1.ab8be054741fbp-1, 0x1.6449e59bb61a6p+0, 0x1.28e83f5717c0ap+1, 0x1.eed8699127964p+1,
+                     0x1.9c5f02a3a0fd3p+2, 0x1.57a4823306285p+3, 0x1.1e5e6c7fda76ep+4},
+                    {0x1.524a62fb90aa0p-2, 0x1.19e8a7d1a3385p-1, 0x1.d5d917b2bab31p-1, 0x1.878a3e6a463fep+0}});
 }
 
 namespace {
@@ -269,7 +291,9 @@ TEST(sgd_into_a_pole_stops_guarded_but_continues_under_safe_policies) {
 
 TEST(layer_and_network_vjps_under_safe_policies) {
     for (auto policy : safe_policies) {
-        auto c = config(policy, 3, 2); c.center = 0.1; c.scale = 1.3;
+        auto c = config(policy, 3, 2);
+        c.center = 0.1;
+        c.scale = 1.3;
         kan::Layer first(2, 3, c), second(3, 1, config(policy, 1, 3));
         for (auto* layer : {&first, &second}) {
             std::vector<double> a(layer->coefficients().size()), b(test::denominators(*layer).size());
@@ -292,19 +316,24 @@ TEST(layer_and_network_vjps_under_safe_policies) {
             const auto d = test::denominators(layer);
             for (std::size_t k = 0; k < d.size(); ++k) {
                 std::vector<double> plus(d.begin(), d.end()), minus = plus;
-                plus[k] += h; minus[k] -= h;
+                plus[k] += h;
+                minus[k] -= h;
                 auto lp = layer, lm = layer;
                 const std::vector<double> a(layer.coefficients().begin(), layer.coefficients().end());
                 const std::vector<double> bias(layer.bias().begin(), layer.bias().end());
-                kan::set_rational_parameters(lp, a, plus, bias); kan::set_rational_parameters(lm, a, minus, bias);
+                kan::set_rational_parameters(lp, a, plus, bias);
+                kan::set_rational_parameters(lm, a, minus, bias);
                 auto p = test::layers(network), m = p;
-                p[j] = lp; m[j] = lm;
+                p[j] = lp;
+                m[j] = lm;
                 test::near(test::denominators(test::grad(g, j))[k],
                            (objective(kan::Network(p)) - objective(kan::Network(m))) / (2 * h), 1e-7);
             }
         }
         for (std::size_t k = 0; k < x.size(); ++k) {
-            auto p = x, m = x; p[k] += h; m[k] -= h;
+            auto p = x, m = x;
+            p[k] += h;
+            m[k] -= h;
             const auto yp = network.forward(p, 3), ym = network.forward(m, 3);
             double s = 0;
             for (std::size_t o = 0; o < yp.size(); ++o) s += (yp[o] - ym[o]) * u[o];

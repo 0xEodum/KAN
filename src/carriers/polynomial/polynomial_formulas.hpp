@@ -24,8 +24,8 @@ namespace kan::detail {
 
 // Chebyshev, Legendre, physicists' Hermite and Jacobi three-term recurrences.
 template<class Scalar, class Guard>
-KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, Scalar alpha, Scalar beta, std::size_t terms,
-                                      Scalar x, Scalar* v, Scalar* d, const Guard& guard) {
+KAN_HOST_DEVICE void polynomial_terms(BasisKind kind, Scalar alpha, Scalar beta, std::size_t terms, Scalar x, Scalar* v,
+                                      Scalar* d, const Guard& guard) {
     constexpr Scalar half = Scalar(0.5);
     v[0] = 1;
     d[0] = 0;

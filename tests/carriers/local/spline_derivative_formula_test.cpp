@@ -19,7 +19,10 @@ namespace {
 // Counts guard calls (the status expressions a kernel's StatusGuard sees).
 struct CountingGuard {
     std::size_t* calls;
-    template<class Scalar> Scalar operator()(Scalar v) const { ++*calls; return v; }
+    template<class Scalar> Scalar operator()(Scalar v) const {
+        ++*calls;
+        return v;
+    }
 };
 std::uint64_t state = 0x9e3779b97f4a7c15ULL;
 double uniform01() { // SplitMix64
@@ -31,29 +34,33 @@ double uniform01() { // SplitMix64
 // Clamped knots on [low, high]: `intervals` interior breakpoints, uniform or
 // jittered, with an optional interior knot repeated `repeat` times.
 template<class Scalar>
-std::vector<Scalar> knots(std::size_t degree, std::size_t intervals, Scalar low, Scalar high, bool jitter, std::size_t repeat) {
+std::vector<Scalar> knots(std::size_t degree, std::size_t intervals, Scalar low, Scalar high, bool jitter,
+                          std::size_t repeat) {
     std::vector<Scalar> t(degree + 1, low);
     for (std::size_t k = 1; k < intervals; ++k) {
-        const double s = (static_cast<double>(k) + (jitter ? 0.8 * (uniform01() - 0.5) : 0.0)) / static_cast<double>(intervals);
+        const double s =
+            (static_cast<double>(k) + (jitter ? 0.8 * (uniform01() - 0.5) : 0.0)) / static_cast<double>(intervals);
         const Scalar v = static_cast<Scalar>(static_cast<double>(low) * (1 - s) + static_cast<double>(high) * s);
         t.push_back(v);
-        if (k == intervals / 2) for (std::size_t r = 1; r < repeat; ++r) t.push_back(v);
+        if (k == intervals / 2)
+            for (std::size_t r = 1; r < repeat; ++r) t.push_back(v);
     }
     t.insert(t.end(), degree + 1, high);
     return t;
 }
-template<class Scalar>
-void check(std::size_t degree, const std::vector<Scalar>& t, const std::string& what) {
+template<class Scalar> void check(std::size_t degree, const std::vector<Scalar>& t, const std::string& what) {
     const auto terms = t.size() - degree - 1;
     std::vector<Scalar> c(terms);
     for (auto& v : c) v = static_cast<Scalar>(2 * uniform01() - 1);
     std::vector<Scalar> cstar(terms - 1);
     for (std::size_t j = 1; j < terms; ++j)
-        cstar[j - 1] = kan::detail::spline_derivative_coefficient(c[j - 1], c[j], kan::detail::spline_derivative_scale(degree, t[j + degree], t[j]));
+        cstar[j - 1] = kan::detail::spline_derivative_coefficient(
+            c[j - 1], c[j], kan::detail::spline_derivative_scale(degree, t[j + degree], t[j]));
     const Scalar low = t[degree], high = t[terms];
     std::vector<Scalar> xs{low, high, static_cast<Scalar>(low - (high - low)), static_cast<Scalar>(high + 1)};
     for (std::size_t k = degree; k <= terms; ++k) xs.push_back(t[k]);
-    for (int k = 0; k < 64; ++k) xs.push_back(static_cast<Scalar>(low + (high - low) * static_cast<Scalar>(uniform01())));
+    for (int k = 0; k < 64; ++k)
+        xs.push_back(static_cast<Scalar>(low + (high - low) * static_cast<Scalar>(uniform01())));
     const double unit = std::is_same_v<Scalar, double> ? 0x1p-52 : 0x1p-23;
     for (const Scalar x : xs) {
         if (!std::isfinite(static_cast<double>(x))) continue;
@@ -61,7 +68,8 @@ void check(std::size_t degree, const std::vector<Scalar>& t, const std::string& 
         Scalar lv[kan::detail::max_spline_degree + 1], lower[kan::detail::max_spline_degree + 1];
         std::size_t calls = 0, lower_calls = 0;
         const auto first = kan::detail::spline_span_terms(t.data(), terms, degree, x, v, d, CountingGuard{&calls});
-        const auto lower_first = kan::detail::spline_lower_terms(t.data(), terms, degree, x, lv, lower, CountingGuard{&lower_calls});
+        const auto lower_first =
+            kan::detail::spline_lower_terms(t.data(), terms, degree, x, lv, lower, CountingGuard{&lower_calls});
         REQUIRE(first == lower_first);
         REQUIRE(calls == lower_calls);
         if (first == terms) continue;
@@ -82,13 +90,14 @@ void check(std::size_t degree, const std::vector<Scalar>& t, const std::string& 
         // Both sides carry rounding of their own terms (products, slopes, C*).
         const double allowance = 8 * static_cast<double>(degree + 2) * unit * (scale + formula_scale);
         if (!(std::abs(derivative - formula) <= allowance))
-            throw std::runtime_error(what + ": x=" + std::to_string(static_cast<double>(x)) + " sum c*B'=" + std::to_string(derivative) +
-                                     " sum C*B_{p-1}=" + std::to_string(formula));
+            throw std::runtime_error(what + ": x=" + std::to_string(static_cast<double>(x)) + " sum c*B'=" +
+                                     std::to_string(derivative) + " sum C*B_{p-1}=" + std::to_string(formula));
     }
 }
 template<class Scalar> void all_cases(Scalar huge) {
     for (std::size_t degree = 1; degree <= kan::detail::max_spline_degree; ++degree) {
-        const auto name = std::string(std::is_same_v<Scalar, double> ? "double" : "float") + " degree " + std::to_string(degree);
+        const auto name =
+            std::string(std::is_same_v<Scalar, double> ? "double" : "float") + " degree " + std::to_string(degree);
         check<Scalar>(degree, knots<Scalar>(degree, 1, -1, 1, false, 1), name + " single interval");
         check<Scalar>(degree, knots<Scalar>(degree, 32, -1, 1, false, 1), name + " uniform");
         check<Scalar>(degree, knots<Scalar>(degree, 37, Scalar(-2.5), Scalar(4), true, 1), name + " nonuniform");

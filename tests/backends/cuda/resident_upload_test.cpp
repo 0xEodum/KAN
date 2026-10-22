@@ -27,18 +27,18 @@ using kan::cuda::ResidentNetwork;
 
 // Per-entry tolerances against the FP64 CPU reference evaluated at the
 // executor's parameters: the resident FP64 tolerance (R7/C2) and the FP32 one (C1).
-struct Tolerance { double relative, floor; };
+struct Tolerance {
+    double relative, floor;
+};
 constexpr Tolerance fp64{1e-12, 1e-13}, fp32{2e-4, 5e-5}, tf32{1e-2, 1e-2};
-Tolerance tolerance(Precision p) {
-    return p == Precision::Float64 ? fp64 : p == Precision::Float32 ? fp32 : tf32;
-}
+Tolerance tolerance(Precision p) { return p == Precision::Float64 ? fp64 : p == Precision::Float32 ? fp32 : tf32; }
 void close(std::span<const double> actual, std::span<const double> expected, Tolerance t) {
     REQUIRE(actual.size() == expected.size());
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i) {
         REQUIRE(std::isfinite(actual[i]));
-        if (std::abs(actual[i]-expected[i]) > t.relative*std::abs(expected[i]) + t.floor*scale + 1e-37) {
+        if (std::abs(actual[i] - expected[i]) > t.relative * std::abs(expected[i]) + t.floor * scale + 1e-37) {
             std::ostringstream out;
             out << std::setprecision(17) << "index " << i << " of " << actual.size() << " actual=" << actual[i]
                 << " expected=" << expected[i] << " scale=" << scale;
@@ -48,30 +48,38 @@ void close(std::span<const double> actual, std::span<const double> expected, Tol
 }
 std::vector<double> wave(std::size_t count, double scale, double frequency, double phase = 0) {
     std::vector<double> v(count);
-    for (std::size_t i = 0; i < count; ++i) v[i] = scale*std::sin(frequency*static_cast<double>(i)+phase);
+    for (std::size_t i = 0; i < count; ++i) v[i] = scale * std::sin(frequency * static_cast<double>(i) + phase);
     return v;
 }
 kan::Layer seeded(kan::Layer l, double phase) {
-    const auto scale = 1.0/std::sqrt(static_cast<double>(l.inputs()*l.terms()));
+    const auto scale = 1.0 / std::sqrt(static_cast<double>(l.inputs() * l.terms()));
     l.set_parameters(wave(l.coefficients().size(), scale, 0.731, phase), wave(l.outputs(), 0.05, 1.3, phase));
     return l;
 }
 kan::BasisConfig family(test::Family kind) {
     test::FamilyParameters p{5};
-    p.alpha = 0.3; p.beta = -0.2; p.frequency = 1.7;
-    p.centers = {-1, -0.5, 0, 0.5, 1}; p.width = 0.8;
+    p.alpha = 0.3;
+    p.beta = -0.2;
+    p.frequency = 1.7;
+    p.centers = {-1, -0.5, 0, 0.5, 1};
+    p.width = 0.8;
     p.log_widths = {-0.3, -0.2, -0.1, -0.2, -0.3};
     p.scales = {0.6, 0.7, 0.8, 0.7, 0.6};
-    p.degree = 3; p.knots = {-1.5, -1.5, -1.5, -1.5, -0.5, 0.25, 1.5, 1.5, 1.5, 1.5};
+    p.degree = 3;
+    p.knots = {-1.5, -1.5, -1.5, -1.5, -0.5, 0.25, 1.5, 1.5, 1.5, 1.5};
     return test::basis(kind, p);
 }
-constexpr test::Family families[] = {test::Family::Chebyshev, test::Family::Legendre, test::Family::Jacobi,
-                                     test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf,
-                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat,
+constexpr test::Family families[] = {test::Family::Chebyshev,      test::Family::Legendre, test::Family::Jacobi,
+                                     test::Family::Hermite,        test::Family::Fourier,  test::Family::GaussianRbf,
+                                     test::Family::TrainableRbf,   test::Family::BSpline,  test::Family::MexicanHat,
                                      test::Family::HermiteFunction};
 kan::RationalConfig rational_config(kan::DenominatorPolicy policy) {
     kan::RationalConfig r;
-    r.numerator_degree = 3; r.denominator_degree = 2; r.center = 0.1; r.scale = 1.3; r.denominator_policy = policy;
+    r.numerator_degree = 3;
+    r.denominator_degree = 2;
+    r.center = 0.1;
+    r.scale = 1.3;
+    r.denominator_policy = policy;
     return r;
 }
 kan::Layer rational(std::size_t in, std::size_t out, kan::DenominatorPolicy policy) {
@@ -99,10 +107,10 @@ kan::Network mixed() {
 }
 constexpr std::size_t batch = 9;
 std::vector<double> input_for(const kan::Network& n, std::size_t rows = batch) {
-    return wave(rows*n.inputs(), 0.9, 0.37, 0.2);
+    return wave(rows * n.inputs(), 0.9, 0.37, 0.2);
 }
 std::vector<double> upstream_for(const kan::Network& n, std::size_t rows = batch) {
-    return wave(rows*n.outputs(), 1.0, 0.53, 0.4);
+    return wave(rows * n.outputs(), 1.0, 0.53, 0.4);
 }
 // `steps` CPU SGD steps: the "trained elsewhere" weights.
 kan::Network cpu_trained(kan::Network n, int steps, double rate = 0.05) {
@@ -116,18 +124,26 @@ std::vector<double> flat(const kan::Network& network) {
     auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
     for (std::size_t j = 0; j < network.layers().size(); ++j) {
         if (std::holds_alternative<kan::InputMap>(network.layers()[j])) {
-            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) { add(n->gain); add(n->bias); }
+            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) {
+                add(n->gain);
+                add(n->bias);
+            }
             continue;
         }
         const auto& l = test::layer(network, j);
-        add(l.coefficients()); add(l.bias());
-        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) { add(t->basis.centers); add(t->basis.log_widths); }
+        add(l.coefficients());
+        add(l.bias());
+        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) {
+            add(t->basis.centers);
+            add(t->basis.log_widths);
+        }
         add(test::denominators(l));
     }
     return v;
 }
 std::vector<double> rounded(std::vector<double> v, Precision p) {
-    if (p != Precision::Float64) for (auto& x : v) x = static_cast<double>(static_cast<float>(x));
+    if (p != Precision::Float64)
+        for (auto& x : v) x = static_cast<double>(static_cast<float>(x));
     return v;
 }
 void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients& expected, Tolerance t) {
@@ -153,7 +169,8 @@ void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients&
 void matches_cpu(ResidentNetwork& gpu, const kan::Network& reference_shape, Precision p) {
     const auto x = input_for(reference_shape), u = upstream_for(reference_shape);
     const auto reference = gpu.download_parameters();
-    gpu.upload_input(x, batch); gpu.upload_output_gradient(u);
+    gpu.upload_input(x, batch);
+    gpu.upload_output_gradient(u);
     gpu.forward();
     close(gpu.download_output(), reference.forward(x, batch), tolerance(p));
     gpu.backward();
@@ -185,8 +202,10 @@ TEST(upload_after_cpu_training_matches_cpu) {
 TEST(upload_matches_cpu_for_every_family_and_policy) {
     for (const auto p : precisions) {
         std::vector<kan::Network> networks;
-        for (const auto kind : families) networks.push_back(kan::Network({seeded(kan::Layer(3, 2, family(kind)), 0.4)}));
-        for (const auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
+        for (const auto kind : families)
+            networks.push_back(kan::Network({seeded(kan::Layer(3, 2, family(kind)), 0.4)}));
+        for (const auto policy :
+             {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
             networks.push_back(kan::Network({rational(3, 2, policy)}));
         for (const auto& initial : networks) {
             ResidentNetwork gpu(initial, batch, p);
@@ -205,8 +224,13 @@ TEST(upload_round_trips_with_download) {
         const auto x = input_for(initial), u = upstream_for(initial);
         // A: trained on the GPU; B: a fresh executor of the initial network.
         ResidentNetwork a(initial, batch, p);
-        a.upload_input(x, batch); a.upload_output_gradient(u);
-        for (int s = 0; s < 3; ++s) { a.forward(); a.backward(0.01); a.sgd(0.05); }
+        a.upload_input(x, batch);
+        a.upload_output_gradient(u);
+        for (int s = 0; s < 3; ++s) {
+            a.forward();
+            a.backward(0.01);
+            a.sgd(0.05);
+        }
         const auto saved = a.download_parameters();
         a.forward();
         const auto output = a.download_output();
@@ -215,7 +239,8 @@ TEST(upload_round_trips_with_download) {
         // Downloads are exact widenings, so the round trip is exact in every precision.
         REQUIRE(flat(b.download_parameters()) == flat(saved));
         REQUIRE(b.download_parameters().layers().size() == saved.layers().size());
-        for (std::size_t j = 0; j < saved.layers().size(); ++j) REQUIRE(b.download_parameters().layers()[j].index() == saved.layers()[j].index());
+        for (std::size_t j = 0; j < saved.layers().size(); ++j)
+            REQUIRE(b.download_parameters().layers()[j].index() == saved.layers()[j].index());
         b.upload_input(x, batch);
         b.forward();
         REQUIRE(b.download_output() == output); // same executor kind, parameters and input
@@ -248,10 +273,11 @@ std::vector<std::pair<std::string, kan::Network>> mismatches() {
         result.emplace_back("missing layer", kan::Network(std::move(layers)));
     }
     {
-        std::vector<kan::NetworkLayer> layers(base.layers().begin()+1, base.layers().end());
+        std::vector<kan::NetworkLayer> layers(base.layers().begin() + 1, base.layers().end());
         result.emplace_back("leading layer removed", kan::Network(std::move(layers)));
     }
-    result.emplace_back("layer instead of input map", replaced(4, seeded(kan::Layer(4, 4, kan::ChebyshevConfig{2}), 0.3)));
+    result.emplace_back("layer instead of input map",
+                        replaced(4, seeded(kan::Layer(4, 4, kan::ChebyshevConfig{2}), 0.3)));
     result.emplace_back("input map instead of layer", replaced(6, kan::InputMap(3, kan::TanhMap{1.0})));
     {
         // Different hidden width 3->5->... (dimensions).
@@ -263,17 +289,22 @@ std::vector<std::pair<std::string, kan::Network>> mismatches() {
     }
     result.emplace_back("basis size", replaced(1, seeded(kan::Layer(3, 4, kan::ChebyshevConfig{6}), 0.1)));
     result.emplace_back("basis family, same size", replaced(1, seeded(kan::Layer(3, 4, kan::LegendreConfig{5}), 0.1)));
-    result.emplace_back("Jacobi family, same size", replaced(1, seeded(kan::Layer(3, 4, kan::JacobiConfig{5, 0.5, 0.0}), 0.1)));
-    result.emplace_back("fixed Gaussian RBF instead of trainable", replaced(3, seeded(kan::Layer(4, 4, kan::GaussianRbfConfig{{-1, -0.5, 0, 0.5, 1}, 0.8}), 0.7)));
-    result.emplace_back("trainable RBF term count", replaced(3, seeded(kan::Layer(4, 4, kan::TrainableRbfConfig{{-1, 0, 1}, {0, 0, 0}}), 0.7)));
-    result.emplace_back("rational instead of basis carrier", replaced(1, rational(3, 4, kan::DenominatorPolicy::Absolute)));
+    result.emplace_back("Jacobi family, same size",
+                        replaced(1, seeded(kan::Layer(3, 4, kan::JacobiConfig{5, 0.5, 0.0}), 0.1)));
+    result.emplace_back("fixed Gaussian RBF instead of trainable",
+                        replaced(3, seeded(kan::Layer(4, 4, kan::GaussianRbfConfig{{-1, -0.5, 0, 0.5, 1}, 0.8}), 0.7)));
+    result.emplace_back("trainable RBF term count",
+                        replaced(3, seeded(kan::Layer(4, 4, kan::TrainableRbfConfig{{-1, 0, 1}, {0, 0, 0}}), 0.7)));
+    result.emplace_back("rational instead of basis carrier",
+                        replaced(1, rational(3, 4, kan::DenominatorPolicy::Absolute)));
     for (const auto& [name, change] : std::vector<std::pair<std::string, std::function<void(kan::RationalConfig&)>>>{
              {"rational numerator degree", [](kan::RationalConfig& c) { c.numerator_degree = 2; }},
              {"rational denominator degree", [](kan::RationalConfig& c) { c.denominator_degree = 3; }},
              {"rational center", [](kan::RationalConfig& c) { c.center = 0.2; }},
              {"rational scale", [](kan::RationalConfig& c) { c.scale = 1.4; }},
              {"rational epsilon", [](kan::RationalConfig& c) { c.epsilon = 1e-7; }},
-             {"rational policy", [](kan::RationalConfig& c) { c.denominator_policy = kan::DenominatorPolicy::Smooth; }}}) {
+             {"rational policy",
+              [](kan::RationalConfig& c) { c.denominator_policy = kan::DenominatorPolicy::Smooth; }}}) {
         auto config = rational_config(kan::DenominatorPolicy::Absolute);
         change(config);
         kan::Layer l(4, 3, config);
@@ -282,8 +313,10 @@ std::vector<std::pair<std::string, kan::Network>> mismatches() {
     {
         // Knots moved at the same term count (set_carrier): fixed configuration.
         auto l = layer(6);
-        auto knots = spline_knots; knots[5] = 0.3;
-        l.set_carrier(kan::BasisEdges{kan::BSplineConfig{3, knots}, std::vector<double>(l.coefficients().begin(), l.coefficients().end())});
+        auto knots = spline_knots;
+        knots[5] = 0.3;
+        l.set_carrier(kan::BasisEdges{kan::BSplineConfig{3, knots},
+                                      std::vector<double>(l.coefficients().begin(), l.coefficients().end())});
         result.emplace_back("B-spline knots, same term count", replaced(6, std::move(l)));
     }
     {
@@ -296,11 +329,15 @@ std::vector<std::pair<std::string, kan::Network>> mismatches() {
         kan::adapt_grid(l, std::vector<double>{-0.2, -0.1, 0.0, 0.1});
         result.emplace_back("B-spline adapt_grid", replaced(6, std::move(l)));
     }
-    result.emplace_back("affine scale", replaced(0, kan::InputMap(3, kan::AffineMap{{0.5, 0.4, 0.35}, {0.1, -0.1, 0.0}})));
-    result.emplace_back("affine shift", replaced(0, kan::InputMap(3, kan::AffineMap{{0.5, 0.4, 0.3}, {0.1, -0.1, 0.01}})));
+    result.emplace_back("affine scale",
+                        replaced(0, kan::InputMap(3, kan::AffineMap{{0.5, 0.4, 0.35}, {0.1, -0.1, 0.0}})));
+    result.emplace_back("affine shift",
+                        replaced(0, kan::InputMap(3, kan::AffineMap{{0.5, 0.4, 0.3}, {0.1, -0.1, 0.01}})));
     result.emplace_back("map kind", replaced(0, kan::InputMap(3, kan::TanhMap{1.0})));
     result.emplace_back("tanh scale", replaced(4, kan::InputMap(4, kan::TanhMap{0.9})));
-    result.emplace_back("LayerNorm epsilon", replaced(2, kan::InputMap(4, kan::LayerNormMap{1e-4, {1.0, 0.9, 1.1, 1.0}, {0.0, 0.05, -0.05, 0.1}})));
+    result.emplace_back(
+        "LayerNorm epsilon",
+        replaced(2, kan::InputMap(4, kan::LayerNormMap{1e-4, {1.0, 0.9, 1.1, 1.0}, {0.0, 0.05, -0.05, 0.1}})));
     result.emplace_back("LayerNorm without gain/bias", replaced(2, kan::InputMap(4, kan::LayerNormMap{1e-3, {}, {}})));
     return result;
 }
@@ -310,7 +347,8 @@ TEST(upload_rejects_every_structure_mismatch_and_keeps_the_executor_unchanged) {
         const auto initial = mixed();
         const auto x = input_for(initial), u = upstream_for(initial);
         ResidentNetwork gpu(initial, batch, p);
-        gpu.upload_input(x, batch); gpu.upload_output_gradient(u);
+        gpu.upload_input(x, batch);
+        gpu.upload_output_gradient(u);
         gpu.forward();
         const auto parameters = gpu.download_parameters();
         const auto output = gpu.download_output();
@@ -392,12 +430,14 @@ TEST(float32_upload_rejects_unrepresentable_parameters_without_partial_upload) {
     };
     add("coefficient beyond FLT_MAX", [](auto& layers) {
         auto& l = std::get<kan::Layer>(layers[6]);
-        std::vector<double> c(l.coefficients().begin(), l.coefficients().end()); c.back() = 1e39;
+        std::vector<double> c(l.coefficients().begin(), l.coefficients().end());
+        c.back() = 1e39;
         l.set_parameters(c, std::vector<double>(l.bias().begin(), l.bias().end()));
     });
     add("bias beyond FLT_MAX", [](auto& layers) {
         auto& l = std::get<kan::Layer>(layers[6]);
-        std::vector<double> b(l.bias().begin(), l.bias().end()); b[0] = -1e39;
+        std::vector<double> b(l.bias().begin(), l.bias().end());
+        b[0] = -1e39;
         l.set_parameters(std::vector<double>(l.coefficients().begin(), l.coefficients().end()), b);
     });
     add("trainable RBF center beyond FLT_MAX", [](auto& layers) {
@@ -415,7 +455,8 @@ TEST(float32_upload_rejects_unrepresentable_parameters_without_partial_upload) {
     add("rational denominator beyond FLT_MAX", [](auto& layers) {
         auto& l = std::get<kan::Layer>(layers[5]);
         const auto& e = std::get<kan::RationalEdges>(l.carrier());
-        auto b = e.denominators; b[0] = 1e39;
+        auto b = e.denominators;
+        b[0] = 1e39;
         kan::set_rational_parameters(l, e.coefficients, b, std::vector<double>(l.bias().begin(), l.bias().end()));
     });
     add("LayerNorm gain beyond FLT_MAX", [](auto& layers) {
@@ -455,7 +496,8 @@ TEST(float32_upload_rejects_unrepresentable_parameters_without_partial_upload) {
     {
         auto layers = changed_first();
         auto& l = std::get<kan::Layer>(layers[1]);
-        std::vector<double> c(l.coefficients().begin(), l.coefficients().end()); c[0] = 1e-50;
+        std::vector<double> c(l.coefficients().begin(), l.coefficients().end());
+        c[0] = 1e-50;
         l.set_parameters(c, std::vector<double>(l.bias().begin(), l.bias().end()));
         const kan::Network tiny(std::move(layers));
         ResidentNetwork gpu(initial, batch, Precision::Float32);
@@ -472,8 +514,10 @@ TEST(upload_invalidates_forward_state_and_keeps_input_and_upstream) {
         ResidentNetwork gpu(initial, batch, p);
         // Before any input: allowed, and nothing to invalidate.
         gpu.upload_parameters(initial);
-        gpu.upload_input(x, batch); gpu.upload_output_gradient(u);
-        gpu.forward(); gpu.backward();
+        gpu.upload_input(x, batch);
+        gpu.upload_output_gradient(u);
+        gpu.forward();
+        gpu.backward();
         gpu.upload_parameters(trained);
         test::throws<std::logic_error>([&] { gpu.backward(); });
         test::throws<std::logic_error>([&] { gpu.download_output(); });
@@ -508,7 +552,7 @@ TEST(upload_of_parameter_regions_above_one_mebibyte) {
     layers.emplace_back(seeded(kan::Layer(64, 8, family(test::Family::TrainableRbf)), 0.6));
     layers.emplace_back(rational(8, 2, kan::DenominatorPolicy::Smooth));
     const kan::Network initial(std::move(layers));
-    REQUIRE(flat(initial).size()*sizeof(double) > (std::size_t{1} << 20));
+    REQUIRE(flat(initial).size() * sizeof(double) > (std::size_t{1} << 20));
     const auto trained = cpu_trained(initial, 2, 0.01);
     for (const auto p : precisions) {
         ResidentNetwork gpu(initial, batch, p);
@@ -528,7 +572,8 @@ TEST(upload_of_parameter_regions_above_one_mebibyte) {
     {
         std::vector<kan::NetworkLayer> stages(huge.layers().begin(), huge.layers().end());
         auto& last = std::get<kan::Layer>(stages[3]);
-        std::vector<double> bias(last.bias().begin(), last.bias().end()); bias[1] = 1e39;
+        std::vector<double> bias(last.bias().begin(), last.bias().end());
+        bias[1] = 1e39;
         last.set_parameters(std::vector<double>(last.coefficients().begin(), last.coefficients().end()), bias);
         huge = kan::Network(std::move(stages));
     }
@@ -547,11 +592,13 @@ TEST(upload_needs_no_allocation_and_handles_parameter_free_networks) {
     REQUIRE(gpu.workspace_allocations() == allocations);
     REQUIRE(flat(gpu.download_parameters()) == flat(initial));
     // Fixed maps only: nothing to upload, the structure is still checked.
-    const kan::Network fixed({kan::InputMap(2, kan::AffineMap{{2.0, 0.5}, {0.0, 1.0}}), kan::InputMap(2, kan::TanhMap{1.0})});
+    const kan::Network fixed(
+        {kan::InputMap(2, kan::AffineMap{{2.0, 0.5}, {0.0, 1.0}}), kan::InputMap(2, kan::TanhMap{1.0})});
     ResidentNetwork maps(fixed, 4);
     maps.upload_parameters(fixed);
     test::throws<std::invalid_argument>([&] {
-        maps.upload_parameters(kan::Network({kan::InputMap(2, kan::AffineMap{{2.0, 0.5}, {0.0, 1.5}}), kan::InputMap(2, kan::TanhMap{1.0})}));
+        maps.upload_parameters(kan::Network(
+            {kan::InputMap(2, kan::AffineMap{{2.0, 0.5}, {0.0, 1.5}}), kan::InputMap(2, kan::TanhMap{1.0})}));
     });
     // A moved-from executor raises like every other operation.
     ResidentNetwork moved(initial, 1);
@@ -562,6 +609,9 @@ TEST(upload_needs_no_allocation_and_handles_parameter_free_networks) {
 } // namespace
 
 int main() {
-    if (!kan::cuda::available()) { std::cerr << "real CUDA hardware required\n"; return 1; }
+    if (!kan::cuda::available()) {
+        std::cerr << "real CUDA hardware required\n";
+        return 1;
+    }
     return test::run();
 }

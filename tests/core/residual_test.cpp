@@ -57,8 +57,8 @@ kan::Layer rational(std::size_t inputs, std::size_t outputs) {
     c.scale = 1.3;
     c.denominator_policy = kan::DenominatorPolicy::Smooth;
     kan::Layer l(inputs, outputs, c);
-    kan::set_rational_parameters(l, pattern(l.coefficients().size(), 0.04), pattern(test::denominators(l).size(), 0.1, 3),
-                                 pattern(outputs, 0.03, 3));
+    kan::set_rational_parameters(l, pattern(l.coefficients().size(), 0.04),
+                                 pattern(test::denominators(l).size(), 0.1, 3), pattern(outputs, 0.03, 3));
     return l;
 }
 kan::Layer with_residual(kan::Layer layer, double scale = 0.3) {
@@ -73,8 +73,12 @@ std::vector<double> values(const kan::Layer& l, Group g) {
     case Group::Coefficients: return std_vector(l.coefficients());
     case Group::Bias: return std_vector(l.bias());
     case Group::Residual: return l.residual() ? l.residual()->weights : std::vector<double>{};
-    case Group::Centers: return std::holds_alternative<kan::TrainableRbfEdges>(l.carrier()) ? test::trainable(l).centers : std::vector<double>{};
-    case Group::LogWidths: return std::holds_alternative<kan::TrainableRbfEdges>(l.carrier()) ? test::trainable(l).log_widths : std::vector<double>{};
+    case Group::Centers:
+        return std::holds_alternative<kan::TrainableRbfEdges>(l.carrier()) ? test::trainable(l).centers
+                                                                           : std::vector<double>{};
+    case Group::LogWidths:
+        return std::holds_alternative<kan::TrainableRbfEdges>(l.carrier()) ? test::trainable(l).log_widths
+                                                                           : std::vector<double>{};
     case Group::Denominators: return std_vector(test::denominators(l));
     }
     return {};
@@ -90,8 +94,10 @@ void assign(kan::Layer& l, Group g, const std::vector<double>& v) {
     case Group::Centers: kan::set_rbf_parameters(l, v, test::trainable(l).log_widths); return;
     case Group::LogWidths: kan::set_rbf_parameters(l, test::trainable(l).centers, v); return;
     }
-    if (is_rational) kan::set_rational_parameters(l, c, d, b);
-    else l.set_parameters(c, b);
+    if (is_rational)
+        kan::set_rational_parameters(l, c, d, b);
+    else
+        l.set_parameters(c, b);
 }
 std::span<const double> gradient(const kan::LayerGradients& g, Group group) {
     switch (group) {
@@ -125,7 +131,8 @@ void check_network(const std::vector<kan::NetworkLayer>& stages, const std::vect
     for (std::size_t k = 0; k < stages.size(); ++k) {
         const auto* layer = std::get_if<kan::Layer>(&stages[k]);
         if (!layer) continue;
-        for (auto group : {Group::Coefficients, Group::Bias, Group::Residual, Group::Centers, Group::LogWidths, Group::Denominators}) {
+        for (auto group : {Group::Coefficients, Group::Bias, Group::Residual, Group::Centers, Group::LogWidths,
+                           Group::Denominators}) {
             const auto v = values(*layer, group);
             const auto analytic = gradient(test::grad(g, k), group);
             REQUIRE(analytic.size() == v.size());
@@ -136,7 +143,9 @@ void check_network(const std::vector<kan::NetworkLayer>& stages, const std::vect
                 vm[j] -= h;
                 assign(std::get<kan::Layer>(plus[k]), group, vp);
                 assign(std::get<kan::Layer>(minus[k]), group, vm);
-                const double fd = (objective(kan::Network(plus), x, batch, u) - objective(kan::Network(minus), x, batch, u)) / (2 * h);
+                const double fd =
+                    (objective(kan::Network(plus), x, batch, u) - objective(kan::Network(minus), x, batch, u)) /
+                    (2 * h);
                 test::near(analytic[j], fd, 3e-7);
             }
         }
@@ -145,7 +154,8 @@ void check_network(const std::vector<kan::NetworkLayer>& stages, const std::vect
 
 std::vector<kan::Layer> carriers(std::size_t inputs, std::size_t outputs) {
     return {linear(inputs, outputs, kan::ChebyshevConfig{4}), linear(inputs, outputs, spline()),
-            linear(inputs, outputs, kan::TrainableRbfConfig{{-0.6, 0.1, 0.8}, {-0.3, 0.2, -0.1}}), rational(inputs, outputs)};
+            linear(inputs, outputs, kan::TrainableRbfConfig{{-0.6, 0.1, 0.8}, {-0.3, 0.2, -0.1}}),
+            rational(inputs, outputs)};
 }
 } // namespace
 
@@ -180,10 +190,13 @@ TEST(all_vjps_of_each_carrier_with_the_branch) {
 
 TEST(all_vjps_of_mixed_networks_with_and_without_the_branch) {
     const std::vector<double> x{-0.7, 0.25, 0.6, 0.45};
-    check_network({with_residual(rational(2, 3)), with_residual(linear(3, 2, kan::TrainableRbfConfig{{-0.6, 0.1, 0.8}, {-0.3, 0.2, -0.1}})),
-                   linear(2, 1, spline())}, x, 2);
-    check_network({kan::InputMap(2, kan::TanhMap{1.0}), with_residual(linear(2, 3, spline())), kan::InputMap(3, kan::TanhMap{1.0}),
-                   with_residual(linear(3, 1, kan::ChebyshevConfig{3}), -0.4)}, x, 2);
+    check_network({with_residual(rational(2, 3)),
+                   with_residual(linear(3, 2, kan::TrainableRbfConfig{{-0.6, 0.1, 0.8}, {-0.3, 0.2, -0.1}})),
+                   linear(2, 1, spline())},
+                  x, 2);
+    check_network({kan::InputMap(2, kan::TanhMap{1.0}), with_residual(linear(2, 3, spline())),
+                   kan::InputMap(3, kan::TanhMap{1.0}), with_residual(linear(3, 1, kan::ChebyshevConfig{3}), -0.4)},
+                  x, 2);
 }
 
 // The backlog's motivation: localized carriers have zero value and zero
@@ -275,7 +288,8 @@ TEST(branch_survives_every_carrier_replacement_and_copies) {
     kan::set_rbf_parameters(r, std::vector<double>{-0.5, 0, 0.5}, std::vector<double>{0, 0, 0});
     REQUIRE(*r.residual() == w);
     auto q = with_residual(rational(2, 2));
-    kan::set_rational_parameters(q, std_vector(q.coefficients()), pattern(test::denominators(q).size(), 0.05), std::vector<double>{1, 2});
+    kan::set_rational_parameters(q, std_vector(q.coefficients()), pattern(test::denominators(q).size(), 0.05),
+                                 std::vector<double>{1, 2});
     REQUIRE(*q.residual() == w);
     // Copies are independent values.
     auto copy = q;
@@ -313,7 +327,8 @@ TEST(sgd_updates_the_branch_and_validates_its_gradient) {
         REQUIRE(*l.residual() == *before.residual());
         REQUIRE(l.carrier() == before.carrier());
         l.sgd(g, 0.1);
-        for (std::size_t j = 0; j < 6; ++j) REQUIRE(l.residual()->weights[j] == before.residual()->weights[j] - 0.1 * g.residual[j]);
+        for (std::size_t j = 0; j < 6; ++j)
+            REQUIRE(l.residual()->weights[j] == before.residual()->weights[j] - 0.1 * g.residual[j]);
         // A gradient with a residual field is rejected by a layer without the branch.
         auto without = plain;
         test::throws<std::invalid_argument>([&] { without.sgd(g, 0.1); });
@@ -353,7 +368,8 @@ TEST(network_backward_sgd_and_regularization_carry_the_branch) {
     REQUIRE(test::grad(penalty.gradients, 1).residual.empty());
     const auto w = test::layer(n, 0).residual()->weights;
     n.sgd(g, 0.1);
-    for (std::size_t j = 0; j < 6; ++j) REQUIRE(test::layer(n, 0).residual()->weights[j] == w[j] - 0.1 * test::grad(g, 0).residual[j]);
+    for (std::size_t j = 0; j < 6; ++j)
+        REQUIRE(test::layer(n, 0).residual()->weights[j] == w[j] - 0.1 * test::grad(g, 0).residual[j]);
     // A failed network step changes no layer.
     auto bad = g;
     test::grad(bad, 0).residual[0] = std::numeric_limits<double>::max();
@@ -459,9 +475,12 @@ TEST(noise_init_draws_pykan_scale_base) {
 TEST(noise_init_validates_branch_fields_before_any_change) {
     auto l = zero_branch(linear(3, 2, kan::ChebyshevConfig{3}));
     const auto before = l;
-    test::throws<std::invalid_argument>([&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, inf, 1}); });
-    test::throws<std::invalid_argument>([&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, 0, -1}); });
-    test::throws<std::invalid_argument>([&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, 0, inf}); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, inf, 1}); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, 0, -1}); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::initialize(l, kan::NoiseInit{0.3, kan::Distribution::Uniform, 0, {}, 0, inf}); });
     REQUIRE(l.carrier() == before.carrier() && *l.residual() == *before.residual());
 }
 
@@ -496,11 +515,18 @@ TEST(branch_draws_are_pinned_across_platforms) {
     smooth.denominator_policy = kan::DenominatorPolicy::Smooth;
     smooth.numerator_degree = 4;
     smooth.denominator_degree = 3;
-    struct Case { kan::Layer layer; kan::Initializer init; const char* pinned; };
+    struct Case {
+        kan::Layer layer;
+        kan::Initializer init;
+        const char* pinned;
+    };
     std::vector<Case> cases{
-        {zero_branch(kan::Layer(5, 4, uniform_spline(3, 7))), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "1ef218a170c967fd"},
-        {zero_branch(kan::Layer(5, 4, kan::FourierConfig{5, 2.5})), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}, 0.2, 0.7}, "3b6cb65c8b613b2f"},
-        {zero_branch(kan::Layer(5, 4, smooth)), kan::NoiseInit{0.3, kan::Distribution::Normal, 9, {0.4, 2}}, "af64dc9297fd02da"},
+        {zero_branch(kan::Layer(5, 4, uniform_spline(3, 7))), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}},
+         "1ef218a170c967fd"},
+        {zero_branch(kan::Layer(5, 4, kan::FourierConfig{5, 2.5})),
+         kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}, 0.2, 0.7}, "3b6cb65c8b613b2f"},
+        {zero_branch(kan::Layer(5, 4, smooth)), kan::NoiseInit{0.3, kan::Distribution::Normal, 9, {0.4, 2}},
+         "af64dc9297fd02da"},
     };
     std::string failures;
     for (auto& c : cases) {

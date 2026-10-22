@@ -38,7 +38,8 @@ using kan::cuda::testing::SplinePath;
 // for a power of two).
 kan::BSplineConfig spline(std::size_t degree, std::size_t intervals) {
     kan::BSplineConfig b{degree, std::vector<double>(degree + 1, -1.0)};
-    for (std::size_t k = 1; k < intervals; ++k) b.knots.push_back(-1.0 + 2.0 * static_cast<double>(k) / static_cast<double>(intervals));
+    for (std::size_t k = 1; k < intervals; ++k)
+        b.knots.push_back(-1.0 + 2.0 * static_cast<double>(k) / static_cast<double>(intervals));
     b.knots.insert(b.knots.end(), degree + 1, 1.0);
     return b;
 }
@@ -50,9 +51,11 @@ kan::Layer smooth_layer(std::size_t in, std::size_t out, kan::BSplineConfig basi
     const auto terms = l.terms();
     std::vector<double> c(l.coefficients().size());
     for (std::size_t oi = 0; oi < in * out; ++oi) {
-        const double phase = 0.37 * static_cast<double>(oi), amp = (0.5 + 0.5 * std::cos(1.3 * static_cast<double>(oi))) / std::sqrt(static_cast<double>(in));
+        const double phase = 0.37 * static_cast<double>(oi),
+                     amp = (0.5 + 0.5 * std::cos(1.3 * static_cast<double>(oi))) / std::sqrt(static_cast<double>(in));
         for (std::size_t k = 0; k < terms; ++k)
-            c[oi * terms + k] = f32(amp * std::sin(3.14159 * static_cast<double>(k) / static_cast<double>(terms - 1) + phase));
+            c[oi * terms + k] =
+                f32(amp * std::sin(3.14159 * static_cast<double>(k) / static_cast<double>(terms - 1) + phase));
     }
     std::vector<double> bias(out);
     for (std::size_t o = 0; o < out; ++o) bias[o] = f32(0.01 * static_cast<double>(o));
@@ -63,7 +66,8 @@ kan::Layer smooth_layer(std::size_t in, std::size_t out, kan::BSplineConfig basi
 std::vector<double> inputs(std::size_t count, std::size_t intervals) {
     std::vector<double> x(count);
     for (std::size_t k = 0; k < count; ++k) x[k] = f32(0.9999 * std::sin(0.377 * static_cast<double>(k) + 0.2));
-    for (std::size_t k = 0; k < count; k += 11) x[k] = -1.0 + 2.0 * static_cast<double>((k / 11) % (intervals + 1)) / static_cast<double>(intervals);
+    for (std::size_t k = 0; k < count; k += 11)
+        x[k] = -1.0 + 2.0 * static_cast<double>((k / 11) % (intervals + 1)) / static_cast<double>(intervals);
     for (std::size_t k = 5; k < count; k += 97) x[k] = (k / 97) % 2 ? 1.5 : -3.0;
     return x;
 }
@@ -110,7 +114,8 @@ std::string name(Precision p, SplinePath path, std::size_t degree, std::size_t i
 // error/bound ratio of every configuration and fails after all of them ran.
 struct BoundCheck {
     std::string failures;
-    void operator()(Precision p, SplinePath path, std::size_t degree, std::size_t intervals, std::size_t in, std::size_t out) {
+    void operator()(Precision p, SplinePath path, std::size_t degree, std::size_t intervals, std::size_t in,
+                    std::size_t out) {
         const auto basis = spline(degree, intervals);
         const auto layer = smooth_layer(in, out, basis);
         const kan::Network network({layer});
@@ -134,7 +139,10 @@ struct BoundCheck {
         for (std::size_t r = 0; r < actual.size(); ++r) {
             const double err = std::abs(actual[r] - expected[r]);
             const double ratio = scale[r] > 0 ? err / (unit * scale[r]) : (err > 0 ? INFINITY : 0.0);
-            if (!(ratio <= worst)) { worst = ratio; at = r; }
+            if (!(ratio <= worst)) {
+                worst = ratio;
+                at = r;
+            }
         }
         const auto what = name(p, path, degree, intervals);
         std::cout << "  " << what << ": largest error/bound " << worst << " (entry " << at << ")\n";
@@ -186,14 +194,16 @@ TEST(two_layer_tf32_input_gradient_matches_the_cpu_layer_by_layer) {
         const auto scale = 3.0 / std::sqrt(static_cast<double>(l.inputs() * l.terms()));
         std::vector<double> c(l.coefficients().size()), bias(l.outputs());
         for (std::size_t k = 0; k < c.size(); ++k) c[k] = f32(scale * std::sin(0.731 * static_cast<double>(k) + phase));
-        for (std::size_t o = 0; o < bias.size(); ++o) bias[o] = f32(0.05 * std::sin(1.3 * static_cast<double>(o) + phase));
+        for (std::size_t o = 0; o < bias.size(); ++o)
+            bias[o] = f32(0.05 * std::sin(1.3 * static_cast<double>(o) + phase));
         l.set_parameters(c, bias);
         return l;
     };
     const auto uniform = [](std::size_t degree, std::size_t terms) {
         kan::BSplineConfig b{degree, std::vector<double>(degree + 1, -1.0)};
         const auto interior = terms - degree - 1;
-        for (std::size_t k = 1; k <= interior; ++k) b.knots.push_back(-1.0 + 2.0 * static_cast<double>(k) / static_cast<double>(interior + 1));
+        for (std::size_t k = 1; k <= interior; ++k)
+            b.knots.push_back(-1.0 + 2.0 * static_cast<double>(k) / static_cast<double>(interior + 1));
         b.knots.insert(b.knots.end(), degree + 1, 1.0);
         return b;
     };
@@ -201,7 +211,8 @@ TEST(two_layer_tf32_input_gradient_matches_the_cpu_layer_by_layer) {
     std::vector<double> x(batch * 64), u(batch * 4);
     for (std::size_t k = 0; k < x.size(); ++k) x[k] = f32(0.9995 * std::sin(0.377 * static_cast<double>(k) + 0.9));
     for (std::size_t k = 0; k < u.size(); ++k) u[k] = f32(0.3 * std::sin(0.17 * static_cast<double>(k)));
-    const auto within_c1 = [](std::span<const double> actual, std::span<const double> expected, const std::string& what) {
+    const auto within_c1 = [](std::span<const double> actual, std::span<const double> expected,
+                              const std::string& what) {
         double scale = 0;
         for (double e : expected) scale = std::max(scale, std::abs(e));
         for (std::size_t r = 0; r < actual.size(); ++r)
@@ -211,9 +222,11 @@ TEST(two_layer_tf32_input_gradient_matches_the_cpu_layer_by_layer) {
     };
     for (std::size_t second : {1u, 3u}) {
         const auto first = uniform(3, 48);
-        const kan::Network n({seeded(kan::Layer(64, 40, first), 0.2), seeded(kan::Layer(40, 4, uniform(second, 30)), 0.6)});
+        const kan::Network n(
+            {seeded(kan::Layer(64, 40, first), 0.2), seeded(kan::Layer(40, 4, uniform(second, 30)), 0.6)});
         for (auto path : {SplinePath::Dense, SplinePath::Sparse}) {
-            const auto what = std::string(path == SplinePath::Dense ? "dense" : "sparse") + " second degree " + std::to_string(second);
+            const auto what = std::string(path == SplinePath::Dense ? "dense" : "sparse") + " second degree " +
+                              std::to_string(second);
             ResidentTestScope scope(path);
             ResidentNetwork gpu(n, batch, Precision::TensorFloat32);
             gpu.upload_input(x, batch);
@@ -267,7 +280,8 @@ TEST(overflowing_difference_coefficients_are_reported) {
         spline_layer.set_parameters(c, std::vector<double>{0.0});
         constexpr std::size_t batch = 64;
         std::vector<double> x(batch), u(batch, 0.125);
-        for (std::size_t b = 0; b < batch; ++b) x[b] = f32(-0.97 + 1.94 * static_cast<double>(b) / static_cast<double>(batch - 1));
+        for (std::size_t b = 0; b < batch; ++b)
+            x[b] = f32(-0.97 + 1.94 * static_cast<double>(b) / static_cast<double>(batch - 1));
         ResidentLayout layout;
         ResidentTestScope scope(path, &layout);
         {

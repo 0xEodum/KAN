@@ -55,7 +55,9 @@ std::vector<double> inputs(std::size_t count, double phase = 0) {
     return x;
 }
 
-struct Tolerance { double relative, floor; };
+struct Tolerance {
+    double relative, floor;
+};
 Tolerance tolerance(Precision p) {
     if (p == Precision::Float64) return {1e-11, 1e-12};
     if (p == Precision::Float32) return {2e-4, 5e-5};
@@ -73,7 +75,8 @@ void compare(std::span<const double> actual, std::span<const double> expected, T
 bool same_bits(std::span<const double> a, std::span<const double> b) {
     return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size_bytes()) == 0;
 }
-ResidentLayout layout_of(const kan::Network& n, std::size_t capacity, Precision p, SplinePath path = SplinePath::Automatic) {
+ResidentLayout layout_of(const kan::Network& n, std::size_t capacity, Precision p,
+                         SplinePath path = SplinePath::Automatic) {
     ResidentLayout layout;
     ResidentTestScope scope(path, &layout);
     ResidentNetwork r(n, capacity, p);
@@ -82,7 +85,8 @@ ResidentLayout layout_of(const kan::Network& n, std::size_t capacity, Precision 
 kan::Network single(kan::Layer l) { return kan::Network({std::move(l)}); }
 
 // Forward and backward (L2) on the GPU against the CPU network.
-void check_against_cpu(const kan::Network& cpu, ResidentNetwork& gpu, std::size_t batch, double l2, Precision p, const std::string& what) {
+void check_against_cpu(const kan::Network& cpu, ResidentNetwork& gpu, std::size_t batch, double l2, Precision p,
+                       const std::string& what) {
     const auto x = inputs(batch * cpu.inputs(), 0.3);
     const auto dy = wave(batch * cpu.outputs(), 0.7, 0.613, 0.4);
     gpu.upload_input(x, batch);
@@ -122,12 +126,15 @@ TEST(selection_rule_picks_sparse_for_large_spline_layers) {
     const auto large = single(seeded(kan::Layer(128, 64, spline(3, 48)), 0.1));
     for (auto p : precisions) REQUIRE(layout_of(large, 4096, p).sparse.at(0));
     REQUIRE(!layout_of(single(seeded(kan::Layer(64, 48, spline(3, 6)), 0.1)), 1024, Precision::Float32).sparse.at(0));
-    REQUIRE(!layout_of(single(seeded(kan::Layer(64, 48, spline(3, 6)), 0.1)), 1024, Precision::TensorFloat32).sparse.at(0));
+    REQUIRE(
+        !layout_of(single(seeded(kan::Layer(64, 48, spline(3, 6)), 0.1)), 1024, Precision::TensorFloat32).sparse.at(0));
     REQUIRE(!layout_of(single(seeded(kan::Layer(3, 2, spline(3, 48)), 0.1)), 8, Precision::Float64).sparse.at(0));
     REQUIRE(!layout_of(single(seeded(kan::Layer(64, 48, spline(9, 60)), 0.1)), 1024, Precision::Float64).sparse.at(0));
-    REQUIRE(!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{48}), 0.1)), 1024, Precision::Float64).sparse.at(0));
+    REQUIRE(!layout_of(single(seeded(kan::Layer(64, 48, kan::ChebyshevConfig{48}), 0.1)), 1024, Precision::Float64)
+                 .sparse.at(0));
     // Mixed network: only the large spline layer is sparse.
-    const kan::Network mixed({seeded(kan::Layer(128, 64, spline(3, 48)), 0.1), seeded(kan::Layer(64, 8, kan::ChebyshevConfig{5}), 0.2)});
+    const kan::Network mixed(
+        {seeded(kan::Layer(128, 64, spline(3, 48)), 0.1), seeded(kan::Layer(64, 8, kan::ChebyshevConfig{5}), 0.2)});
     const auto layout = layout_of(mixed, 4096, Precision::Float32);
     REQUIRE(layout.sparse.size() == 2 && layout.sparse[0] && !layout.sparse[1]);
     // Memory: the dense layout holds capacity*inputs*terms values (Phi) plus the
@@ -140,8 +147,10 @@ TEST(selection_rule_picks_sparse_for_large_spline_layers) {
         REQUIRE(dense - sparse >= rows);
     }
     // Forcing: Sparse applies to supported layers only.
-    REQUIRE(layout_of(single(seeded(kan::Layer(3, 2, spline(2, 5)), 0.1)), 8, Precision::Float64, SplinePath::Sparse).sparse.at(0));
-    REQUIRE(!layout_of(single(seeded(kan::Layer(3, 2, spline(9, 12)), 0.1)), 8, Precision::Float64, SplinePath::Sparse).sparse.at(0));
+    REQUIRE(layout_of(single(seeded(kan::Layer(3, 2, spline(2, 5)), 0.1)), 8, Precision::Float64, SplinePath::Sparse)
+                .sparse.at(0));
+    REQUIRE(!layout_of(single(seeded(kan::Layer(3, 2, spline(9, 12)), 0.1)), 8, Precision::Float64, SplinePath::Sparse)
+                 .sparse.at(0));
     REQUIRE(!layout_of(large, 4096, Precision::Float64, SplinePath::Dense).sparse.at(0));
 }
 
@@ -172,7 +181,8 @@ TEST(sparse_matches_cpu_and_dense_for_every_supported_degree) {
     // tolerance; the case's 0.46 deviation, expected 0.398 against -0.060,
     // was this jump, not the input-VJP formula.)
     for (auto p : precisions) {
-        const kan::Network n({seeded(kan::Layer(64, 40, spline(3, 48)), 0.2), seeded(kan::Layer(40, 4, spline(1, 30)), 0.6)});
+        const kan::Network n(
+            {seeded(kan::Layer(64, 40, spline(3, 48)), 0.2), seeded(kan::Layer(40, 4, spline(1, 30)), 0.6)});
         ResidentLayout layout;
         std::vector<double> sparse_out, dense_out;
         kan::NetworkGradients sparse_g, dense_g;
@@ -193,7 +203,8 @@ TEST(sparse_matches_cpu_and_dense_for_every_supported_degree) {
         compare(sparse_out, dense_out, tolerance(p), "sparse vs dense output");
         compare(sparse_g.input, dense_g.input, tolerance(p), "sparse vs dense input gradient");
         for (std::size_t j = 0; j < 2; ++j) {
-            compare(test::grad(sparse_g, j).coefficients, test::grad(dense_g, j).coefficients, tolerance(p), "sparse vs dense coefficients");
+            compare(test::grad(sparse_g, j).coefficients, test::grad(dense_g, j).coefficients, tolerance(p),
+                    "sparse vs dense coefficients");
             compare(test::grad(sparse_g, j).bias, test::grad(dense_g, j).bias, tolerance(p), "sparse vs dense bias");
         }
     }
@@ -203,9 +214,11 @@ TEST(sparse_matches_cpu_and_dense_for_every_supported_degree) {
 // terms) and inputs exactly at every knot; batch zero gives L2-only gradients.
 TEST(sparse_knot_contracts_batch_zero_and_dead_edges) {
     const double big = 1e300;
-    const std::vector<kan::BSplineConfig> configs{
-        {3, {-1, -1, -1, -1, 0, 0, 0, 0.5, 1, 1, 1, 1}}, {2, {-big, -big, -big, 0, big, big, big}},
-        {3, {-1, -1, -1, -1, 1, 1, 1, 1}}, {1, {-1, -1, -0.5, -0.5, 0, 0.5, 1, 1}}, {0, {-1, -0.25, 0.5, 1}}};
+    const std::vector<kan::BSplineConfig> configs{{3, {-1, -1, -1, -1, 0, 0, 0, 0.5, 1, 1, 1, 1}},
+                                                  {2, {-big, -big, -big, 0, big, big, big}},
+                                                  {3, {-1, -1, -1, -1, 1, 1, 1, 1}},
+                                                  {1, {-1, -1, -0.5, -0.5, 0, 0.5, 1, 1}},
+                                                  {0, {-1, -0.25, 0.5, 1}}};
     for (auto p : {Precision::Float64, Precision::Float32}) {
         for (const auto& b : configs) {
             if (p == Precision::Float32 && b.knots.front() < -1e30) continue; // not representable in FP32
@@ -226,7 +239,8 @@ TEST(sparse_knot_contracts_batch_zero_and_dead_edges) {
             compare(gpu.download_output(), cpu.forward(x, batch), tolerance(p), "at knots");
             gpu.upload_output_gradient(wave(batch * 3, 1, 0.5));
             gpu.backward();
-            compare(gpu.download_gradients().input, cpu.backward(x, batch, wave(batch * 3, 1, 0.5)).input, tolerance(p), "at knots dx");
+            compare(gpu.download_gradients().input, cpu.backward(x, batch, wave(batch * 3, 1, 0.5)).input, tolerance(p),
+                    "at knots dx");
             // Batch zero: gradients are the L2 term only (zero bias VJP).
             gpu.upload_input({}, 0);
             gpu.forward();
@@ -265,7 +279,8 @@ TEST(sparse_layers_in_mixed_networks_with_residual_branch) {
         std::vector<kan::NetworkLayer> layers;
         layers.emplace_back(kan::InputMap(32, kan::TanhMap{}));
         layers.emplace_back(first);
-        layers.emplace_back(kan::InputMap(24, kan::LayerNormMap{1e-5, std::vector<double>(24, 1.0), std::vector<double>(24, 0.0)}));
+        layers.emplace_back(
+            kan::InputMap(24, kan::LayerNormMap{1e-5, std::vector<double>(24, 1.0), std::vector<double>(24, 0.0)}));
         layers.emplace_back(second);
         layers.emplace_back(third);
         layers.emplace_back(fourth);
@@ -284,7 +299,8 @@ TEST(sparse_layers_in_mixed_networks_with_residual_branch) {
 // are deterministic; SGD trajectories follow the CPU.
 TEST(sparse_training_steps_are_bitwise_eager_and_deterministic) {
     for (auto p : precisions) {
-        const kan::Network n({seeded(kan::Layer(48, 64, spline(3, 48)), 0.2), seeded(kan::Layer(64, 64, spline(2, 40)), 0.5),
+        const kan::Network n({seeded(kan::Layer(48, 64, spline(3, 48)), 0.2),
+                              seeded(kan::Layer(64, 64, spline(2, 40)), 0.5),
                               seeded(kan::Layer(64, 5, kan::ChebyshevConfig{4}), 0.7)});
         const auto x = inputs(512 * 48, 0.7);
         const auto dy = wave(512 * 5, 0.2, 0.31);
@@ -292,9 +308,14 @@ TEST(sparse_training_steps_are_bitwise_eager_and_deterministic) {
         ResidentTestScope scope(SplinePath::Sparse, &layout);
         ResidentNetwork eager(n, 512, p), graph(n, 512, p), again(n, 512, p);
         REQUIRE(layout.sparse.at(0) && layout.sparse.at(1));
-        for (auto* r : {&eager, &graph, &again}) { r->upload_input(x, 512); r->upload_output_gradient(dy); }
+        for (auto* r : {&eager, &graph, &again}) {
+            r->upload_input(x, 512);
+            r->upload_output_gradient(dy);
+        }
         for (int step = 0; step < 4; ++step) {
-            eager.forward(); eager.backward(0.01); eager.sgd(0.05);
+            eager.forward();
+            eager.backward(0.01);
+            eager.sgd(0.05);
             graph.train_step(0.05, 0.01);
             again.train_step(0.05, 0.01);
         }
@@ -312,12 +333,14 @@ TEST(sparse_training_steps_are_bitwise_eager_and_deterministic) {
             for (int step = 0; step < 3; ++step) {
                 mse.train_step(x, target, 512, 0.1);
                 auto y = cpu.forward(x, 512);
-                for (std::size_t k = 0; k < y.size(); ++k) y[k] = (y[k] - target[k]) * (2.0 / static_cast<double>(y.size()));
+                for (std::size_t k = 0; k < y.size(); ++k)
+                    y[k] = (y[k] - target[k]) * (2.0 / static_cast<double>(y.size()));
                 cpu.sgd(cpu.backward(x, 512, y), 0.1);
             }
             const auto trained = mse.download_parameters();
             for (std::size_t j = 0; j < 3; ++j)
-                compare(test::layer(trained, j).coefficients(), test::layer(cpu, j).coefficients(), tolerance(p), "mse trajectory");
+                compare(test::layer(trained, j).coefficients(), test::layer(cpu, j).coefficients(), tolerance(p),
+                        "mse trajectory");
         }
     }
 }
@@ -364,8 +387,10 @@ TEST(sparse_upload_parameters_and_knot_insertion_growth) {
     ResidentNetwork after(refined, 4096, Precision::Float32);
     REQUIRE(layout.sparse.at(0));
     const auto x = inputs(1000 * 128, 0.2);
-    before.upload_input(x, 1000); before.forward();
-    after.upload_input(x, 1000); after.forward();
+    before.upload_input(x, 1000);
+    before.forward();
+    after.upload_input(x, 1000);
+    after.forward();
     compare(after.download_output(), before.download_output(), tolerance(Precision::Float32), "refined output");
     // New parameters through upload_parameters.
     auto changed = refined;
@@ -374,8 +399,10 @@ TEST(sparse_upload_parameters_and_knot_insertion_growth) {
     changed = single(layer);
     after.upload_parameters(changed);
     check_against_cpu(after.download_parameters(), after, 1000, 0, Precision::Float32, "uploaded");
-    after.upload_input(x, 1000); after.forward();
-    compare(after.download_output(), after.download_parameters().forward(x, 1000), tolerance(Precision::Float32), "uploaded output");
+    after.upload_input(x, 1000);
+    after.forward();
+    compare(after.download_output(), after.download_parameters().forward(x, 1000), tolerance(Precision::Float32),
+            "uploaded output");
 }
 
 // Long rows: 400 terms need fewer inputs per input-VJP block and more than
@@ -392,6 +419,9 @@ TEST(sparse_long_rows_use_smaller_input_groups) {
 }
 
 int main() {
-    if (!kan::cuda::available()) { std::cout << "SKIP no CUDA device\n"; return 0; }
+    if (!kan::cuda::available()) {
+        std::cout << "SKIP no CUDA device\n";
+        return 0;
+    }
     return test::run();
 }

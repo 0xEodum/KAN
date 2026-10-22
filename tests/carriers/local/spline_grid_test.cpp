@@ -142,7 +142,11 @@ TEST(per_input_layer_is_the_sum_of_its_inputs) {
     const auto layer = seeded(kan::Layer(3, 2, c));
     const std::size_t batch = 17;
     auto x = samples(batch);
-    x[0] = -1; x[1] = 0.5; x[5] = 4; x[3] = 1.5; x[4] = -3; // endpoints and outside the domain
+    x[0] = -1;
+    x[1] = 0.5;
+    x[5] = 4;
+    x[3] = 1.5;
+    x[4] = -3; // endpoints and outside the domain
     const auto y = layer.forward(x, batch);
     const auto& coefficients = std::get<kan::BasisEdges>(layer.carrier()).coefficients;
     // Input i alone: a one-input shared-grid layer on grid i with C[:, i, :].
@@ -157,7 +161,8 @@ TEST(per_input_layer_is_the_sum_of_its_inputs) {
     }
     for (std::size_t b = 0; b < batch; ++b)
         for (std::size_t o = 0; o < 2; ++o)
-            test::near(y[b * 2 + o], layer.bias()[o] + parts[0][b * 2 + o] + parts[1][b * 2 + o] + parts[2][b * 2 + o], 1e-13);
+            test::near(y[b * 2 + o], layer.bias()[o] + parts[0][b * 2 + o] + parts[1][b * 2 + o] + parts[2][b * 2 + o],
+                       1e-13);
     // Finite differences of the input and coefficient VJPs.
     std::vector<double> u(batch * 2);
     for (std::size_t k = 0; k < u.size(); ++k) u[k] = wave(k, 0.9);
@@ -165,7 +170,8 @@ TEST(per_input_layer_is_the_sum_of_its_inputs) {
     const double h = 1e-6;
     for (std::size_t e = 0; e < x.size(); ++e) {
         auto xp = x, xm = x;
-        xp[e] += h; xm[e] -= h;
+        xp[e] += h;
+        xm[e] -= h;
         const double fd = (objective(layer, xp, batch, u) - objective(layer, xm, batch, u)) / (2 * h);
         // Inputs at or across knots and endpoints are not differentiable there.
         if (e == 0 || e == 1 || e == 5) continue;
@@ -174,8 +180,10 @@ TEST(per_input_layer_is_the_sum_of_its_inputs) {
     for (std::size_t k = 0; k < coefficients.size(); ++k) {
         auto p = layer, m = layer;
         auto cp = coefficients, cm = coefficients;
-        cp[k] += h; cm[k] -= h;
-        p.set_parameters(cp, layer.bias()); m.set_parameters(cm, layer.bias());
+        cp[k] += h;
+        cm[k] -= h;
+        p.set_parameters(cp, layer.bias());
+        m.set_parameters(cm, layer.bias());
         test::near(g.coefficients[k], (objective(p, x, batch, u) - objective(m, x, batch, u)) / (2 * h), 1e-7);
     }
 }
@@ -204,8 +212,10 @@ TEST(insert_knots_and_adapt_grid_per_input) {
     const auto x = samples(batch);
     test::throws<std::invalid_argument>([&] { kan::insert_knot(layer, 0.1); });
     test::throws<std::invalid_argument>([&] { kan::adapt_grid(layer, std::vector<double>{0.1}); });
-    test::throws<std::invalid_argument>([&] { kan::insert_knots(layer, std::vector<double>{0.1, -1}); });      // one per grid
-    test::throws<std::invalid_argument>([&] { kan::insert_knots(layer, std::vector<double>{0.1, -1, 5}); });   // 5 outside grid 2
+    test::throws<std::invalid_argument>(
+        [&] { kan::insert_knots(layer, std::vector<double>{0.1, -1}); }); // one per grid
+    test::throws<std::invalid_argument>(
+        [&] { kan::insert_knots(layer, std::vector<double>{0.1, -1, 5}); }); // 5 outside grid 2
     REQUIRE(layer.carrier() == before.carrier());
     kan::insert_knots(layer, std::vector<double>{0.1, -1, 2.5});
     REQUIRE(layer.terms() == 9 && spline_of(layer).grids == 3);
@@ -264,7 +274,8 @@ TEST(refit_knots_follow_pykan_quantiles) {
         const auto row = kan::spline_grid(spline_of(margin), i).knots;
         REQUIRE(row.front() == *lo - 0.01 * (*hi - *lo) && row.back() == *hi + 0.01 * (*hi - *lo));
     }
-    test::throws<std::invalid_argument>([&] { kan::refit_grid(margin, x, batch, kan::GridRefit{5, 0.02, 1e-8, true, -1}); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::refit_grid(margin, x, batch, kan::GridRefit{5, 0.02, 1e-8, true, -1}); });
 }
 
 TEST(refit_reproduces_polynomials_exactly) {
@@ -296,7 +307,8 @@ TEST(refit_reproduces_polynomials_exactly) {
             for (std::size_t o = 0; o < 2; ++o)
                 for (std::size_t i = 0; i < 3; ++i) {
                     const auto expected = polynomial_coefficients(kan::spline_grid(s, i).knots, p, polys[o * 3 + i]);
-                    for (std::size_t k = 0; k < terms; ++k) test::near(next[(o * 3 + i) * terms + k], expected[k], 1e-11);
+                    for (std::size_t k = 0; k < terms; ++k)
+                        test::near(next[(o * 3 + i) * terms + k], expected[k], 1e-11);
                 }
             REQUIRE(refit.bias()[0] == 0.25 && refit.bias()[1] == -0.5);
         }
@@ -312,7 +324,10 @@ TEST(refit_onto_a_refined_grid_preserves_the_function) {
     std::size_t batch = 200;
     std::vector<double> x(batch * 2);
     for (std::size_t k = 0; k < x.size(); ++k) x[k] = 0.999 * std::sin(0.71 * double(k) + 0.2);
-    x[0] = -1; x[1] = 1; x[2] = 1; x[3] = -1;
+    x[0] = -1;
+    x[1] = 1;
+    x[2] = 1;
+    x[3] = -1;
     auto refit = layer;
     kan::refit_grid(refit, x, batch, kan::GridRefit{8, 1.0, 0.0, true, 0.0});
     REQUIRE(refit.terms() == 11);
@@ -325,7 +340,9 @@ TEST(refit_validation_is_atomic) {
     const auto before = layer;
     const std::size_t batch = 20;
     auto x = samples(batch);
-    const auto unchanged = [&] { REQUIRE(layer.carrier() == before.carrier() && std::ranges::equal(layer.bias(), before.bias())); };
+    const auto unchanged = [&] {
+        REQUIRE(layer.carrier() == before.carrier() && std::ranges::equal(layer.bias(), before.bias()));
+    };
     test::throws<std::invalid_argument>([&] { kan::refit_grid(layer, x, batch + 1); });
     test::throws<std::invalid_argument>([&] { kan::refit_grid(layer, {}, 0); });
     for (double eps : {-0.1, 1.5, std::nan("")})
@@ -403,7 +420,8 @@ TEST(network_refit_propagates_samples_through_preceding_layers) {
     const auto snapshot = failing;
     test::throws<std::invalid_argument>([&] { failing.refit_grids(x, batch); });
     for (std::size_t j = 0; j < 3; ++j)
-        REQUIRE(std::get<kan::Layer>(failing.layers()[j]).carrier() == std::get<kan::Layer>(snapshot.layers()[j]).carrier());
+        REQUIRE(std::get<kan::Layer>(failing.layers()[j]).carrier() ==
+                std::get<kan::Layer>(snapshot.layers()[j]).carrier());
     kan::Network none({kan::NetworkLayer(kan::Layer(3, 2, kan::ChebyshevConfig{3}))});
     test::throws<std::invalid_argument>([&] { none.refit_grids(x, batch); });
     test::throws<std::invalid_argument>([&] { refit.refit_grids(x, batch + 1); });

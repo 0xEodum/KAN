@@ -19,10 +19,18 @@ struct EdgeShape {
 
 // Nonlinear gradient type of each carrier (the NonlinearGradients alternative).
 template<class Edges> struct nonlinear_of;
-template<> struct nonlinear_of<BasisEdges> { using type = std::monostate; };
-template<> struct nonlinear_of<TrainableRbfEdges> { using type = TrainableRbfGradients; };
-template<> struct nonlinear_of<RationalEdges> { using type = RationalGradients; };
-template<> struct nonlinear_of<WaveletEdges> { using type = WaveletGradients; };
+template<> struct nonlinear_of<BasisEdges> {
+    using type = std::monostate;
+};
+template<> struct nonlinear_of<TrainableRbfEdges> {
+    using type = TrainableRbfGradients;
+};
+template<> struct nonlinear_of<RationalEdges> {
+    using type = RationalGradients;
+};
+template<> struct nonlinear_of<WaveletEdges> {
+    using type = WaveletGradients;
+};
 template<class Edges> using nonlinear_t = typename nonlinear_of<Edges>::type;
 
 // Coefficients per edge.
@@ -49,28 +57,28 @@ void require_finite_nonlinear(const WaveletEdges& edges); // translations finite
 
 // output[b,o] = bias[o] + sum_i phi_{o,i}(input[b,i]) for validated state and
 // finite input. Nonfinite intermediate results throw std::overflow_error.
-void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> bias,
-             std::span<const double> input, std::size_t batch, std::span<double> output);
+void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output);
 void forward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> bias,
              std::span<const double> input, std::size_t batch, std::span<double> output);
-void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias,
-             std::span<const double> input, std::size_t batch, std::span<double> output);
-void forward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> bias,
-             std::span<const double> input, std::size_t batch, std::span<double> output);
+void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output);
+void forward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output);
 
 // Accumulates the input, coefficient and nonlinear VJPs, summed over the batch,
 // into zero-initialized gradients. The bias VJP is carrier independent.
-void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, std::monostate& nonlinear);
-void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, TrainableRbfGradients& nonlinear);
-void backward(const RationalEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const RationalEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, RationalGradients& nonlinear);
-void backward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, WaveletGradients& nonlinear);
 
 // Correctly shaped zero nonlinear gradients.

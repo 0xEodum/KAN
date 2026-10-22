@@ -80,9 +80,8 @@ struct MexicanHatConfig {
 };
 
 // A value-initialized BasisConfig is ChebyshevConfig{4}.
-using BasisConfig = std::variant<ChebyshevConfig, LegendreConfig, JacobiConfig, HermiteConfig,
-                                 FourierConfig, GaussianRbfConfig, TrainableRbfConfig,
-                                 BSplineConfig, MexicanHatConfig>;
+using BasisConfig = std::variant<ChebyshevConfig, LegendreConfig, JacobiConfig, HermiteConfig, FourierConfig,
+                                 GaussianRbfConfig, TrainableRbfConfig, BSplineConfig, MexicanHatConfig>;
 
 struct BasisValues {
     std::vector<double> values;

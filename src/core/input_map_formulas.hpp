@@ -11,13 +11,11 @@
 
 namespace kan::detail {
 
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar affine_value(Scalar scale, Scalar shift, Scalar x) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar affine_value(Scalar scale, Scalar shift, Scalar x) {
     return scale * x + shift;
 }
 
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar tanh_value(Scalar scale, Scalar x) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar tanh_value(Scalar scale, Scalar x) {
     return math::tanh(scale * x);
 }
 
@@ -27,21 +25,18 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar tanh_value(Scalar scale, Scalar x) {
 // below ~1e-8*s, and a saturated y = +-1 gives the exact limit zero. Using
 // the forward output instead of cosh keeps the device VJP at three FP64
 // operations (GA102 runs FP64 at 1/64 rate; see M1 profiling evidence).
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar tanh_derivative(Scalar scale, Scalar y) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar tanh_derivative(Scalar scale, Scalar y) {
     return scale * ((Scalar(1) - y) * (Scalar(1) + y));
 }
 
 // Row means are sum * (1/n) with the reciprocal computed once per map:
 // one multiplication instead of a division per row (and per device lane).
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar layer_norm_mean(Scalar sum, Scalar inverse_count) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar layer_norm_mean(Scalar sum, Scalar inverse_count) {
     return sum * inverse_count;
 }
 
 // 1 / sqrt(var + epsilon) from the population variance of a row.
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar layer_norm_rstd(Scalar variance, Scalar epsilon) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar layer_norm_rstd(Scalar variance, Scalar epsilon) {
     return Scalar(1) / math::sqrt(variance + epsilon);
 }
 

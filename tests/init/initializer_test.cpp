@@ -98,7 +98,10 @@ void same_moments(const std::vector<double>& actual, const std::vector<double>& 
 kan::Layer wavelet_layer() {
     kan::Layer layer(5, 4, kan::WaveletConfig{3});
     std::vector<double> tau(60), l(60);
-    for (std::size_t j = 0; j < 60; ++j) { tau[j] = -0.5 + 0.25 * double(j % 7); l[j] = -1 + 0.25 * double(j % 5); }
+    for (std::size_t j = 0; j < 60; ++j) {
+        tau[j] = -0.5 + 0.25 * double(j % 7);
+        l[j] = -1 + 0.25 * double(j % 5);
+    }
     kan::set_wavelet_parameters(layer, std::vector<double>(60, 0.0), tau, l, std::vector<double>(4, 0.0));
     return layer;
 }
@@ -227,8 +230,14 @@ TEST(normal_draws_have_the_stated_moments) {
     const auto c = layer.coefficients();
     const double a = 1.0 / (2.0 * 8.0), variance = a * a / 12;
     double mean = 0, m2 = 0, m4 = 0;
-    for (double v : c) { mean += v; m2 += v * v; m4 += v * v * v * v; }
-    mean /= double(c.size()); m2 /= double(c.size()); m4 /= double(c.size());
+    for (double v : c) {
+        mean += v;
+        m2 += v * v;
+        m4 += v * v * v * v;
+    }
+    mean /= double(c.size());
+    m2 /= double(c.size());
+    m4 /= double(c.size());
     test::near(mean / std::sqrt(variance), 0, 0.05);
     test::near(m2 / variance, 1, 0.05);
     test::near(m4 / (m2 * m2), 3, 0.15); // Gaussian kurtosis, uniform would give 1.8
@@ -242,9 +251,14 @@ TEST(normal_draws_have_the_stated_moments) {
 TEST(variance_scaling_preserves_the_reference_second_moment) {
     // One wide layer, inputs drawn from the reference measure: E[y^2] = gain^2 * variance.
     std::uint64_t state = 99;
-    const auto next_u = [&] { state = state * 6364136223846793005ull + 1442695040888963407ull;
-                              return (double(state >> 11) + 0.5) * 0x1p-53; };
-    struct Case { kan::BasisConfig basis; std::function<double(double)> inverse_cdf; };
+    const auto next_u = [&] {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        return (double(state >> 11) + 0.5) * 0x1p-53;
+    };
+    struct Case {
+        kan::BasisConfig basis;
+        std::function<double(double)> inverse_cdf;
+    };
     const double pi = std::numbers::pi;
     std::vector<Case> cases{
         {kan::ChebyshevConfig{6}, [&](double u) { return -std::cos(pi * u); }},
@@ -285,11 +299,18 @@ TEST(variance_stays_bounded_through_eight_layers) {
     const std::size_t width = 16, batch = 512, depth = 8;
     std::vector<double> x(width * batch);
     for (std::size_t j = 0; j < x.size(); ++j) x[j] = std::sin(0.37 * double(j) + 0.1 * double(j % 7));
-    struct Case { const char* name; kan::BasisConfig basis; bool tanh; };
+    struct Case {
+        const char* name;
+        kan::BasisConfig basis;
+        bool tanh;
+    };
     const std::vector<Case> cases{
-        {"chebyshev", kan::ChebyshevConfig{5}, true}, {"legendre", kan::LegendreConfig{5}, true},
-        {"jacobi", kan::JacobiConfig{5, 0.5, 0.5}, true}, {"bspline", uniform_spline(3, 5), true},
-        {"hermite", kan::HermiteConfig{4}, true}, {"fourier", kan::FourierConfig{5, 1.0}, false},
+        {"chebyshev", kan::ChebyshevConfig{5}, true},
+        {"legendre", kan::LegendreConfig{5}, true},
+        {"jacobi", kan::JacobiConfig{5, 0.5, 0.5}, true},
+        {"bspline", uniform_spline(3, 5), true},
+        {"hermite", kan::HermiteConfig{4}, true},
+        {"fourier", kan::FourierConfig{5, 1.0}, false},
         {"hermite_fn", kan::HermiteConfig{12, kan::HermiteNormalization::Function}, false},
         {"rbf", kan::GaussianRbfConfig{linspace(-1, 1, 6), 0.4}, false},
         {"mexican_hat", kan::MexicanHatConfig{linspace(-1, 1, 5), std::vector<double>(5, 0.5)}, false},
@@ -322,7 +343,8 @@ TEST(variance_stays_bounded_through_eight_layers) {
 }
 
 TEST(rational_denominators_are_bounded_nonzero_and_pole_free) {
-    for (auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
+    for (auto policy :
+         {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
         for (std::size_t n : {1u, 2u, 5u, 16u})
             for (double radius : {1.0, 0.25, 3.0}) {
                 kan::RationalConfig config;
@@ -334,8 +356,10 @@ TEST(rational_denominators_are_bounded_nonzero_and_pole_free) {
                 const kan::DenominatorInit d{0.6, radius};
                 for (int which = 0; which < 2; ++which) {
                     kan::Layer layer(4, 3, config);
-                    if (which == 0) kan::initialize(layer, kan::VarianceScaling{1, kan::Distribution::Normal, 8, d});
-                    else kan::initialize(layer, kan::NoiseInit{0.3, kan::Distribution::Uniform, 8, d});
+                    if (which == 0)
+                        kan::initialize(layer, kan::VarianceScaling{1, kan::Distribution::Normal, 8, d});
+                    else
+                        kan::initialize(layer, kan::NoiseInit{0.3, kan::Distribution::Uniform, 8, d});
                     const auto b = test::denominators(layer);
                     for (std::size_t e = 0; e < 12; ++e) {
                         double bound = 0, power = 1;
@@ -349,7 +373,8 @@ TEST(rational_denominators_are_bounded_nonzero_and_pole_free) {
                         REQUIRE(bound <= 0.6 * (1 + 1e-14)); // |S(z)| <= 0.6 for |z| <= radius
                     }
                     // Executing the whole domain never reports a pole.
-                    const auto xs = linspace(config.center - radius * config.scale, config.center + radius * config.scale, 801);
+                    const auto xs =
+                        linspace(config.center - radius * config.scale, config.center + radius * config.scale, 801);
                     std::vector<double> x;
                     for (double v : xs) x.insert(x.end(), 4, v);
                     const auto grads = layer.backward(x, xs.size(), std::vector<double>(3 * xs.size(), 1.0));
@@ -361,7 +386,8 @@ TEST(rational_denominators_are_bounded_nonzero_and_pole_free) {
 }
 
 TEST(rational_numerators_preserve_variance_on_the_domain) {
-    for (auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth}) {
+    for (auto policy :
+         {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth}) {
         kan::RationalConfig config;
         config.center = -0.5;
         config.scale = 2.0;
@@ -403,12 +429,12 @@ TEST(invalid_initializers_are_rejected_atomically) {
     for (double scale : {0.0, -0.1, nan, inf})
         test::throws<std::invalid_argument>([&] { kan::initialize(layer, kan::NoiseInit{scale, {}, 0, {}}); });
     for (double bound : {0.0, 1.0, -0.5, nan})
-        test::throws<std::invalid_argument>([&] { kan::initialize(layer, kan::VarianceScaling{1, {}, 0, {bound, 1}}); });
+        test::throws<std::invalid_argument>(
+            [&] { kan::initialize(layer, kan::VarianceScaling{1, {}, 0, {bound, 1}}); });
     for (double radius : {0.0, -1.0, nan, inf})
         test::throws<std::invalid_argument>([&] { kan::initialize(layer, kan::NoiseInit{0.3, {}, 0, {0.5, radius}}); });
-    test::throws<std::invalid_argument>([&] {
-        kan::initialize(layer, kan::VarianceScaling{1, static_cast<kan::Distribution>(7), 0, {}});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { kan::initialize(layer, kan::VarianceScaling{1, static_cast<kan::Distribution>(7), 0, {}}); });
     REQUIRE(digest(layer) == before);
     kan::Layer moved(2, 2, kan::ChebyshevConfig{3});
     kan::Layer sink = std::move(moved);
@@ -418,7 +444,8 @@ TEST(invalid_initializers_are_rejected_atomically) {
     r.denominator_degree = 16;
     kan::Layer rational(1, 1, r);
     test::throws<std::overflow_error>([&] { kan::initialize(rational, kan::VarianceScaling{1, {}, 0, {0.5, 1e300}}); });
-    test::throws<std::overflow_error>([&] { kan::initialize(rational, kan::VarianceScaling{1, {}, 0, {0.5, 1e-300}}); });
+    test::throws<std::overflow_error>(
+        [&] { kan::initialize(rational, kan::VarianceScaling{1, {}, 0, {0.5, 1e-300}}); });
 }
 
 TEST(network_initialization_uses_layer_seeds_and_resets_layer_norm) {
@@ -427,8 +454,8 @@ TEST(network_initialization_uses_layer_seeds_and_resets_layer_norm) {
     rational.denominator_policy = kan::DenominatorPolicy::Absolute;
     const kan::TrainableRbfConfig rbf{{-1, 0, 1}, {-0.5, -0.4, -0.3}};
     kan::Network net({kan::InputMap(3, kan::AffineMap{{2, 2, 2}, {0, 0, 0}}), kan::Layer(3, 4, kan::ChebyshevConfig{4}),
-                      kan::InputMap(4, kan::LayerNormMap{1e-5, {3, 3, 3, 3}, {1, 1, 1, 1}}),
-                      kan::Layer(4, 2, rbf), kan::Layer(2, 2, rational), kan::InputMap(2, kan::TanhMap{2})});
+                      kan::InputMap(4, kan::LayerNormMap{1e-5, {3, 3, 3, 3}, {1, 1, 1, 1}}), kan::Layer(4, 2, rbf),
+                      kan::Layer(2, 2, rational), kan::InputMap(2, kan::TanhMap{2})});
     const kan::Initializer init = kan::VarianceScaling{1.2, kan::Distribution::Normal, 77, {}};
     kan::initialize(net, init);
     for (std::size_t p : {1u, 3u, 4u}) {
@@ -457,8 +484,10 @@ TEST(wavelet_initialization_preserves_variance_and_keeps_placement) {
     // [min(tau - s), max(tau + s)], the span of every term's central lobe
     // ([-1, 1] for the constructor's placement), with per-term moments.
     std::uint64_t state = 7;
-    const auto next_u = [&] { state = state * 6364136223846793005ull + 1442695040888963407ull;
-                              return (double(state >> 11) + 0.5) * 0x1p-53; };
+    const auto next_u = [&] {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        return (double(state >> 11) + 0.5) * 0x1p-53;
+    };
     const std::size_t inputs = 32, outputs = 32, batch = 2048;
     for (std::size_t size : {1u, 3u}) {
         for (auto distribution : {kan::Distribution::Uniform, kan::Distribution::Normal}) {
@@ -477,7 +506,8 @@ TEST(wavelet_initialization_preserves_variance_and_keeps_placement) {
                 REQUIRE(edges.translations == placement.translations);
                 REQUIRE(edges.log_scales == placement.log_scales);
                 REQUIRE(std::ranges::equal(layer.bias(), std::vector<double>(outputs, 0.0)));
-                ratio += mean_square(layer.forward(std::span<const double>(x).first(inputs * 1024), 1024)) / (0.64 / 3) / 16;
+                ratio +=
+                    mean_square(layer.forward(std::span<const double>(x).first(inputs * 1024), 1024)) / (0.64 / 3) / 16;
             }
             test::near(ratio, 1, 0.15);
         }
@@ -519,18 +549,28 @@ TEST(seeds_are_deterministic_and_pinned_across_platforms) {
     smooth.denominator_policy = kan::DenominatorPolicy::Smooth;
     smooth.numerator_degree = 4;
     smooth.denominator_degree = 3;
-    struct Case { kan::Layer layer; kan::Initializer init; const char* pinned; };
+    struct Case {
+        kan::Layer layer;
+        kan::Initializer init;
+        const char* pinned;
+    };
     std::vector<Case> cases{
-        {kan::Layer(5, 4, kan::ChebyshevConfig{6}), kan::VarianceScaling{1, kan::Distribution::Uniform, 1, {}}, "0cc0adf3c0731725"},
-        {kan::Layer(5, 4, kan::HermiteConfig{5}), kan::VarianceScaling{1, kan::Distribution::Normal, 2, {}}, "bd57711a756b9442"},
-        {kan::Layer(5, 4, kan::JacobiConfig{5, 0.3, -0.4}), kan::VarianceScaling{0.7, kan::Distribution::Normal, 3, {}}, "7c38d487449c767e"},
-        {kan::Layer(5, 4, uniform_spline(3, 7)), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}}, "09b57ceb64cf560d"},
-        {kan::Layer(5, 4, uniform_spline(2, 4)), kan::VarianceScaling{1, kan::Distribution::Normal, 5, {}}, "4eaa871a69b30de0"},
+        {kan::Layer(5, 4, kan::ChebyshevConfig{6}), kan::VarianceScaling{1, kan::Distribution::Uniform, 1, {}},
+         "0cc0adf3c0731725"},
+        {kan::Layer(5, 4, kan::HermiteConfig{5}), kan::VarianceScaling{1, kan::Distribution::Normal, 2, {}},
+         "bd57711a756b9442"},
+        {kan::Layer(5, 4, kan::JacobiConfig{5, 0.3, -0.4}), kan::VarianceScaling{0.7, kan::Distribution::Normal, 3, {}},
+         "7c38d487449c767e"},
+        {kan::Layer(5, 4, uniform_spline(3, 7)), kan::NoiseInit{0.3, kan::Distribution::Uniform, 4, {}},
+         "09b57ceb64cf560d"},
+        {kan::Layer(5, 4, uniform_spline(2, 4)), kan::VarianceScaling{1, kan::Distribution::Normal, 5, {}},
+         "4eaa871a69b30de0"},
         {kan::Layer(5, 4, kan::TrainableRbfConfig{{-1, 0.1, 1}, {-0.7, -1.1, 0.3}}),
          kan::VarianceScaling{1, kan::Distribution::Normal, 6, {}}, "39e6d8394275d625"},
         {kan::Layer(5, 4, kan::MexicanHatConfig{{-1, 0, 2}, {0.5, 0.7, 1.1}}),
          kan::VarianceScaling{1, kan::Distribution::Uniform, 7, {}}, "e46b5fb6a1201363"},
-        {kan::Layer(5, 4, kan::FourierConfig{5, 2.5}), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}}, "309cb5b5cbe3b6d4"},
+        {kan::Layer(5, 4, kan::FourierConfig{5, 2.5}), kan::NoiseInit{0.3, kan::Distribution::Normal, 8, {}},
+         "309cb5b5cbe3b6d4"},
         {kan::Layer(5, 4, smooth), kan::VarianceScaling{1, kan::Distribution::Normal, 9, {0.4, 2}}, "44389dcaba3ba426"},
         // Backlog M5; pinned with GCC on aarch64 (no MSVC run on that machine).
         {kan::Layer(5, 4, kan::HermiteConfig{7, kan::HermiteNormalization::Function}),

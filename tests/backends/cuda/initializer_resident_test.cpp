@@ -8,7 +8,10 @@
 #include <cstdio>
 
 namespace {
-struct Data { std::vector<double> x, target; std::size_t batch = 64; };
+struct Data {
+    std::vector<double> x, target;
+    std::size_t batch = 64;
+};
 Data product_data() {
     Data d;
     for (std::size_t i = 0; i < 8; ++i)
@@ -20,8 +23,7 @@ Data product_data() {
     return d;
 }
 
-template<class Config>
-kan::Network deep(const Config& config) {
+template<class Config> kan::Network deep(const Config& config) {
     std::vector<kan::NetworkLayer> stages;
     std::size_t in = 2;
     for (std::size_t l = 0; l < 5; ++l) {
@@ -64,9 +66,11 @@ void compare_parameters(const kan::Network& gpu, const kan::Network& cpu, double
     }
 }
 
-template<class Config>
-void resident_matches_cpu_training(const Config& config, const char* name) {
-    if (!kan::cuda::available()) { std::puts("no CUDA device: skipped"); return; }
+template<class Config> void resident_matches_cpu_training(const Config& config, const char* name) {
+    if (!kan::cuda::available()) {
+        std::puts("no CUDA device: skipped");
+        return;
+    }
     const auto d = product_data();
     auto cpu = deep(config);
     kan::initialize(cpu, kan::VarianceScaling{1, kan::Distribution::Normal, 4, {}});
@@ -106,7 +110,8 @@ TEST(resident_bspline_from_variance_scaling) {
     resident_matches_cpu_training(kan::BSplineConfig{3, {-1, -1, -1, -1, -0.5, 0, 0.5, 1, 1, 1, 1}}, "bspline");
 }
 TEST(resident_rational_policies_from_variance_scaling) {
-    for (auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth}) {
+    for (auto policy :
+         {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth}) {
         kan::RationalConfig c;
         c.denominator_policy = policy;
         resident_matches_cpu_training(c, "rational");

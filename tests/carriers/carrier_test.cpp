@@ -75,7 +75,8 @@ TEST(set_parameters_is_generic_over_carriers) {
     REQUIRE(edges.denominators == std::vector<double>{0});
     const double z = (0.3 - 0.1) / 1.3;
     test::near(rational.forward(std::vector<double>{0.3}, 1)[0], 0.5 + 1 + 2 * z);
-    test::throws<std::invalid_argument>([&] { rational.set_parameters(std::vector<double>{1, 2}, std::vector<double>{0}); });
+    test::throws<std::invalid_argument>(
+        [&] { rational.set_parameters(std::vector<double>{1, 2}, std::vector<double>{0}); });
 }
 
 TEST(set_carrier_validates_and_is_atomic) {
@@ -83,19 +84,17 @@ TEST(set_carrier_validates_and_is_atomic) {
     layer.set_parameters(ramp(10, 0.1), std::vector<double>{0.2});
     const auto before = layer.carrier();
 
-    test::throws<std::invalid_argument>([&] { layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{4}, ramp(7, 1)}); });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{4}, ramp(7, 1)}); });
     test::throws<std::invalid_argument>([&] { layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{0}, {}}); });
-    test::throws<std::invalid_argument>([&] {
-        layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{1}, std::vector<double>{1, inf}});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{1}, std::vector<double>{1, inf}}); });
     // A trainable RBF configuration needs its own carrier type.
     test::throws<std::invalid_argument>([&] { layer.set_carrier(kan::BasisEdges{rbf(), ramp(4, 1)}); });
-    test::throws<std::invalid_argument>([&] {
-        layer.set_carrier(kan::RationalEdges{pade(), ramp(6, 1), std::vector<double>{0}});
-    });
-    test::throws<std::invalid_argument>([&] {
-        layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{2}, ramp(4, 1)}, std::vector<double>{inf});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::RationalEdges{pade(), ramp(6, 1), std::vector<double>{0}}); });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::BasisEdges{kan::ChebyshevConfig{2}, ramp(4, 1)}, std::vector<double>{inf}); });
     REQUIRE(layer.carrier() == before);
     REQUIRE(layer.bias()[0] == 0.2);
 
@@ -121,11 +120,11 @@ TEST(family_operations_are_free_functions) {
     kan::Layer chebyshev(1, 1, kan::ChebyshevConfig{3});
     test::throws<std::invalid_argument>([&] { kan::insert_knot(chebyshev, 0.5); });
     test::throws<std::invalid_argument>([&] { kan::adapt_grid(chebyshev, std::vector<double>{0.5}); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_rbf_parameters(chebyshev, std::vector<double>{0}, std::vector<double>{0}); });
     test::throws<std::invalid_argument>([&] {
-        kan::set_rbf_parameters(chebyshev, std::vector<double>{0}, std::vector<double>{0});
-    });
-    test::throws<std::invalid_argument>([&] {
-        kan::set_rational_parameters(chebyshev, std::vector<double>{0, 0, 0}, std::vector<double>{}, std::vector<double>{0});
+        kan::set_rational_parameters(chebyshev, std::vector<double>{0, 0, 0}, std::vector<double>{},
+                                     std::vector<double>{0});
     });
 
     kan::Layer trainable(1, 1, rbf());
@@ -134,17 +133,19 @@ TEST(family_operations_are_free_functions) {
              kan::TrainableRbfConfig{{0.1, 0.2}, {0.3, 0.4}}));
 
     kan::Layer rational(1, 1, pade());
-    kan::set_rational_parameters(rational, std::vector<double>{1, 0, 0}, std::vector<double>{0.5}, std::vector<double>{2});
+    kan::set_rational_parameters(rational, std::vector<double>{1, 0, 0}, std::vector<double>{0.5},
+                                 std::vector<double>{2});
     REQUIRE(std::get<kan::RationalEdges>(rational.carrier()).denominators == std::vector<double>{0.5});
     REQUIRE(rational.bias()[0] == 2);
     test::throws<std::invalid_argument>([&] {
-        kan::set_rational_parameters(rational, std::vector<double>{1, 0, 0}, std::vector<double>{inf}, std::vector<double>{2});
+        kan::set_rational_parameters(rational, std::vector<double>{1, 0, 0}, std::vector<double>{inf},
+                                     std::vector<double>{2});
     });
     REQUIRE(std::get<kan::RationalEdges>(rational.carrier()).denominators == std::vector<double>{0.5});
 
     kan::Network network({kan::Layer(1, 1, cubic())});
     network.insert_knot(0, 0.25);
-    REQUIRE(test::layer(network,0).terms() == 6);
+    REQUIRE(test::layer(network, 0).terms() == 6);
 }
 
 TEST(sgd_rejects_gradients_of_another_carrier) {
@@ -175,9 +176,8 @@ TEST(sgd_rejects_gradients_of_another_carrier) {
 
 TEST(invalid_and_moved_from_carriers_are_rejected) {
     kan::Layer rational(1, 1, pade());
-    test::throws<std::invalid_argument>([&] {
-        rational.set_carrier(kan::RationalEdges{pade(), ramp(2, 1), std::vector<double>{0}});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { rational.set_carrier(kan::RationalEdges{pade(), ramp(2, 1), std::vector<double>{0}}); });
     kan::Layer spline(1, 1, cubic());
     auto moved = std::move(spline);
     test::throws<std::invalid_argument>([&] { kan::insert_knot(spline, 0.5); });

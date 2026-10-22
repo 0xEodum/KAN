@@ -13,8 +13,7 @@ void positive_finite(double value, const char* message) {
 
 void require_terms(std::size_t size) {
     if (size == 0) throw std::invalid_argument("basis size must be positive");
-    if (size > std::vector<double>{}.max_size())
-        throw std::overflow_error("basis size exceeds vector capacity");
+    if (size > std::vector<double>{}.max_size()) throw std::overflow_error("basis size exceeds vector capacity");
 }
 
 void require_finite(const std::vector<double>& values, const char* message) {
@@ -62,8 +61,7 @@ void validate(const TrainableRbfConfig& c) {
 // One clamped knot vector t[0..n) of degree p.
 void validate_grid(std::size_t degree, const double* t, std::size_t n) {
     const auto size = n > degree && n - degree > 1 ? n - degree - 1 : 0;
-    if (size < degree + 1)
-        throw std::invalid_argument("spline needs at least 2*(degree+1) knots (degree+1 terms)");
+    if (size < degree + 1) throw std::invalid_argument("spline needs at least 2*(degree+1) knots (degree+1 terms)");
     for (std::size_t j = 0; j < n; ++j)
         if (!std::isfinite(t[j]) || (j && t[j] < t[j - 1]))
             throw std::invalid_argument("spline knots must be finite and nondecreasing");
@@ -76,8 +74,7 @@ void validate_grid(std::size_t degree, const double* t, std::size_t n) {
     std::size_t multiplicity = 1;
     for (std::size_t j = degree + 2; j < size; ++j) {
         multiplicity = t[j] == t[j - 1] ? multiplicity + 1 : 1;
-        if (multiplicity > degree + 1)
-            throw std::invalid_argument("spline interior multiplicity exceeds degree+1");
+        if (multiplicity > degree + 1) throw std::invalid_argument("spline interior multiplicity exceeds degree+1");
     }
 }
 
@@ -123,7 +120,8 @@ BSplineConfig per_input_grids(const BSplineConfig& config, std::size_t inputs) {
         throw std::overflow_error("spline knot count exceeds vector capacity");
     BSplineConfig result{config.degree, {}, inputs};
     result.knots.reserve(config.knots.size() * inputs);
-    for (std::size_t i = 0; i < inputs; ++i) result.knots.insert(result.knots.end(), config.knots.begin(), config.knots.end());
+    for (std::size_t i = 0; i < inputs; ++i)
+        result.knots.insert(result.knots.end(), config.knots.begin(), config.knots.end());
     return result;
 }
 

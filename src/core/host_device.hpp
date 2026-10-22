@@ -107,9 +107,7 @@ KAN_HOST_DEVICE inline float cos(float v) { return KAN_FLOAT_MATH(cos)(v); }
 KAN_HOST_DEVICE inline float sin(float v) { return KAN_FLOAT_MATH(sin)(v); }
 KAN_HOST_DEVICE inline float tanh(float v) { return KAN_FLOAT_MATH(tanh)(v); }
 KAN_HOST_DEVICE inline float cosh(float v) { return KAN_FLOAT_MATH(cosh)(v); }
-KAN_HOST_DEVICE inline float copysign(float magnitude, float sign) {
-    return KAN_FLOAT_MATH(copysign)(magnitude, sign);
-}
+KAN_HOST_DEVICE inline float copysign(float magnitude, float sign) { return KAN_FLOAT_MATH(copysign)(magnitude, sign); }
 KAN_HOST_DEVICE inline float ldexp(float v, int exponent) { return KAN_FLOAT_MATH(ldexp)(v, exponent); }
 KAN_HOST_DEVICE inline float fma(float a, float b, float c) { return KAN_FLOAT_MATH(fma)(a, b, c); }
 KAN_HOST_DEVICE inline float nearbyint(float v) { return KAN_FLOAT_MATH(nearbyint)(v); }

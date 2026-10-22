@@ -161,8 +161,7 @@ TEST(hermite_function_derivatives_match_finite_differences) {
         const double h = 1e-5;
         const auto plus = kan::evaluate_basis(function(terms), x + h).values;
         const auto minus = kan::evaluate_basis(function(terms), x - h).values;
-        for (std::size_t n = 0; n < terms; ++n)
-            test::near(r.derivatives[n], (plus[n] - minus[n]) / (2 * h), 1e-8);
+        for (std::size_t n = 0; n < terms; ++n) test::near(r.derivatives[n], (plus[n] - minus[n]) / (2 * h), 1e-8);
     }
 }
 

@@ -22,8 +22,8 @@ bool valid_log_scale(double log_scale) noexcept {
 WaveletEvaluation evaluate_wavelet(double x, double translation, double log_scale) {
     if (!std::isfinite(x) || !std::isfinite(translation) || !valid_log_scale(log_scale))
         throw std::invalid_argument("wavelet input, translation and log scale must be finite and valid");
-    const auto t = detail::wavelet_terms<true>(x, translation, detail::wavelet_scales(log_scale),
-                                               detail::FiniteBasisGuard{});
+    const auto t =
+        detail::wavelet_terms<true>(x, translation, detail::wavelet_scales(log_scale), detail::FiniteBasisGuard{});
     return {t.value, t.input_derivative, -t.input_derivative, t.log_scale_derivative};
 }
 

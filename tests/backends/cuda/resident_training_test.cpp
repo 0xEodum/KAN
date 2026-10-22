@@ -41,17 +41,21 @@ constexpr Precision precisions[] = {Precision::Float64, Precision::Float32, Prec
 
 std::vector<double> wave(std::size_t count, double scale, double frequency, double phase = 0) {
     std::vector<double> v(count);
-    for (std::size_t i = 0; i < count; ++i) v[i] = scale*std::sin(frequency*static_cast<double>(i)+phase);
+    for (std::size_t i = 0; i < count; ++i) v[i] = scale * std::sin(frequency * static_cast<double>(i) + phase);
     return v;
 }
 kan::Layer seeded(kan::Layer l, double phase, double amplitude = 1.0) {
-    const auto scale = amplitude/std::sqrt(static_cast<double>(l.inputs()*l.terms()));
+    const auto scale = amplitude / std::sqrt(static_cast<double>(l.inputs() * l.terms()));
     l.set_parameters(wave(l.coefficients().size(), scale, 0.731, phase), wave(l.outputs(), 0.05, 1.3, phase));
     return l;
 }
 kan::RationalConfig rational_config(kan::DenominatorPolicy policy, std::size_t m = 3, std::size_t n = 2) {
     kan::RationalConfig r;
-    r.numerator_degree = m; r.denominator_degree = n; r.center = 0.1; r.scale = 1.3; r.denominator_policy = policy;
+    r.numerator_degree = m;
+    r.denominator_degree = n;
+    r.center = 0.1;
+    r.scale = 1.3;
+    r.denominator_policy = policy;
     return r;
 }
 kan::Layer rational(std::size_t in, std::size_t out, kan::DenominatorPolicy policy) {
@@ -98,14 +102,14 @@ std::vector<Fixture> fixtures() {
     return {{"small", small(), 7, 0.05}, {"mixed", mixed(), 9, 0.05}, {"wide", wide(), 400, 0.005}};
 }
 std::vector<double> input_for(const kan::Network& n, std::size_t rows, double phase = 0.2) {
-    return wave(rows*n.inputs(), 0.9, 0.37, phase);
+    return wave(rows * n.inputs(), 0.9, 0.37, phase);
 }
 std::vector<double> target_for(const kan::Network& n, std::size_t rows, double phase = 0.4) {
-    return wave(rows*n.outputs(), 0.5, 0.53, phase);
+    return wave(rows * n.outputs(), 0.5, 0.53, phase);
 }
 // The gradient of a batch-mean loss (scaled by 1/rows, as torch_reference.py).
 std::vector<double> upstream_for(const kan::Network& n, std::size_t rows) {
-    return wave(rows*n.outputs(), 1.0/static_cast<double>(std::max<std::size_t>(rows, 1)), 0.53, 0.4);
+    return wave(rows * n.outputs(), 1.0 / static_cast<double>(std::max<std::size_t>(rows, 1)), 0.53, 0.4);
 }
 // Every trainable parameter of a network in a fixed order.
 std::vector<double> flat(const kan::Network& network) {
@@ -113,12 +117,19 @@ std::vector<double> flat(const kan::Network& network) {
     auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
     for (std::size_t j = 0; j < network.layers().size(); ++j) {
         if (std::holds_alternative<kan::InputMap>(network.layers()[j])) {
-            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) { add(n->gain); add(n->bias); }
+            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) {
+                add(n->gain);
+                add(n->bias);
+            }
             continue;
         }
         const auto& l = test::layer(network, j);
-        add(l.coefficients()); add(l.bias());
-        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) { add(t->basis.centers); add(t->basis.log_widths); }
+        add(l.coefficients());
+        add(l.bias());
+        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) {
+            add(t->basis.centers);
+            add(t->basis.log_widths);
+        }
         add(test::denominators(l));
     }
     return v;
@@ -128,17 +139,20 @@ std::vector<double> parameters(ResidentNetwork& gpu) { return flat(gpu.download_
 // The MSE upstream in the executor's arithmetic: (y - t) * (2/N) in T.
 std::vector<double> mse_upstream(std::span<const double> y, std::span<const double> t, Precision p) {
     std::vector<double> g(y.size());
-    const double scale = 2.0/static_cast<double>(y.size());
+    const double scale = 2.0 / static_cast<double>(y.size());
     for (std::size_t i = 0; i < y.size(); ++i) {
-        if (p == Precision::Float64) g[i] = (y[i]-t[i])*scale;
-        else g[i] = static_cast<double>((static_cast<float>(y[i])-static_cast<float>(t[i]))*static_cast<float>(scale));
+        if (p == Precision::Float64)
+            g[i] = (y[i] - t[i]) * scale;
+        else
+            g[i] =
+                static_cast<double>((static_cast<float>(y[i]) - static_cast<float>(t[i])) * static_cast<float>(scale));
     }
     return g;
 }
 double mse(std::span<const double> y, std::span<const double> t) {
     double sum = 0;
-    for (std::size_t i = 0; i < y.size(); ++i) sum += (y[i]-t[i])*(y[i]-t[i]);
-    return sum/static_cast<double>(y.size());
+    for (std::size_t i = 0; i < y.size(); ++i) sum += (y[i] - t[i]) * (y[i] - t[i]);
+    return sum / static_cast<double>(y.size());
 }
 // One eager MSE step on the reference executor (host-computed upstream).
 double eager_mse_step(ResidentNetwork& gpu, std::span<const double> x, std::span<const double> t, std::size_t rows,
@@ -152,7 +166,11 @@ double eager_mse_step(ResidentNetwork& gpu, std::span<const double> x, std::span
     return mse(y, t);
 }
 template<class Exception, class Fn> std::string message_of(Fn fn) {
-    try { fn(); } catch (const Exception& error) { return error.what(); }
+    try {
+        fn();
+    } catch (const Exception& error) {
+        return error.what();
+    }
     throw std::runtime_error("expected exception was not thrown");
 }
 bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
@@ -163,16 +181,24 @@ TEST(train_step_is_bitwise_the_eager_step) {
             for (const double l2 : {0.0, 1e-3}) {
                 ResidentNetwork graph(f.network, f.batch, p), eager(f.network, f.batch, p);
                 const auto x = input_for(f.network, f.batch), u = upstream_for(f.network, f.batch);
-                for (auto* r : {&graph, &eager}) { r->upload_input(x, f.batch); r->upload_output_gradient(u); }
+                for (auto* r : {&graph, &eager}) {
+                    r->upload_input(x, f.batch);
+                    r->upload_output_gradient(u);
+                }
                 for (int s = 0; s < 4; ++s) {
                     graph.train_step(f.rate, l2);
-                    eager.forward(); eager.backward(l2); eager.sgd(f.rate);
+                    eager.forward();
+                    eager.backward(l2);
+                    eager.sgd(f.rate);
                 }
-                if (parameters(graph) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
+                if (parameters(graph) != parameters(eager))
+                    throw std::runtime_error(std::string("mismatch: ") + f.name);
                 REQUIRE(graph.trained_steps() == 4);
                 // The resident upstream survives the steps: the eager path continues.
-                graph.forward(); graph.backward(l2);
-                eager.forward(); eager.backward(l2);
+                graph.forward();
+                graph.backward(l2);
+                eager.forward();
+                eager.backward(l2);
                 REQUIRE(graph.download_gradients().input == eager.download_gradients().input);
             }
         }
@@ -183,9 +209,9 @@ TEST(train_step_lifecycle_and_arguments) {
     for (const auto p : precisions) {
         const auto n = small();
         ResidentNetwork gpu(n, 4, p);
-        test::throws<std::logic_error>([&] { gpu.train_step(0.1); });                          // no input
+        test::throws<std::logic_error>([&] { gpu.train_step(0.1); }); // no input
         gpu.upload_input(input_for(n, 4), 4);
-        test::throws<std::logic_error>([&] { gpu.train_step(0.1); });                          // no upstream
+        test::throws<std::logic_error>([&] { gpu.train_step(0.1); });                              // no upstream
         test::throws<std::logic_error>([&] { gpu.train_step(0.1, 0.0, Loss::MeanSquaredError); }); // no target
         test::throws<std::logic_error>([&] { gpu.download_loss(); });
         gpu.upload_output_gradient(upstream_for(n, 4));
@@ -212,7 +238,10 @@ TEST(train_step_lifecycle_and_arguments) {
         test::throws<std::logic_error>([&] { gpu.train_step(0.1, 0.0, Loss::MeanSquaredError); });
         // Empty batches have no mean squared error.
         gpu.upload_input({}, 0);
-        test::throws<std::invalid_argument>([&] { gpu.upload_target({}); gpu.train_step(0.1, 0.0, Loss::MeanSquaredError); });
+        test::throws<std::invalid_argument>([&] {
+            gpu.upload_target({});
+            gpu.train_step(0.1, 0.0, Loss::MeanSquaredError);
+        });
         test::throws<std::invalid_argument>([&] { gpu.train_step({}, {}, 0, 0.1); });
         // Empty batch with an uploaded (empty) upstream: L2 only, as sgd().
         gpu.upload_output_gradient({});
@@ -226,7 +255,8 @@ TEST(device_mse_matches_host_mse_bitwise_and_cpu) {
         for (auto& f : fixtures()) {
             ResidentNetwork graph(f.network, f.batch, p), eager(f.network, f.batch, p);
             const auto x = input_for(f.network, f.batch), t = target_for(f.network, f.batch);
-            graph.upload_input(x, f.batch); graph.upload_target(t);
+            graph.upload_input(x, f.batch);
+            graph.upload_target(t);
             for (int s = 0; s < 3; ++s) {
                 const auto cpu = eager.download_parameters();
                 const auto y_cpu = cpu.forward(x, f.batch);
@@ -237,8 +267,12 @@ TEST(device_mse_matches_host_mse_bitwise_and_cpu) {
                 const double relative = p == Precision::Float64 ? 1e-13 : 1e-5;
                 test::near(loss, expected, relative);
                 // ... and as the FP64 CPU at the executor's parameters.
-                test::near(loss, mse(y_cpu, t), p == Precision::Float64 ? 1e-12 : p == Precision::Float32 ? 2e-3 : 5e-2);
-                if (parameters(graph) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
+                test::near(loss, mse(y_cpu, t),
+                           p == Precision::Float64   ? 1e-12
+                           : p == Precision::Float32 ? 2e-3
+                                                     : 5e-2);
+                if (parameters(graph) != parameters(eager))
+                    throw std::runtime_error(std::string("mismatch: ") + f.name);
             }
             // The device-computed upstream is not an uploaded one.
             test::throws<std::logic_error>([&] { graph.train_step(f.rate); });
@@ -254,14 +288,15 @@ TEST(staged_batches_match_resident_steps) {
             staged.set_status_interval(3);
             // Varying batch sizes force re-capture; the sources are clobbered
             // after each call (the call must have consumed them).
-            const std::size_t rows[] = {capacity, capacity, capacity/2+1, capacity, 1, capacity};
+            const std::size_t rows[] = {capacity, capacity, capacity / 2 + 1, capacity, 1, capacity};
             double last = 0;
             for (std::size_t s = 0; s < std::size(rows); ++s) {
-                auto x = input_for(f.network, rows[s], 0.1*static_cast<double>(s));
-                auto t = target_for(f.network, rows[s], 0.3*static_cast<double>(s));
+                auto x = input_for(f.network, rows[s], 0.1 * static_cast<double>(s));
+                auto t = target_for(f.network, rows[s], 0.3 * static_cast<double>(s));
                 const auto x_copy = x, t_copy = t;
                 staged.train_step(x, t, rows[s], f.rate, 1e-3);
-                std::fill(x.begin(), x.end(), 1e300); std::fill(t.begin(), t.end(), std::nan(""));
+                std::fill(x.begin(), x.end(), 1e300);
+                std::fill(t.begin(), t.end(), std::nan(""));
                 last = eager_mse_step(eager, x_copy, t_copy, rows[s], f.rate, 1e-3, p);
             }
             test::near(staged.download_loss(), last, p == Precision::Float64 ? 1e-13 : 1e-5);
@@ -269,12 +304,15 @@ TEST(staged_batches_match_resident_steps) {
             REQUIRE(staged.trained_steps() == std::size(rows));
             // The last staged batch is the executor's input: evaluate it eagerly.
             REQUIRE(staged.batch() == capacity);
-            staged.forward(); eager.forward();
+            staged.forward();
+            eager.forward();
             REQUIRE(staged.download_output() == eager.download_output());
             // Resident MSE steps on the last staged batch continue the same trajectory.
             staged.train_step(f.rate, 1e-3, Loss::MeanSquaredError);
-            eager_mse_step(eager, input_for(f.network, capacity, 0.5), target_for(f.network, capacity, 1.5), capacity, f.rate, 1e-3, p);
-            if (parameters(staged) != parameters(eager)) throw std::runtime_error(std::string("resident mismatch: ") + f.name);
+            eager_mse_step(eager, input_for(f.network, capacity, 0.5), target_for(f.network, capacity, 1.5), capacity,
+                           f.rate, 1e-3, p);
+            if (parameters(staged) != parameters(eager))
+                throw std::runtime_error(std::string("resident mismatch: ") + f.name);
         }
     }
 }
@@ -286,15 +324,18 @@ TEST(staged_batch_validation_changes_nothing) {
         const auto x = input_for(n, 6), t = target_for(n, 6);
         gpu.train_step(x, t, 6, 0.05);
         const double first = eager_mse_step(reference, x, t, 6, 0.05, 0.0, p);
-        auto bad = x; bad[4] = std::nan("");
+        auto bad = x;
+        bad[4] = std::nan("");
         test::throws<std::invalid_argument>([&] { gpu.train_step(bad, t, 6, 0.05); });
-        auto bad_target = t; bad_target[1] = INFINITY;
+        auto bad_target = t;
+        bad_target[1] = INFINITY;
         test::throws<std::invalid_argument>([&] { gpu.train_step(x, bad_target, 6, 0.05); });
-        test::throws<std::invalid_argument>([&] { gpu.train_step(x, t, 7, 0.05); });              // above capacity
+        test::throws<std::invalid_argument>([&] { gpu.train_step(x, t, 7, 0.05); }); // above capacity
         test::throws<std::invalid_argument>([&] { gpu.train_step(x, std::vector<double>(3), 6, 0.05); });
         test::throws<std::invalid_argument>([&] { gpu.train_step(x, t, 6, 0.0); });
         if (p != Precision::Float64) {
-            auto huge = x; huge[0] = 1e300;
+            auto huge = x;
+            huge[0] = 1e300;
             test::throws<std::invalid_argument>([&] { gpu.train_step(huge, t, 6, 0.05); });
         }
         REQUIRE(gpu.trained_steps() == 1);
@@ -318,7 +359,7 @@ TEST(deferred_overflow_is_attributed_to_its_step) {
         gpu.set_status_interval(4);
         REQUIRE(gpu.status_interval() == 4);
         std::vector<std::vector<double>> xs;
-        for (int s = 0; s < 8; ++s) xs.push_back(input_for(n, 5, 0.3*s));
+        for (int s = 0; s < 8; ++s) xs.push_back(input_for(n, 5, 0.3 * s));
         xs[2][3] = overflowing(p);
         const auto t = target_for(n, 5);
         for (int s = 0; s < 2; ++s) eager_mse_step(reference, xs[s], t, 5, 0.05, 0.0, p);
@@ -346,7 +387,8 @@ TEST(deferred_overflow_is_attributed_to_its_step) {
 // Guarded rational edge with Q = 1 - z at the default center/scale: x = 1 is a pole.
 kan::Network pole_network() {
     kan::RationalConfig config;
-    config.numerator_degree = 1; config.denominator_degree = 1;
+    config.numerator_degree = 1;
+    config.denominator_degree = 1;
     kan::Layer l(1, 1, config);
     kan::set_rational_parameters(l, std::vector<double>{0.2, 0.5}, std::vector<double>{-1.0}, std::vector<double>{0.0});
     return kan::Network({std::move(l)});
@@ -363,8 +405,8 @@ TEST(first_failure_of_an_interval_wins) {
         const std::vector<double> t_far{0.1, far, 0.3};
         constexpr double rate = 1e-12; // keeps the denominator at the pole
         eager_mse_step(reference, good, t, 3, rate, 0.0, p);
-        gpu.train_step(good, t, 3, rate);  // step 0: fine
-        gpu.train_step(pole, t, 3, rate);  // step 1: pole
+        gpu.train_step(good, t, 3, rate); // step 0: fine
+        gpu.train_step(pole, t, 3, rate); // step 1: pole
         // Step 2: a loss overflow, which would be reported only if it were first.
         gpu.train_step(good, t_far, 3, rate);
         const auto text = message_of<std::domain_error>([&] { gpu.check_status(); });
@@ -377,8 +419,10 @@ TEST(first_failure_of_an_interval_wins) {
         test::throws<std::domain_error>([&] { gpu.train_step(pole, t, 3, rate); });
         REQUIRE(gpu.trained_steps() == 1);
         // The loss overflow alone commits nothing either (resident target).
-        gpu.upload_input(good, 3); gpu.upload_target(t_far);
-        const auto overflow = message_of<std::overflow_error>([&] { gpu.train_step(rate, 0.0, Loss::MeanSquaredError); });
+        gpu.upload_input(good, 3);
+        gpu.upload_target(t_far);
+        const auto overflow =
+            message_of<std::overflow_error>([&] { gpu.train_step(rate, 0.0, Loss::MeanSquaredError); });
         REQUIRE(contains(overflow, "training step 1"));
         REQUIRE(parameters(gpu) == parameters(reference));
     }
@@ -398,7 +442,11 @@ TEST(synchronous_calls_report_pending_failures) {
             [&](ResidentNetwork& g) { g.upload_parameters(n); },
             [&](ResidentNetwork& g) { g.set_status_interval(2); },
             // Reports the failure; the loss is stale afterwards (std::logic_error).
-            [&](ResidentNetwork& g) { try { g.download_loss(); } catch (const std::logic_error&) {} },
+            [&](ResidentNetwork& g) {
+                try {
+                    g.download_loss();
+                } catch (const std::logic_error&) {}
+            },
         };
         for (const auto& call : calls) {
             ResidentNetwork gpu(n, 4, p);
@@ -426,25 +474,42 @@ TEST(graph_replay_sees_uploaded_parameters_and_changes) {
         for (auto& f : fixtures()) {
             ResidentNetwork gpu(f.network, f.batch, p), eager(f.network, f.batch, p);
             const auto x = input_for(f.network, f.batch), u = upstream_for(f.network, f.batch);
-            for (auto* r : {&gpu, &eager}) { r->upload_input(x, f.batch); r->upload_output_gradient(u); }
+            for (auto* r : {&gpu, &eager}) {
+                r->upload_input(x, f.batch);
+                r->upload_output_gradient(u);
+            }
             auto step = [&](double rate, double l2) {
                 gpu.train_step(rate, l2);
-                eager.forward(); eager.backward(l2); eager.sgd(rate);
+                eager.forward();
+                eager.backward(l2);
+                eager.sgd(rate);
             };
             const double r = f.rate;
-            step(r, 0.0); step(r, 0.0);
+            step(r, 0.0);
+            step(r, 0.0);
             // Parameters replaced between replays.
             const auto other = ResidentNetwork(f.network, f.batch, p).download_parameters();
-            gpu.upload_parameters(other); eager.upload_parameters(other);
+            gpu.upload_parameters(other);
+            eager.upload_parameters(other);
             step(r, 0.0);
             // Learning-rate schedule and L2 changes between replays.
-            step(0.4*r, 0.0); step(0.2*r, 1e-3); step(0.2*r, 1e-3); step(0.6*r, 0.0);
+            step(0.4 * r, 0.0);
+            step(0.2 * r, 1e-3);
+            step(0.2 * r, 1e-3);
+            step(0.6 * r, 0.0);
             // A smaller batch, then the full batch again.
-            const auto rows = f.batch/2+1;
+            const auto rows = f.batch / 2 + 1;
             const auto x2 = input_for(f.network, rows, 0.7), u2 = upstream_for(f.network, rows);
-            for (auto* e : {&gpu, &eager}) { e->upload_input(x2, rows); e->upload_output_gradient(u2); }
-            step(r, 0.0); step(r, 0.0);
-            for (auto* e : {&gpu, &eager}) { e->upload_input(x, f.batch); e->upload_output_gradient(u); }
+            for (auto* e : {&gpu, &eager}) {
+                e->upload_input(x2, rows);
+                e->upload_output_gradient(u2);
+            }
+            step(r, 0.0);
+            step(r, 0.0);
+            for (auto* e : {&gpu, &eager}) {
+                e->upload_input(x, f.batch);
+                e->upload_output_gradient(u);
+            }
             step(r, 0.0);
             if (parameters(gpu) != parameters(eager)) throw std::runtime_error(std::string("mismatch: ") + f.name);
             REQUIRE(gpu.trained_steps() == 10);
@@ -458,8 +523,10 @@ TEST(training_allocates_no_device_storage) {
         ResidentNetwork gpu(n, 64, p);
         const auto allocations = gpu.workspace_allocations();
         gpu.set_status_interval(8);
-        for (int s = 0; s < 20; ++s) gpu.train_step(input_for(n, 64 - s % 3), target_for(n, 64 - s % 3), 64 - s % 3, 0.01);
-        gpu.upload_input(input_for(n, 64), 64); gpu.upload_output_gradient(upstream_for(n, 64));
+        for (int s = 0; s < 20; ++s)
+            gpu.train_step(input_for(n, 64 - s % 3), target_for(n, 64 - s % 3), 64 - s % 3, 0.01);
+        gpu.upload_input(input_for(n, 64), 64);
+        gpu.upload_output_gradient(upstream_for(n, 64));
         for (int s = 0; s < 5; ++s) gpu.train_step(0.01, 1e-4);
         gpu.check_status();
         REQUIRE(gpu.workspace_allocations() == allocations);
@@ -495,6 +562,9 @@ TEST(moved_from_training_calls_fail) {
 } // namespace
 
 int main() {
-    if (!kan::cuda::available()) { std::cerr << "real CUDA hardware required\n"; return 1; }
+    if (!kan::cuda::available()) {
+        std::cerr << "real CUDA hardware required\n";
+        return 1;
+    }
     return test::run();
 }

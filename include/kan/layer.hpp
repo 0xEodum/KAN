@@ -21,8 +21,8 @@ struct LayerGradients {
     std::vector<double> input;
     std::vector<double> coefficients; // per-edge coefficients (rational numerators)
     std::vector<double> bias;
-    NonlinearGradients nonlinear;     // alternative matches the layer's carrier
-    std::vector<double> residual;     // (outputs, inputs); empty without the residual branch
+    NonlinearGradients nonlinear; // alternative matches the layer's carrier
+    std::vector<double> residual; // (outputs, inputs); empty without the residual branch
 };
 
 struct RegularizationResult {
@@ -41,16 +41,16 @@ public:
     // Zero-initialized parameters. A TrainableRbfConfig selects
     // TrainableRbfEdges; every other basis selects BasisEdges.
     Layer(std::size_t inputs, std::size_t outputs, BasisConfig basis);
-    template<class Config> requires std::same_as<std::remove_cvref_t<Config>, RationalConfig>
-    Layer(std::size_t inputs, std::size_t outputs, Config&& config)
-        : Layer(inputs, outputs, config, RationalTag{}) {}
+    template<class Config>
+        requires std::same_as<std::remove_cvref_t<Config>, RationalConfig>
+    Layer(std::size_t inputs, std::size_t outputs, Config&& config) : Layer(inputs, outputs, config, RationalTag{}) {}
     // Per-edge trainable wavelets (backlog M7): zero coefficients and bias;
     // term k of every edge starts at tau = -1 + (2k+1)/size with scale
     // s = 1/size (log scale -log(size)), equispaced hats on [-1, 1] whose zero
     // crossings meet (size 1: tau = 0, s = 1, the Wav-KAN initialization).
-    template<class Config> requires std::same_as<std::remove_cvref_t<Config>, WaveletConfig>
-    Layer(std::size_t inputs, std::size_t outputs, Config&& config)
-        : Layer(inputs, outputs, config, WaveletTag{}) {}
+    template<class Config>
+        requires std::same_as<std::remove_cvref_t<Config>, WaveletConfig>
+    Layer(std::size_t inputs, std::size_t outputs, Config&& config) : Layer(inputs, outputs, config, WaveletTag{}) {}
     // Value semantics. The copy constructor is defined out of line: inlined
     // into copies of std::vector<NetworkLayer>, GCC 15 -O3 reports a false
     // -Wmaybe-uninitialized in libstdc++'s variant cleanup path.

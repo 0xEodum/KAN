@@ -126,6 +126,7 @@ public:
     std::size_t batch() const;
     std::size_t workspace_allocations() const;
     Precision precision() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

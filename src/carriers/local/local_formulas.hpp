@@ -26,26 +26,22 @@ inline constexpr std::size_t max_spline_degree = 16;
 
 // Overflow in x-center is possible only for opposite signs. Divide before
 // subtracting in that case, retaining a wide kernel's tail.
-template<class Scalar>
-KAN_HOST_DEVICE inline Scalar normalized_distance(Scalar x, Scalar center, Scalar width) {
+template<class Scalar> KAN_HOST_DEVICE inline Scalar normalized_distance(Scalar x, Scalar center, Scalar width) {
     const Scalar distance = x - center;
     return math::finite(distance) ? distance / width : x / width - center / width;
 }
 
 // Ratios on a huge domain remain finite even when its length overflows.
 template<class Scalar>
-KAN_HOST_DEVICE inline Scalar interval_ratio(Scalar numerator_right, Scalar numerator_left,
-                                             Scalar right, Scalar left) {
+KAN_HOST_DEVICE inline Scalar interval_ratio(Scalar numerator_right, Scalar numerator_left, Scalar right, Scalar left) {
     const Scalar denominator = right - left;
     if (denominator == 0) return 0;
     if (math::finite(denominator)) return (numerator_right - numerator_left) / denominator;
-    return (Scalar(0.5) * numerator_right - Scalar(0.5) * numerator_left) /
-           (Scalar(0.5) * right - Scalar(0.5) * left);
+    return (Scalar(0.5) * numerator_right - Scalar(0.5) * numerator_left) / (Scalar(0.5) * right - Scalar(0.5) * left);
 }
 
 template<class Scalar>
-KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree, Scalar right,
-                                                Scalar left) {
+KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree, Scalar right, Scalar left) {
     if (value == 0 || right == left) return 0;
     const Scalar denominator = right - left;
     const Scalar p = static_cast<Scalar>(degree);
@@ -72,8 +68,8 @@ KAN_HOST_DEVICE inline Scalar spline_slope_term(Scalar value, std::size_t degree
 // the values. The derivative expressions are still evaluated and guarded (the
 // status the values' derivatives report is unchanged) but not written.
 template<bool Dense, bool Lower = false, class Scalar, class Guard>
-KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
-                                            Scalar* v, Scalar* d, const Guard& guard) {
+KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x, Scalar* v,
+                                            Scalar* d, const Guard& guard) {
     static_assert(!(Dense && Lower), "the lower-degree values have the sparse form only");
     if constexpr (Dense) {
         for (std::size_t k = 0; k < terms; ++k) {
@@ -89,8 +85,10 @@ KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, 
         std::size_t lo = degree, hi = terms;
         while (lo < hi) {
             const auto mid = lo + (hi - lo) / 2;
-            if (t[mid] <= x) lo = mid + 1;
-            else hi = mid;
+            if (t[mid] <= x)
+                lo = mid + 1;
+            else
+                hi = mid;
         }
         span = lo - 1;
     }
@@ -111,8 +109,7 @@ KAN_HOST_DEVICE std::size_t spline_evaluate(const Scalar* t, std::size_t terms, 
             const auto i = start + r;
             Scalar value = 0;
             if (lower[r] != 0) value += interval_ratio(x, t[i], t[i + p], t[i]) * lower[r];
-            if (lower[r + 1] != 0)
-                value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
+            if (lower[r + 1] != 0) value += interval_ratio(t[i + p + 1], x, t[i + p + 1], t[i + 1]) * lower[r + 1];
             next[r] = guard(value);
             if (p == degree) {
                 const Scalar derivative = guard(spline_slope_term(lower[r], p, t[i + p], t[i]) -
@@ -162,8 +159,8 @@ KAN_HOST_DEVICE inline Scalar spline_derivative_coefficient(Scalar previous, Sca
     return (Scalar(0.5) * current - Scalar(0.5) * previous) * scale * Scalar(2);
 }
 template<class Scalar, class Guard>
-KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
-                                  Scalar* v, Scalar* d, const Guard& guard) {
+KAN_HOST_DEVICE void spline_terms(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x, Scalar* v,
+                                  Scalar* d, const Guard& guard) {
     spline_evaluate<true>(t, terms, degree, x, v, d, guard);
 }
 
@@ -173,9 +170,8 @@ template<class Scalar> inline constexpr Scalar mexican_hat_log_normalization = S
 
 // L2-normalized Mexican hat (Ricker) wavelets, evaluated in log space.
 template<class Scalar, class Guard>
-KAN_HOST_DEVICE void mexican_hat_terms(const Scalar* centers, const Scalar* scales,
-                                       std::size_t terms, Scalar x, Scalar* v, Scalar* d,
-                                       const Guard& guard) {
+KAN_HOST_DEVICE void mexican_hat_terms(const Scalar* centers, const Scalar* scales, std::size_t terms, Scalar x,
+                                       Scalar* v, Scalar* d, const Guard& guard) {
     constexpr Scalar log_normalization = mexican_hat_log_normalization<Scalar>;
     for (std::size_t k = 0; k < terms; ++k) {
         v[k] = 0;
@@ -186,12 +182,11 @@ KAN_HOST_DEVICE void mexican_hat_terms(const Scalar* centers, const Scalar* scal
         if (!math::finite(q2)) continue;
         const Scalar log_scale = math::log(scale);
         const Scalar envelope = log_normalization - Scalar(0.5) * log_scale - Scalar(0.5) * q2;
-        if (q2 != 1)
-            v[k] = guard(math::copysign(math::exp(envelope + math::log(math::abs(1 - q2))), 1 - q2));
+        if (q2 != 1) v[k] = guard(math::copysign(math::exp(envelope + math::log(math::abs(1 - q2))), 1 - q2));
         if (q != 0 && q2 != 3)
-            d[k] = guard(math::copysign(
-                math::exp(envelope + math::log(math::abs(q)) + math::log(math::abs(q2 - 3)) - log_scale),
-                q * Scalar(q2 > 3 ? 1 : -1)));
+            d[k] = guard(
+                math::copysign(math::exp(envelope + math::log(math::abs(q)) + math::log(math::abs(q2 - 3)) - log_scale),
+                               q * Scalar(q2 > 3 ? 1 : -1)));
     }
 }
 
@@ -207,8 +202,7 @@ template<class Scalar> inline constexpr Scalar wavelet_root_low = Scalar(0x1.319
 template<class Scalar> struct WaveletScales {
     Scalar inverse, amplitude;
 };
-template<class Scalar>
-KAN_HOST_DEVICE inline WaveletScales<Scalar> wavelet_scales(Scalar log_scale) {
+template<class Scalar> KAN_HOST_DEVICE inline WaveletScales<Scalar> wavelet_scales(Scalar log_scale) {
     const Scalar inverse = math::exp(-log_scale);
     return {inverse, mexican_hat_amplitude<Scalar> * math::sqrt(inverse)};
 }
@@ -234,10 +228,11 @@ template<class Scalar> struct WaveletTerms {
 // below the normal range, exactly where the log-space branch takes over; the
 // rounding of c q^2 adds at most |c q^2| 2^-24 (< 8e-6 for the normal range)
 // to the exponent. FP64 (CPU, FP64 resident): exp, the parity formula.
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar wavelet_envelope(Scalar q2) {
-    if constexpr (std::is_same_v<Scalar, float>) return math::exp2_flush(q2 * -0x1.715476p-1f);
-    else return math::exp(Scalar(-0.5) * q2);
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar wavelet_envelope(Scalar q2) {
+    if constexpr (std::is_same_v<Scalar, float>)
+        return math::exp2_flush(q2 * -0x1.715476p-1f);
+    else
+        return math::exp(Scalar(-0.5) * q2);
 }
 // The rare branches of wavelet_terms, out of line (KAN_NOINLINE) so that the
 // unrolled kernel loops keep only the direct path: inlined, the log-space
@@ -246,8 +241,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar wavelet_envelope(Scalar q2) {
 // q2 = q*q is not finite (an overflowed distance x - tau is retried as
 // x r - tau r) or exp(-q^2/2) is below the normal range (log space).
 template<bool Derivatives, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_NOINLINE WaveletTerms<Scalar> wavelet_tail_terms(Scalar x, Scalar translation, WaveletScales<Scalar> s,
-                                                                     Scalar q, Scalar q2, const Guard& guard) {
+KAN_HOST_DEVICE KAN_NOINLINE WaveletTerms<Scalar>
+wavelet_tail_terms(Scalar x, Scalar translation, WaveletScales<Scalar> s, Scalar q, Scalar q2, const Guard& guard) {
     constexpr Scalar min_normal = math::constants<Scalar>::min_normal;
     WaveletTerms<Scalar> r{0, 0, 0};
     if (!math::finite(q2)) {
@@ -260,7 +255,8 @@ KAN_HOST_DEVICE KAN_NOINLINE WaveletTerms<Scalar> wavelet_tail_terms(Scalar x, S
             r.value = guard(s.amplitude * ((1 - q2) * e));
             if constexpr (Derivatives) {
                 r.input_derivative = guard((s.amplitude * (q * (q2 - 3) * e)) * s.inverse);
-                r.log_scale_derivative = guard(-(s.amplitude * ((q2 - wavelet_root_high<Scalar>) * (q2 - wavelet_root_low<Scalar>) * e)));
+                r.log_scale_derivative =
+                    guard(-(s.amplitude * ((q2 - wavelet_root_high<Scalar>)*(q2 - wavelet_root_low<Scalar>)*e)));
             }
             return r;
         }
@@ -270,27 +266,28 @@ KAN_HOST_DEVICE KAN_NOINLINE WaveletTerms<Scalar> wavelet_tail_terms(Scalar x, S
     if constexpr (Derivatives) {
         r.input_derivative = guard(math::copysign(
             math::exp(envelope + math::log(math::abs(q)) + math::log(q2 - 3) + math::log(s.inverse)), q));
-        r.log_scale_derivative = guard(
-            -math::exp(envelope + math::log(q2 - wavelet_root_high<Scalar>) + math::log(q2 - wavelet_root_low<Scalar>)));
+        r.log_scale_derivative = guard(-math::exp(envelope + math::log(q2 - wavelet_root_high<Scalar>) +
+                                                  math::log(q2 - wavelet_root_low<Scalar>)));
     }
     return r;
 }
 // The direct path from q, q^2 and E = wavelet_envelope(q^2) >= min_normal.
 template<bool Derivatives, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE WaveletTerms<Scalar> wavelet_direct_terms(Scalar q, Scalar q2, Scalar e, WaveletScales<Scalar> s,
-                                                                           const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE WaveletTerms<Scalar>
+wavelet_direct_terms(Scalar q, Scalar q2, Scalar e, WaveletScales<Scalar> s, const Guard& guard) {
     WaveletTerms<Scalar> r;
     r.value = guard(s.amplitude * ((1 - q2) * e));
     r.input_derivative = r.log_scale_derivative = 0;
     if constexpr (Derivatives) {
         r.input_derivative = guard((s.amplitude * (q * (q2 - 3) * e)) * s.inverse);
-        r.log_scale_derivative = guard(-(s.amplitude * ((q2 - wavelet_root_high<Scalar>) * (q2 - wavelet_root_low<Scalar>) * e)));
+        r.log_scale_derivative =
+            guard(-(s.amplitude * ((q2 - wavelet_root_high<Scalar>)*(q2 - wavelet_root_low<Scalar>)*e)));
     }
     return r;
 }
 template<bool Derivatives, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE WaveletTerms<Scalar> wavelet_terms(Scalar x, Scalar translation, WaveletScales<Scalar> s,
-                                                                    const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE WaveletTerms<Scalar> wavelet_terms(Scalar x, Scalar translation,
+                                                                    WaveletScales<Scalar> s, const Guard& guard) {
     constexpr Scalar min_normal = math::constants<Scalar>::min_normal;
     const Scalar q = (x - translation) * s.inverse, q2 = q * q;
     const Scalar e = wavelet_envelope(q2);

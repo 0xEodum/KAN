@@ -45,7 +45,8 @@ std::size_t trainable(const LayerNormMap& map) noexcept { return map.gain.size()
 
 void forward(const AffineMap& map, std::size_t n, std::span<const double> x, std::size_t batch, std::span<double> y) {
     for (std::size_t b = 0; b < batch; ++b)
-        for (std::size_t i = 0; i < n; ++i) y[b * n + i] = detail::affine_value(map.scale[i], map.shift[i], x[b * n + i]);
+        for (std::size_t i = 0; i < n; ++i)
+            y[b * n + i] = detail::affine_value(map.scale[i], map.shift[i], x[b * n + i]);
 }
 void forward(const TanhMap& map, std::size_t n, std::span<const double> x, std::size_t batch, std::span<double> y) {
     for (std::size_t k = 0; k < batch * n; ++k) y[k] = detail::tanh_value(map.scale, x[k]);
@@ -67,7 +68,8 @@ RowMoments moments(const double* row, std::size_t n, double epsilon) {
     return {mean, detail::layer_norm_rstd(variance, epsilon)};
 }
 
-void forward(const LayerNormMap& map, std::size_t n, std::span<const double> x, std::size_t batch, std::span<double> y) {
+void forward(const LayerNormMap& map, std::size_t n, std::span<const double> x, std::size_t batch,
+             std::span<double> y) {
     const bool affine = !map.gain.empty();
     for (std::size_t b = 0; b < batch; ++b) {
         const double* row = x.data() + b * n;
@@ -172,17 +174,18 @@ InputMapGradients InputMap::backward(std::span<const double> input, std::size_t 
                                      std::span<const double> output_gradient) const {
     validate_state();
     const auto size = checked_size(batch, features_);
-    if (input.size() != size || output_gradient.size() != size)
-        throw std::invalid_argument("backward shape mismatch");
+    if (input.size() != size || output_gradient.size() != size) throw std::invalid_argument("backward shape mismatch");
     require_finite(input);
     require_finite(output_gradient);
     InputMapGradients gradient;
     gradient.input.assign(size, 0.0);
-    std::visit([&](const auto& m) {
-        gradient.gain.assign(trainable(m), 0.0);
-        gradient.bias.assign(trainable(m), 0.0);
-        kan::backward(m, features_, input, batch, output_gradient, gradient);
-    }, map_);
+    std::visit(
+        [&](const auto& m) {
+            gradient.gain.assign(trainable(m), 0.0);
+            gradient.bias.assign(trainable(m), 0.0);
+            kan::backward(m, features_, input, batch, output_gradient, gradient);
+        },
+        map_);
     result_finite(gradient.input);
     result_finite(gradient.gain);
     result_finite(gradient.bias);
@@ -193,15 +196,17 @@ void InputMap::sgd(const InputMapGradients& gradients, double learning_rate) {
     validate_state();
     if (!std::isfinite(learning_rate) || learning_rate <= 0.0)
         throw std::invalid_argument("learning rate must be finite and positive");
-    auto next = std::visit([&](const auto& m) -> InputMapKind {
-        if (gradients.gain.size() != trainable(m) || gradients.bias.size() != trainable(m))
-            throw std::invalid_argument("parameter gradient shape mismatch");
-        require_finite(gradients.gain);
-        require_finite(gradients.bias);
-        auto candidate = m;
-        update(candidate, gradients, learning_rate);
-        return candidate;
-    }, map_);
+    auto next = std::visit(
+        [&](const auto& m) -> InputMapKind {
+            if (gradients.gain.size() != trainable(m) || gradients.bias.size() != trainable(m))
+                throw std::invalid_argument("parameter gradient shape mismatch");
+            require_finite(gradients.gain);
+            require_finite(gradients.bias);
+            auto candidate = m;
+            update(candidate, gradients, learning_rate);
+            return candidate;
+        },
+        map_);
     map_ = std::move(next);
 }
 
@@ -219,8 +224,8 @@ Samples checked_samples(std::span<const double> samples, std::size_t batch, std:
 }
 } // namespace
 
-AffineMap affine_from_range(std::span<const double> samples, std::size_t batch, std::size_t features,
-                            double lower, double upper) {
+AffineMap affine_from_range(std::span<const double> samples, std::size_t batch, std::size_t features, double lower,
+                            double upper) {
     const auto s = checked_samples(samples, batch, features);
     if (!std::isfinite(lower) || !std::isfinite(upper) || !(lower < upper))
         throw std::invalid_argument("target interval must be finite with lower < upper");

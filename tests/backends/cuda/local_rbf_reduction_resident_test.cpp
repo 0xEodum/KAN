@@ -50,7 +50,8 @@ kan::Layer seeded(kan::Layer l, double phase) {
 }
 // Two trainable-RBF layers (the second receives a network-internal input gradient).
 kan::Network model(std::size_t inputs, std::size_t hidden, std::size_t terms) {
-    return kan::Network({seeded(kan::Layer(inputs, hidden, rbf(terms)), 0.2), seeded(kan::Layer(hidden, 3, rbf(terms)), 0.5)});
+    return kan::Network(
+        {seeded(kan::Layer(inputs, hidden, rbf(terms)), 0.2), seeded(kan::Layer(hidden, 3, rbf(terms)), 0.5)});
 }
 // A forced tile executor must really have the tile kernel (otherwise the
 // bitwise comparison would compare the column kernel with itself).
@@ -75,8 +76,8 @@ void require_same(const kan::NetworkGradients& a, const kan::NetworkGradients& b
         const auto& y = test::grad(b, j);
         const auto& u = std::get<kan::TrainableRbfGradients>(x.nonlinear);
         const auto& v = std::get<kan::TrainableRbfGradients>(y.nonlinear);
-        if (!same_bits(x.coefficients, y.coefficients) || !same_bits(x.bias, y.bias) || !same_bits(u.centers, v.centers) ||
-            !same_bits(u.log_widths, v.log_widths))
+        if (!same_bits(x.coefficients, y.coefficients) || !same_bits(x.bias, y.bias) ||
+            !same_bits(u.centers, v.centers) || !same_bits(u.log_widths, v.log_widths))
             throw std::runtime_error(what + ": layer " + std::to_string(j) + " gradients differ");
     }
 }
@@ -86,15 +87,18 @@ void require_same(const kan::Network& a, const kan::Network& b, const std::strin
         const auto& y = test::layer(b, j);
         const auto& u = std::get<kan::TrainableRbfEdges>(x.carrier()).basis;
         const auto& v = std::get<kan::TrainableRbfEdges>(y.carrier()).basis;
-        const std::vector<double> xc(x.coefficients().begin(), x.coefficients().end()), yc(y.coefficients().begin(), y.coefficients().end());
+        const std::vector<double> xc(x.coefficients().begin(), x.coefficients().end()),
+            yc(y.coefficients().begin(), y.coefficients().end());
         const std::vector<double> xb(x.bias().begin(), x.bias().end()), yb(y.bias().begin(), y.bias().end());
-        if (!same_bits(xc, yc) || !same_bits(xb, yb) || !same_bits(u.centers, v.centers) || !same_bits(u.log_widths, v.log_widths))
+        if (!same_bits(xc, yc) || !same_bits(xb, yb) || !same_bits(u.centers, v.centers) ||
+            !same_bits(u.log_widths, v.log_widths))
             throw std::runtime_error(what + ": layer " + std::to_string(j) + " parameters differ");
     }
 }
 // Eager forward + backward (L2) + SGD, then two captured training steps, on
 // both executors with the same data; gradients and parameters must agree bitwise.
-void run_both(ResidentNetwork& a, ResidentNetwork& b, std::size_t inputs, std::size_t outputs, std::size_t batch, const std::string& what) {
+void run_both(ResidentNetwork& a, ResidentNetwork& b, std::size_t inputs, std::size_t outputs, std::size_t batch,
+              const std::string& what) {
     const auto x = wave(batch * inputs, 1.2, 0.377, 0.1);
     const auto dy = wave(batch * outputs, 0.7, 0.613, 0.4);
     for (auto* r : {&a, &b}) {
@@ -105,7 +109,11 @@ void run_both(ResidentNetwork& a, ResidentNetwork& b, std::size_t inputs, std::s
     }
     REQUIRE(same_bits(a.download_output(), b.download_output()));
     require_same(a.download_gradients(), b.download_gradients(), what);
-    for (auto* r : {&a, &b}) { r->sgd(0.05); r->train_step(0.05); r->train_step(0.05, 1e-3); }
+    for (auto* r : {&a, &b}) {
+        r->sgd(0.05);
+        r->train_step(0.05);
+        r->train_step(0.05, 1e-3);
+    }
     require_same(a.download_parameters(), b.download_parameters(), what);
 }
 constexpr Precision precisions[] = {Precision::Float64, Precision::Float32, Precision::TensorFloat32};
@@ -118,11 +126,15 @@ constexpr Precision precisions[] = {Precision::Float64, Precision::Float32, Prec
 // a 99 KiB device: FP64 16+16+16+16+6, FP32 32+32+6 / 32+32+26; 90 terms also
 // takes FP32 past the C1 stage, so its automatic path is the column or tile kernel).
 TEST(column_and_tile_reductions_are_bitwise_equal) {
-    struct Shape { std::size_t inputs, hidden, terms, capacity, batch; };
-    const Shape shapes[] = {{5, 4, 3, 64, 37}, {24, 6, 8, 800, 700}, {16, 5, 70, 160, 151}, {6, 4, 90, 96, 96}, {7, 3, 1, 300, 300}};
+    struct Shape {
+        std::size_t inputs, hidden, terms, capacity, batch;
+    };
+    const Shape shapes[] = {
+        {5, 4, 3, 64, 37}, {24, 6, 8, 800, 700}, {16, 5, 70, 160, 151}, {6, 4, 90, 96, 96}, {7, 3, 1, 300, 300}};
     for (auto p : precisions)
         for (const auto& s : shapes) {
-            const auto what = "precision " + std::to_string(static_cast<int>(p)) + " terms " + std::to_string(s.terms) + " batch " + std::to_string(s.batch);
+            const auto what = "precision " + std::to_string(static_cast<int>(p)) + " terms " + std::to_string(s.terms) +
+                              " batch " + std::to_string(s.batch);
             const auto n = model(s.inputs, s.hidden, s.terms);
             auto column = make(n, s.capacity, p, NonlinearReduction::Column);
             unsigned group = 0;
@@ -185,12 +197,16 @@ TEST(overflow_is_reported_and_recovered_under_either_path) {
             gpu.upload_output_gradient(wave(700 * 3, 0.7, 0.613, 0.4));
             gpu.backward();
             for (std::size_t j = 0; j < 2; ++j)
-                for (double v : std::get<kan::TrainableRbfGradients>(test::grad(gpu.download_gradients(), j).nonlinear).centers)
+                for (double v :
+                     std::get<kan::TrainableRbfGradients>(test::grad(gpu.download_gradients(), j).nonlinear).centers)
                     REQUIRE(std::isfinite(v));
         }
 }
 
 int main() {
-    if (!kan::cuda::available()) { std::cout << "SKIP no CUDA device\n"; return 0; }
+    if (!kan::cuda::available()) {
+        std::cout << "SKIP no CUDA device\n";
+        return 0;
+    }
     return test::run();
 }

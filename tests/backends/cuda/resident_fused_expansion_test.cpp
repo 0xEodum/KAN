@@ -34,7 +34,7 @@ std::size_t construction_bytes(const kan::Network& network, std::size_t capacity
 
 std::vector<double> wave(std::size_t count, double scale, double frequency, double phase = 0) {
     std::vector<double> v(count);
-    for (std::size_t i = 0; i < count; ++i) v[i] = scale*std::sin(frequency*static_cast<double>(i)+phase);
+    for (std::size_t i = 0; i < count; ++i) v[i] = scale * std::sin(frequency * static_cast<double>(i) + phase);
     return v;
 }
 } // namespace
@@ -52,16 +52,19 @@ kan::Network chebyshev(std::size_t width, std::size_t terms) {
 TEST(float32_fixed_basis_layer_reserves_no_derivative_rows) {
     constexpr std::size_t capacity = 8192, width = 256, terms = 7;
     const auto narrow = construction_bytes(chebyshev(width, terms), capacity, Precision::Float32);
-    const auto wide = construction_bytes(chebyshev(width, 2*terms), capacity, Precision::Float32);
-    const auto column = capacity*width*terms*sizeof(float);
+    const auto wide = construction_bytes(chebyshev(width, 2 * terms), capacity, Precision::Float32);
+    const auto column = capacity * width * terms * sizeof(float);
     const auto growth = wide > narrow ? wide - narrow : 0;
-    if (growth >= 5*column/2)
+    if (growth >= 5 * column / 2)
         throw std::runtime_error("7 more terms took " + std::to_string(growth) + " bytes, " +
-                                 std::to_string(growth/static_cast<double>(column)) + " row tensors");
-    REQUIRE(growth >= 2*column);
+                                 std::to_string(growth / static_cast<double>(column)) + " row tensors");
+    REQUIRE(growth >= 2 * column);
 }
 
 int main() {
-    if (!kan::cuda::available()) { std::cout << "SKIP no CUDA device\n"; return 0; }
+    if (!kan::cuda::available()) {
+        std::cout << "SKIP no CUDA device\n";
+        return 0;
+    }
     return test::run();
 }

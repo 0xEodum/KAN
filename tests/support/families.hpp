@@ -10,8 +10,18 @@
 namespace test {
 
 // HermiteFunction: HermiteConfig with the Function normalization (backlog M5).
-enum class Family { Chebyshev, Legendre, Jacobi, Hermite, Fourier, GaussianRbf, TrainableRbf, BSpline, MexicanHat,
-                    HermiteFunction };
+enum class Family {
+    Chebyshev,
+    Legendre,
+    Jacobi,
+    Hermite,
+    Fourier,
+    GaussianRbf,
+    TrainableRbf,
+    BSpline,
+    MexicanHat,
+    HermiteFunction
+};
 
 struct FamilyParameters {
     std::size_t size = 4; // global families only; local families use their vectors

@@ -32,7 +32,8 @@ void close(std::span<const double> actual, std::span<const double> expected, Tol
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i) {
-        if (!std::isfinite(actual[i]) || std::abs(actual[i] - expected[i]) > t.relative * std::abs(expected[i]) + t.floor * scale + 1e-37) {
+        if (!std::isfinite(actual[i]) ||
+            std::abs(actual[i] - expected[i]) > t.relative * std::abs(expected[i]) + t.floor * scale + 1e-37) {
             std::ostringstream out;
             out << std::setprecision(9) << what << " index " << i << " of " << actual.size() << " actual=" << actual[i]
                 << " expected=" << expected[i] << " scale=" << scale;
@@ -49,7 +50,8 @@ kan::Layer wavelet(std::size_t in, std::size_t out, std::size_t size, double pha
     kan::Layer layer(in, out, kan::WaveletConfig{size});
     const auto count = in * out * size;
     kan::set_wavelet_parameters(layer, wave(count, 0.5 / std::sqrt(double(in * size)) + 0.1, 0.9, 0.3 + phase),
-                                wave(count, 0.8, 1.7, 0.1 + phase), wave(count, 0.4, 2.3, 0.2 + phase), wave(out, 0.1, 1.1));
+                                wave(count, 0.8, 1.7, 0.1 + phase), wave(count, 0.4, 2.3, 0.2 + phase),
+                                wave(out, 0.1, 1.1));
     return layer;
 }
 const kan::WaveletEdges& edges(const kan::Layer& l) { return std::get<kan::WaveletEdges>(l.carrier()); }
@@ -114,7 +116,8 @@ void train_like_cpu(Precision precision, std::size_t width, std::size_t size, st
         const auto penalty = cpu.regularization(0.1).gradients;
         for (std::size_t j = 0; j < expected.layers.size(); ++j) {
             auto& g = test::grad(expected, j);
-            for (std::size_t k = 0; k < g.coefficients.size(); ++k) g.coefficients[k] += test::grad(penalty, j).coefficients[k];
+            for (std::size_t k = 0; k < g.coefficients.size(); ++k)
+                g.coefficients[k] += test::grad(penalty, j).coefficients[k];
             for (std::size_t k = 0; k < g.residual.size(); ++k) g.residual[k] += test::grad(penalty, j).residual[k];
         }
         compare_gradients(gpu.download_gradients(), expected, t);
@@ -139,8 +142,9 @@ TEST(wavelet_resident_large_layers_match_cpu) {
     // TF32 computes this carrier in FP32 (no contraction): the FP32 tolerance applies.
     for (auto precision : {Precision::Float64, Precision::Float32, Precision::TensorFloat32}) {
         const auto t = precision == Precision::Float64 ? fp64 : fp32;
-        for (const auto& shape : {std::array<std::size_t, 4>{37, 45, 3, 777}, std::array<std::size_t, 4>{70, 1, 2, 2600},
-                                  std::array<std::size_t, 4>{1, 130, 5, 300}}) {
+        for (const auto& shape :
+             {std::array<std::size_t, 4>{37, 45, 3, 777}, std::array<std::size_t, 4>{70, 1, 2, 2600},
+              std::array<std::size_t, 4>{1, 130, 5, 300}}) {
             const auto [in, out, size, batch] = shape;
             kan::Network cpu({wavelet(in, out, size)});
             ResidentNetwork gpu(cpu, batch + 5, precision);
@@ -158,8 +162,9 @@ TEST(wavelet_resident_large_layers_match_cpu) {
             try {
                 compare_gradients(gpu.download_gradients(), cpu.backward(x, batch, dy), t);
             } catch (const std::exception& e) {
-                throw std::runtime_error(std::string(precision == Precision::Float64 ? "FP64 " : "FP32 ") + std::to_string(in) + "x" +
-                                         std::to_string(out) + "x" + std::to_string(size) + " batch " + std::to_string(batch) + ": " + e.what());
+                throw std::runtime_error(std::string(precision == Precision::Float64 ? "FP64 " : "FP32 ") +
+                                         std::to_string(in) + "x" + std::to_string(out) + "x" + std::to_string(size) +
+                                         " batch " + std::to_string(batch) + ": " + e.what());
             }
         }
     }
@@ -190,10 +195,12 @@ TEST(wavelet_resident_every_launch_geometry_matches_cpu) {
     const auto expected = cpu.backward(x, batch, dy);
     for (auto precision : {Precision::Float64, Precision::Float32}) {
         for (unsigned samples : {1u, 2u, 4u, 8u})
-            for (const auto [slots, splits, input_splits] : {std::tuple{1u, 1u, 1u}, std::tuple{2u, 3u, 2u}, std::tuple{3u, 7u, 5u}}) {
+            for (const auto [slots, splits, input_splits] :
+                 {std::tuple{1u, 1u, 1u}, std::tuple{2u, 3u, 2u}, std::tuple{3u, 7u, 5u}}) {
                 // FP64 instantiates forward S = 1 and backward S <= 4 only.
                 const bool fp64 = precision == Precision::Float64;
-                const WaveletLaunch launch{fp64 ? 1u : samples, fp64 ? std::min(samples, 4u) : samples, slots, splits, input_splits};
+                const WaveletLaunch launch{fp64 ? 1u : samples, fp64 ? std::min(samples, 4u) : samples, slots, splits,
+                                           input_splits};
                 std::unique_ptr<ResidentNetwork> gpu;
                 {
                     ResidentTestScope scope(launch);
@@ -280,9 +287,14 @@ TEST(wavelet_resident_training_steps_match_eager_and_roll_back) {
         const std::size_t batch = 19;
         const auto x = wave(batch * 3, 1.0, 0.41), dy = wave(batch * 2, 0.4, 0.83);
         ResidentNetwork eager(net, batch, precision), graph(net, batch, precision);
-        for (auto* r : {&eager, &graph}) { r->upload_input(x, batch); r->upload_output_gradient(dy); }
+        for (auto* r : {&eager, &graph}) {
+            r->upload_input(x, batch);
+            r->upload_output_gradient(dy);
+        }
         for (int step = 0; step < 4; ++step) {
-            eager.forward(); eager.backward(0.01); eager.sgd(0.03);
+            eager.forward();
+            eager.backward(0.01);
+            eager.sgd(0.03);
             graph.train_step(0.03, 0.01);
         }
         const auto a = eager.download_parameters(), b = graph.download_parameters();
@@ -299,11 +311,14 @@ TEST(wavelet_resident_training_steps_match_eager_and_roll_back) {
         test::throws<std::overflow_error>([&] { graph.train_step(1.0); });
         REQUIRE(graph.trained_steps() == 4);
         const auto kept = graph.download_parameters();
-        for (std::size_t j = 0; j < net.layers().size(); ++j) REQUIRE(test::layer(kept, j).carrier() == test::layer(b, j).carrier());
-        eager.forward(); eager.backward();
+        for (std::size_t j = 0; j < net.layers().size(); ++j)
+            REQUIRE(test::layer(kept, j).carrier() == test::layer(b, j).carrier());
+        eager.forward();
+        eager.backward();
         test::throws<std::overflow_error>([&] { eager.sgd(1.0); });
         const auto unchanged = eager.download_parameters();
-        for (std::size_t j = 0; j < net.layers().size(); ++j) REQUIRE(test::layer(unchanged, j).carrier() == test::layer(a, j).carrier());
+        for (std::size_t j = 0; j < net.layers().size(); ++j)
+            REQUIRE(test::layer(unchanged, j).carrier() == test::layer(a, j).carrier());
         // Training continues after the failure.
         graph.upload_output_gradient(dy);
         graph.train_step(0.03);
@@ -321,7 +336,10 @@ TEST(wavelet_resident_out_of_range_log_scale_candidate_names_its_cause) {
         const auto x = wave(batch * 3, 1.0, 0.41);
         const std::vector<double> large(batch * 2, 1e6);
         ResidentNetwork eager(net, batch, precision), graph(net, batch, precision);
-        for (auto* r : {&eager, &graph}) { r->upload_input(x, batch); r->upload_output_gradient(large); }
+        for (auto* r : {&eager, &graph}) {
+            r->upload_input(x, batch);
+            r->upload_output_gradient(large);
+        }
         eager.forward();
         eager.backward();
         const auto g = eager.download_gradients();
@@ -329,13 +347,18 @@ TEST(wavelet_resident_out_of_range_log_scale_candidate_names_its_cause) {
             for (double v : log_scales(test::grad(g, j))) REQUIRE(std::isfinite(v));
         const auto before = eager.download_parameters();
         const auto what = [](auto fn) -> std::string {
-            try { fn(); } catch (const std::overflow_error& e) { return e.what(); }
+            try {
+                fn();
+            } catch (const std::overflow_error& e) {
+                return e.what();
+            }
             return "no overflow_error";
         };
         const auto eager_text = what([&] { eager.sgd(1.0); });
         REQUIRE(eager_text.find("log-scale candidate leaves the valid range") != std::string::npos);
         const auto kept = eager.download_parameters();
-        for (std::size_t j = 0; j < net.layers().size(); ++j) REQUIRE(test::layer(kept, j).carrier() == test::layer(before, j).carrier());
+        for (std::size_t j = 0; j < net.layers().size(); ++j)
+            REQUIRE(test::layer(kept, j).carrier() == test::layer(before, j).carrier());
         const auto graph_text = what([&] { graph.train_step(1.0); });
         REQUIRE(graph_text.find("log-scale candidate leaves the valid range") != std::string::npos);
         REQUIRE(graph_text.find("training step 0") != std::string::npos);
@@ -371,7 +394,8 @@ TEST(wavelet_resident_upload_parameters_checks_structure_and_values) {
     close(gpu.download_output(), changed.forward(x, 8), fp64, "output after rejected upload");
     // FP32: a log scale whose exp leaves the float range is not representable.
     auto wide = wavelet(1, 1, 1);
-    kan::set_wavelet_parameters(wide, std::vector<double>{1}, std::vector<double>{0}, std::vector<double>{100}, std::vector<double>{0});
+    kan::set_wavelet_parameters(wide, std::vector<double>{1}, std::vector<double>{0}, std::vector<double>{100},
+                                std::vector<double>{0});
     test::throws<std::invalid_argument>([&] { ResidentNetwork(kan::Network({wide}), 2, Precision::Float32); });
     ResidentNetwork single(kan::Network({wavelet(1, 1, 1)}), 2, Precision::Float32);
     test::throws<std::invalid_argument>([&] { single.upload_parameters(kan::Network({wide})); });
@@ -414,7 +438,8 @@ TEST(wavelet_resident_tails_and_nonfinite_status) {
         close(r.download_output(), expected, fp64, "retried output");
         r.backward();
         close(log_scales(test::grad(r.download_gradients(), 0)),
-              log_scales(test::grad(net.backward(std::vector<double>{1e308}, 1, std::vector<double>{1}), 0)), fp64, "retried log scale");
+              log_scales(test::grad(net.backward(std::vector<double>{1e308}, 1, std::vector<double>{1}), 0)), fp64,
+              "retried log scale");
     }
     // Nonfinite results raise overflow_error and invalidate the state.
     kan::Layer big(1, 1, kan::WaveletConfig{2});

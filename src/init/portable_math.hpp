@@ -30,7 +30,7 @@ inline constexpr double ln2_lo = 0x1.a39ef35793c76p-33;
 // Natural logarithm of a positive finite x, about 1 ulp.
 inline double portable_log(double x) noexcept {
     int e = 0;
-    double m = std::frexp(x, &e); // x = m * 2^e, m in [0.5, 1)
+    double m = std::frexp(x, &e);   // x = m * 2^e, m in [0.5, 1)
     if (m < 0x1.6a09e667f3bcdp-1) { // sqrt(1/2)
         m *= 2;
         --e;
@@ -48,7 +48,7 @@ inline double portable_exp(double x) noexcept {
     if (x > 709.782712893384) return std::numeric_limits<double>::infinity();
     if (x < -745.2) return 0;
     const double k = std::nearbyint(x * 0x1.71547652b82fep0); // x / ln 2
-    const double r = (x - k * ln2_hi) - k * ln2_lo;            // |r| <= 0.35
+    const double r = (x - k * ln2_hi) - k * ln2_lo;           // |r| <= 0.35
     double p = 1;
     for (int n = 17; n >= 1; --n) p = 1 + (r / n) * p; // Taylor series by Horner
     return std::ldexp(p, static_cast<int>(k));
@@ -121,8 +121,10 @@ inline Quadrature gauss_legendre(std::size_t n) {
                 if (mid <= a || mid >= b) break;
                 double pm = 0;
                 legendre(n, mid, pm, unused);
-                if ((pm < 0) == negative_left) a = mid;
-                else b = mid;
+                if ((pm < 0) == negative_left)
+                    a = mid;
+                else
+                    b = mid;
             }
             const double x = a + (b - a) / 2;
             double p = 0, previous = 0;

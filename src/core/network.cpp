@@ -94,7 +94,8 @@ std::size_t Network::refit_grids(std::span<const double> input, std::size_t batc
             kan::refit_grid(std::get<Layer>(next[j]), activations, batch, options);
             ++count;
         }
-        if (j + 1 < end) activations = std::visit([&](const auto& l) { return l.forward(activations, batch); }, next[j]);
+        if (j + 1 < end)
+            activations = std::visit([&](const auto& l) { return l.forward(activations, batch); }, next[j]);
     }
     layers_.swap(next);
     return count;
@@ -143,9 +144,9 @@ NetworkGradients Network::backward(std::span<const double> input, std::size_t ba
     auto upstream = output_gradient;
     for (std::size_t i = layers_.size(); i-- > 0;) {
         const auto layer_input = i == 0 ? input : std::span<const double>(activations[i - 1]);
-        gradient.layers[i] = std::visit([&](const auto& l) -> NetworkLayerGradients {
-            return l.backward(layer_input, batch, upstream);
-        }, layers_[i]);
+        gradient.layers[i] =
+            std::visit([&](const auto& l) -> NetworkLayerGradients { return l.backward(layer_input, batch, upstream); },
+                       layers_[i]);
         upstream = input_gradient(gradient.layers[i]);
     }
     gradient.input = input_gradient(gradient.layers.front());
@@ -157,13 +158,15 @@ void Network::sgd(const NetworkGradients& gradients, double learning_rate) {
     if (gradients.layers.size() != layers_.size()) throw std::invalid_argument("network gradient shape mismatch");
     auto next = layers_;
     for (std::size_t i = 0; i < next.size(); ++i) {
-        std::visit([&](auto& layer) {
-            using Gradients = std::conditional_t<std::is_same_v<std::decay_t<decltype(layer)>, Layer>,
-                                                 LayerGradients, InputMapGradients>;
-            const auto* g = std::get_if<Gradients>(&gradients.layers[i]);
-            if (!g) throw std::invalid_argument("network gradient kind does not match the layer");
-            layer.sgd(*g, learning_rate);
-        }, next[i]);
+        std::visit(
+            [&](auto& layer) {
+                using Gradients = std::conditional_t<std::is_same_v<std::decay_t<decltype(layer)>, Layer>,
+                                                     LayerGradients, InputMapGradients>;
+                const auto* g = std::get_if<Gradients>(&gradients.layers[i]);
+                if (!g) throw std::invalid_argument("network gradient kind does not match the layer");
+                layer.sgd(*g, learning_rate);
+            },
+            next[i]);
     }
     layers_.swap(next);
 }

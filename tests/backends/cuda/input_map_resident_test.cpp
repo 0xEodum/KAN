@@ -24,12 +24,17 @@ kan::Layer seeded(kan::Layer layer, double phase) {
 }
 kan::LayerNormMap layer_norm(std::size_t features, bool affine) {
     kan::LayerNormMap m{1e-3, {}, {}};
-    if (affine) { m.gain = wave(features, 0.3, 0.2); for (auto& g : m.gain) g += 1; m.bias = wave(features, 0.2, 0.9); }
+    if (affine) {
+        m.gain = wave(features, 0.3, 0.2);
+        for (auto& g : m.gain) g += 1;
+        m.bias = wave(features, 0.2, 0.9);
+    }
     return m;
 }
 kan::Layer rational(std::size_t in, std::size_t out) {
     kan::Layer l(in, out, kan::RationalConfig{2, 1, 0.1, 1.3, 1e-8});
-    kan::set_rational_parameters(l, wave(l.coefficients().size(), 0.3, 0.2), wave(in * out, 0.1, 0.7), wave(out, 0.05, 0.1));
+    kan::set_rational_parameters(l, wave(l.coefficients().size(), 0.3, 0.2), wave(in * out, 0.1, 0.7),
+                                 wave(out, 0.05, 0.1));
     return l;
 }
 std::size_t outputs(const kan::Network& n) { return n.outputs(); }
@@ -41,11 +46,15 @@ void compare_gradients(const kan::NetworkGradients& gpu, const kan::NetworkGradi
         REQUIRE(gpu.layers[j].index() == cpu.layers[j].index());
         if (const auto* a = std::get_if<kan::InputMapGradients>(&gpu.layers[j])) {
             const auto& e = std::get<kan::InputMapGradients>(cpu.layers[j]);
-            compare(a->input, e.input); compare(a->gain, e.gain); compare(a->bias, e.bias);
+            compare(a->input, e.input);
+            compare(a->gain, e.gain);
+            compare(a->bias, e.bias);
         } else {
             const auto& a2 = std::get<kan::LayerGradients>(gpu.layers[j]);
             const auto& e = std::get<kan::LayerGradients>(cpu.layers[j]);
-            compare(a2.input, e.input); compare(a2.coefficients, e.coefficients); compare(a2.bias, e.bias);
+            compare(a2.input, e.input);
+            compare(a2.coefficients, e.coefficients);
+            compare(a2.bias, e.bias);
         }
     }
 }
@@ -59,7 +68,8 @@ void compare_parameters(const kan::Network& gpu, const kan::Network& cpu) {
             if (const auto* ln = std::get_if<kan::LayerNormMap>(&m->map())) {
                 const auto& eln = std::get<kan::LayerNormMap>(e.map());
                 REQUIRE(ln->epsilon == eln.epsilon);
-                compare(ln->gain, eln.gain); compare(ln->bias, eln.bias);
+                compare(ln->gain, eln.gain);
+                compare(ln->bias, eln.bias);
             } else {
                 REQUIRE(m->map() == e.map()); // fixed maps are returned unchanged
             }
@@ -84,7 +94,8 @@ void parity(kan::Network cpu, std::size_t batch, double scale, double l2) {
         const auto penalty = cpu.regularization(l2).gradients;
         for (std::size_t j = 0; j < expected.layers.size(); ++j)
             if (auto* g = std::get_if<kan::LayerGradients>(&expected.layers[j]))
-                for (std::size_t k = 0; k < g->coefficients.size(); ++k) g->coefficients[k] += test::grad(penalty, j).coefficients[k];
+                for (std::size_t k = 0; k < g->coefficients.size(); ++k)
+                    g->coefficients[k] += test::grad(penalty, j).coefficients[k];
         compare_gradients(gpu.download_gradients(), expected);
         gpu.sgd(0.05);
         cpu.sgd(expected, 0.05);
@@ -96,14 +107,12 @@ void parity(kan::Network cpu, std::size_t batch, double scale, double l2) {
 
 TEST(resident_maps_match_cpu_in_front_of_every_carrier) {
     parity(kan::Network({kan::InputMap(3, kan::AffineMap{{0.02, -0.01, 0.03}, {0.1, 0, -0.2}}),
-                         seeded(kan::Layer(3, 4, kan::ChebyshevConfig{5}), 0.1),
-                         kan::InputMap(4, layer_norm(4, true)),
+                         seeded(kan::Layer(3, 4, kan::ChebyshevConfig{5}), 0.1), kan::InputMap(4, layer_norm(4, true)),
                          seeded(kan::Layer(4, 2, kan::BSplineConfig{2, {-3, -3, -3, -1, 0, 1, 3, 3, 3}}), 0.4)}),
            6, 40, 0.1);
     parity(kan::Network({kan::InputMap(2, kan::TanhMap{0.05}),
                          seeded(kan::Layer(2, 3, kan::TrainableRbfConfig{{-0.5, 0, 0.6}, {-0.3, 0, -0.1}}), 0.3),
-                         kan::InputMap(3, layer_norm(3, false)),
-                         rational(3, 1)}),
+                         kan::InputMap(3, layer_norm(3, false)), rational(3, 1)}),
            5, 30, 0.0);
     parity(kan::Network({kan::InputMap(2, layer_norm(2, true)),
                          seeded(kan::Layer(2, 2, kan::MexicanHatConfig{{-1, 0, 1}, {0.8, 1, 0.6}}), 0.7),
@@ -114,16 +123,20 @@ TEST(resident_maps_match_cpu_in_front_of_every_carrier) {
 // Wide rows (several lanes per feature, several feature blocks) and a batch
 // spanning many reduction tiles; also a capacity larger than the batch.
 TEST(resident_layer_norm_wide_rows_and_many_tiles) {
-    parity(kan::Network({kan::InputMap(70, layer_norm(70, true)), seeded(kan::Layer(70, 3, kan::LegendreConfig{3}), 0.2)}),
-           1000, 5, 0.0);
-    parity(kan::Network({kan::InputMap(33, layer_norm(33, false)), seeded(kan::Layer(33, 1, kan::HermiteConfig{3}), 0.5)}),
-           65, 3, 0.0);
+    parity(
+        kan::Network({kan::InputMap(70, layer_norm(70, true)), seeded(kan::Layer(70, 3, kan::LegendreConfig{3}), 0.2)}),
+        1000, 5, 0.0);
+    parity(
+        kan::Network({kan::InputMap(33, layer_norm(33, false)), seeded(kan::Layer(33, 1, kan::HermiteConfig{3}), 0.5)}),
+        65, 3, 0.0);
     // 32 lanes per row (300 features) and a batch that leaves a partial warp.
-    parity(kan::Network({kan::InputMap(300, layer_norm(300, true)), seeded(kan::Layer(300, 1, kan::ChebyshevConfig{2}), 0.5)}),
+    parity(kan::Network(
+               {kan::InputMap(300, layer_norm(300, true)), seeded(kan::Layer(300, 1, kan::ChebyshevConfig{2}), 0.5)}),
            37, 2, 0.0);
     // One lane per row (2 features): 32 rows per warp.
-    parity(kan::Network({kan::InputMap(2, layer_norm(2, true)), seeded(kan::Layer(2, 1, kan::ChebyshevConfig{3}), 0.5)}),
-           45, 1, 0.0);
+    parity(
+        kan::Network({kan::InputMap(2, layer_norm(2, true)), seeded(kan::Layer(2, 1, kan::ChebyshevConfig{3}), 0.5)}),
+        45, 1, 0.0);
 }
 
 TEST(resident_map_only_network_and_batch_zero) {
@@ -143,7 +156,10 @@ TEST(resident_map_only_network_and_batch_zero) {
     compare_parameters(gpu.download_parameters(), cpu);
     // Smaller batch than capacity.
     const auto x = wave(6, 2, 0.1), u = wave(6, 1, 0.4);
-    gpu.upload_input(x, 2); gpu.upload_output_gradient(u); gpu.forward(); gpu.backward();
+    gpu.upload_input(x, 2);
+    gpu.upload_output_gradient(u);
+    gpu.forward();
+    gpu.backward();
     compare(gpu.download_output(), cpu.forward(x, 2));
     compare_gradients(gpu.download_gradients(), cpu.backward(x, 2, u));
 }
@@ -153,8 +169,10 @@ TEST(resident_fixed_map_network_without_parameters) {
     kan::Network cpu({kan::InputMap(2, kan::AffineMap{{2, -1}, {0.5, 0}}), kan::InputMap(2, kan::TanhMap{0.7})});
     kan::cuda::ResidentNetwork gpu(cpu, 3);
     const auto x = wave(6, 2, 0.2), u = wave(6, 1, 0.5);
-    gpu.upload_input(x, 3); gpu.upload_output_gradient(u);
-    gpu.forward(); gpu.backward();
+    gpu.upload_input(x, 3);
+    gpu.upload_output_gradient(u);
+    gpu.forward();
+    gpu.backward();
     compare(gpu.download_output(), cpu.forward(x, 3));
     compare_gradients(gpu.download_gradients(), cpu.backward(x, 3, u));
     gpu.sgd(0.1);

@@ -24,8 +24,7 @@ void require_finite(std::span<const double> values) {
 ResidentNetwork prepare(const Layer& layer, std::span<const double> input, std::size_t batch,
                         std::span<const double> output_gradient, bool has_gradient) {
     if (!available()) throw std::runtime_error("no CUDA device available");
-    if (input.size() != checked_size(batch, layer.inputs()))
-        throw std::invalid_argument("CUDA input shape mismatch");
+    if (input.size() != checked_size(batch, layer.inputs())) throw std::invalid_argument("CUDA input shape mismatch");
     if (has_gradient && output_gradient.size() != checked_size(batch, layer.outputs()))
         throw std::invalid_argument("CUDA backward shape mismatch");
     require_finite(input);

@@ -23,8 +23,7 @@ std::vector<BasisConfig> global_families(std::size_t size, bool gaussian = true)
 
 double binomial(double top, std::size_t count) {
     double result = 1.0;
-    for (std::size_t k = 1; k <= count; ++k)
-        result *= (top - static_cast<double>(k) + 1.0) / static_cast<double>(k);
+    for (std::size_t k = 1; k <= count; ++k) result *= (top - static_cast<double>(k) + 1.0) / static_cast<double>(k);
     return result;
 }
 
@@ -45,13 +44,13 @@ TEST(polynomial_closed_forms) {
         auto cheb = kan::evaluate_basis(kan::ChebyshevConfig{5}, x);
         auto leg = kan::evaluate_basis(kan::LegendreConfig{5}, x);
         auto herm = kan::evaluate_basis(kan::HermiteConfig{5}, x);
-        test::near(cheb.values[4], 8*x*x*x*x - 8*x*x + 1);
-        test::near(cheb.derivatives[4], 32*x*x*x - 16*x);
-        test::near(leg.values[4], (35*x*x*x*x - 30*x*x + 3)/8);
-        test::near(leg.derivatives[4], (140*x*x*x - 60*x)/8);
-        test::near(herm.values[4], 16*x*x*x*x - 48*x*x + 12);
-        test::near(herm.derivatives[4], 64*x*x*x - 96*x);
-        test::near(herm.values[1], 2*x);
+        test::near(cheb.values[4], 8 * x * x * x * x - 8 * x * x + 1);
+        test::near(cheb.derivatives[4], 32 * x * x * x - 16 * x);
+        test::near(leg.values[4], (35 * x * x * x * x - 30 * x * x + 3) / 8);
+        test::near(leg.derivatives[4], (140 * x * x * x - 60 * x) / 8);
+        test::near(herm.values[4], 16 * x * x * x * x - 48 * x * x + 12);
+        test::near(herm.derivatives[4], 64 * x * x * x - 96 * x);
+        test::near(herm.values[1], 2 * x);
     }
 }
 
@@ -65,24 +64,23 @@ TEST(polynomial_endpoint_identities) {
                 const double value = x < 0 && k % 2 ? -1.0 : 1.0;
                 const double derivative_sign = x < 0 && k % 2 == 0 ? -1.0 : 1.0;
                 test::near(result.values[k], value);
-                test::near(result.derivatives[k], derivative_sign *
-                    (chebyshev ? n*n : n*(n+1)/2));
+                test::near(result.derivatives[k], derivative_sign * (chebyshev ? n * n : n * (n + 1) / 2));
             }
         }
     }
 }
 
 TEST(jacobi_independent_sum_and_derivative_identity) {
-    for (const auto params : {std::pair{0.0,0.0}, std::pair{-0.5,-0.5},
-                             std::pair{0.25,-0.25}, std::pair{-0.9,0.2}, std::pair{1.2,2.3}}) {
+    for (const auto params : {std::pair{0.0, 0.0}, std::pair{-0.5, -0.5}, std::pair{0.25, -0.25}, std::pair{-0.9, 0.2},
+                              std::pair{1.2, 2.3}}) {
         const kan::JacobiConfig config{8, params.first, params.second};
         for (const double x : {-1.4, -1.0, -0.2, 0.6, 1.0, 1.3}) {
             const auto result = kan::evaluate_basis(config, x);
             for (std::size_t k = 0; k < config.size; ++k) {
                 test::near(result.values[k], jacobi_sum(k, config.alpha, config.beta, x));
-                const double derivative = k == 0 ? 0.0 :
-                    (static_cast<double>(k) + config.alpha + config.beta + 1)/2 *
-                    jacobi_sum(k-1, config.alpha+1, config.beta+1, x);
+                const double derivative = k == 0 ? 0.0
+                                                 : (static_cast<double>(k) + config.alpha + config.beta + 1) / 2 *
+                                                       jacobi_sum(k - 1, config.alpha + 1, config.beta + 1, x);
                 test::near(result.derivatives[k], derivative);
             }
         }
@@ -99,8 +97,8 @@ TEST(jacobi_large_parameters_avoid_spurious_coefficient_overflow) {
 }
 
 TEST(jacobi_asymmetric_large_parameter_endpoint_identities) {
-    for (const auto params : {std::pair{1e17,0.0}, std::pair{0.0,1e17},
-                             std::pair{1e70,0.2}, std::pair{-0.7,1e70}}) {
+    for (const auto params :
+         {std::pair{1e17, 0.0}, std::pair{0.0, 1e17}, std::pair{1e70, 0.2}, std::pair{-0.7, 1e70}}) {
         const kan::JacobiConfig config{5, params.first, params.second};
         for (double x : {-1.0, 1.0}) {
             const auto result = kan::evaluate_basis(config, x);
@@ -109,20 +107,20 @@ TEST(jacobi_asymmetric_large_parameter_endpoint_identities) {
                 // DLMF 18.6.T1: endpoint values depend on only one parameter.
                 double expected_value = 1;
                 for (std::size_t j = 1; j <= k; ++j)
-                    expected_value *= (endpoint_parameter + static_cast<double>(j))/static_cast<double>(j);
+                    expected_value *= (endpoint_parameter + static_cast<double>(j)) / static_cast<double>(j);
                 if (x < 0 && k % 2) expected_value = -expected_value;
-                test::near(result.values[k]/expected_value, 1);
+                test::near(result.values[k] / expected_value, 1);
                 if (k == 0) {
                     test::near(result.derivatives[k], 0);
                     continue;
                 }
                 // DLMF 18.9.E15 with the shifted polynomial's endpoint identity.
-                double expected_derivative = 0.5*config.alpha + 0.5*config.beta +
-                                             0.5*(static_cast<double>(k)+1);
+                double expected_derivative =
+                    0.5 * config.alpha + 0.5 * config.beta + 0.5 * (static_cast<double>(k) + 1);
                 for (std::size_t j = 1; j < k; ++j)
-                    expected_derivative *= (endpoint_parameter + static_cast<double>(j)+1)/static_cast<double>(j);
+                    expected_derivative *= (endpoint_parameter + static_cast<double>(j) + 1) / static_cast<double>(j);
                 if (x < 0 && k % 2 == 0) expected_derivative = -expected_derivative;
-                test::near(result.derivatives[k]/expected_derivative, 1);
+                test::near(result.derivatives[k] / expected_derivative, 1);
             }
         }
     }
@@ -133,14 +131,14 @@ TEST(jacobi_endpoint_extreme_derivative_finiteness_and_overflow) {
     kan::JacobiConfig config{2, max, max};
     for (double x : {-1.0, 1.0}) {
         const auto result = kan::evaluate_basis(config, x);
-        test::near(result.values[1]/max, x);
-        test::near(result.derivatives[1]/max, 1);
+        test::near(result.values[1] / max, x);
+        test::near(result.derivatives[1] / max, 1);
     }
     config.beta = 0;
     config.size = 3;
     const auto finite = kan::evaluate_basis(config, -1);
     test::near(finite.values[2], 1);
-    test::near(finite.derivatives[2]/max, -1);
+    test::near(finite.derivatives[2] / max, -1);
     test::throws<std::overflow_error>([&] { kan::evaluate_basis(config, 1); });
     config.size = 4;
     test::throws<std::overflow_error>([&] { kan::evaluate_basis(config, -1); });
@@ -153,22 +151,21 @@ TEST(jacobi_parameters_adjacent_to_minus_one_match_independent_sum) {
     const double fourth = std::nextafter(third, 0.0);
     double eighth = fourth;
     for (int step = 0; step < 4; ++step) eighth = std::nextafter(eighth, 0.0);
-    for (const auto params : {std::pair{first,first}, std::pair{first,second},
-                             std::pair{second,first}, std::pair{second,second},
-                             std::pair{first,fourth}, std::pair{fourth,first},
-                             std::pair{fourth,fourth}, std::pair{first,eighth},
-                             std::pair{eighth,first}, std::pair{eighth,eighth}}) {
+    for (const auto params :
+         {std::pair{first, first}, std::pair{first, second}, std::pair{second, first}, std::pair{second, second},
+          std::pair{first, fourth}, std::pair{fourth, first}, std::pair{fourth, fourth}, std::pair{first, eighth},
+          std::pair{eighth, first}, std::pair{eighth, eighth}}) {
         const kan::JacobiConfig config{8, params.first, params.second};
         for (double x : {-1.0, -0.8, -0.3, 0.0, 0.4, 0.9, 1.0}) {
             const auto result = kan::evaluate_basis(config, x);
-            const double first_slope = 0.5*(config.alpha+1)+0.5*(config.beta+1);
-            test::near(result.derivatives[1]/first_slope, 1);
+            const double first_slope = 0.5 * (config.alpha + 1) + 0.5 * (config.beta + 1);
+            test::near(result.derivatives[1] / first_slope, 1);
             for (std::size_t k = 0; k < config.size; ++k) {
                 test::near(result.values[k], jacobi_sum(k, config.alpha, config.beta, x));
-                const double derivative = k == 0 ? 0 :
-                    (0.5*(config.alpha+1) + 0.5*(config.beta+1) +
-                     0.5*(static_cast<double>(k)-1)) *
-                    jacobi_sum(k-1, config.alpha+1, config.beta+1, x);
+                const double derivative =
+                    k == 0 ? 0
+                           : (0.5 * (config.alpha + 1) + 0.5 * (config.beta + 1) + 0.5 * (static_cast<double>(k) - 1)) *
+                                 jacobi_sum(k - 1, config.alpha + 1, config.beta + 1, x);
                 test::near(result.derivatives[k], derivative);
             }
         }
@@ -182,11 +179,11 @@ TEST(fourier_order_and_angular_frequency) {
     test::near(result.values[0], 1);
     test::near(result.derivatives[0], 0);
     for (std::size_t k = 1; k <= 3; ++k) {
-        const double angular = static_cast<double>(k)*config.frequency;
-        test::near(result.values[2*k-1], std::cos(angular*x));
-        test::near(result.values[2*k], std::sin(angular*x));
-        test::near(result.derivatives[2*k-1], -angular*std::sin(angular*x));
-        test::near(result.derivatives[2*k], angular*std::cos(angular*x));
+        const double angular = static_cast<double>(k) * config.frequency;
+        test::near(result.values[2 * k - 1], std::cos(angular * x));
+        test::near(result.values[2 * k], std::sin(angular * x));
+        test::near(result.derivatives[2 * k - 1], -angular * std::sin(angular * x));
+        test::near(result.derivatives[2 * k], angular * std::cos(angular * x));
     }
 }
 
@@ -195,10 +192,10 @@ TEST(gaussian_values_centers_and_derivatives) {
     for (const double x : {-1.2, 0.2, 0.9}) {
         const auto result = kan::evaluate_basis(config, x);
         for (std::size_t k = 0; k < config.centers.size(); ++k) {
-            const double delta = x-config.centers[k];
-            const double expected = std::exp(-delta*delta/(config.width*config.width));
+            const double delta = x - config.centers[k];
+            const double expected = std::exp(-delta * delta / (config.width * config.width));
             test::near(result.values[k], expected);
-            test::near(result.derivatives[k], -2*delta/(config.width*config.width)*expected);
+            test::near(result.derivatives[k], -2 * delta / (config.width * config.width) * expected);
         }
     }
 }
@@ -208,7 +205,7 @@ TEST(gaussian_extreme_finite_parameters_and_underflow_tails) {
     kan::GaussianRbfConfig config{{-max}, max};
     const auto wide = kan::evaluate_basis(config, max);
     test::near(wide.values[0], std::exp(-4));
-    test::near(wide.derivatives[0]*max, -4*std::exp(-4));
+    test::near(wide.derivatives[0] * max, -4 * std::exp(-4));
     config.width = 1;
     const auto tail = kan::evaluate_basis(config, max);
     test::near(tail.values[0], 0);
@@ -225,14 +222,15 @@ TEST(gaussian_extreme_finite_parameters_and_underflow_tails) {
 
 TEST(gaussian_underflow_value_can_have_representable_derivative) {
     const kan::GaussianRbfConfig config{{0}, std::numeric_limits<double>::denorm_min()};
-    const auto result = kan::evaluate_basis(config, 30*config.width);
+    const auto result = kan::evaluate_basis(config, 30 * config.width);
     test::near(result.values[0], 0);
     // Independent Python Decimal oracle (100-digit precision):
     // -60 * exp(-900) / (2 ** -1074). MSVC long double has double precision.
-    constexpr double expected = -1.657039574215751920267356912558436470529179262842470867148420005915681625311244551783798700124454242E-66;
+    constexpr double expected =
+        -1.657039574215751920267356912558436470529179262842470867148420005915681625311244551783798700124454242E-66;
     REQUIRE(expected != 0);
     REQUIRE(result.derivatives[0] != 0);
-    test::near(result.derivatives[0]/expected, 1, 1e-12);
+    test::near(result.derivatives[0] / expected, 1, 1e-12);
 }
 
 TEST(analytic_derivatives_match_central_differences) {
@@ -240,10 +238,10 @@ TEST(analytic_derivatives_match_central_differences) {
         for (const double x : {-1.1, -0.35, 0.4, 1.2}) {
             constexpr double h = 1e-6;
             const auto value = kan::evaluate_basis(config, x);
-            const auto plus = kan::evaluate_basis(config, x+h);
-            const auto minus = kan::evaluate_basis(config, x-h);
+            const auto plus = kan::evaluate_basis(config, x + h);
+            const auto minus = kan::evaluate_basis(config, x - h);
             for (std::size_t k = 0; k < kan::basis_size(config); ++k)
-                test::near(value.derivatives[k], (plus.values[k]-minus.values[k])/(2*h), 2e-7);
+                test::near(value.derivatives[k], (plus.values[k] - minus.values[k]) / (2 * h), 2e-7);
         }
     }
 }
@@ -264,9 +262,8 @@ TEST(one_term_bases) {
 TEST(invalid_sizes) {
     test::throws<std::invalid_argument>([&] { kan::evaluate_basis(kan::ChebyshevConfig{0}, 0); });
     test::throws<std::invalid_argument>([&] { kan::validate_basis(kan::FourierConfig{2, 1}); });
-    test::throws<std::overflow_error>([&] {
-        kan::evaluate_basis(kan::ChebyshevConfig{std::numeric_limits<std::size_t>::max()}, 0);
-    });
+    test::throws<std::overflow_error>(
+        [&] { kan::evaluate_basis(kan::ChebyshevConfig{std::numeric_limits<std::size_t>::max()}, 0); });
 }
 
 TEST(invalid_family_parameters) {
@@ -298,8 +295,7 @@ TEST(invalid_family_parameters) {
 
 TEST(nonfinite_input_is_rejected_for_every_family) {
     for (const auto& config : global_families(1)) {
-        for (double x : {std::numeric_limits<double>::quiet_NaN(),
-                         std::numeric_limits<double>::infinity(),
+        for (double x : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
                          -std::numeric_limits<double>::infinity()})
             test::throws<std::invalid_argument>([&] { kan::evaluate_basis(config, x); });
     }

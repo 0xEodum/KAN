@@ -30,8 +30,8 @@ constexpr auto unguarded = [](double v) { return v; };
 
 // output[b,o] += sum_i w[o,i] silu(x[b,i]): the sum in ascending i, then
 // added to the carrier's output.
-void residual_forward(std::span<const double> w, std::size_t inputs, std::size_t outputs,
-                      std::span<const double> input, std::size_t batch, std::span<double> output) {
+void residual_forward(std::span<const double> w, std::size_t inputs, std::size_t outputs, std::span<const double> input,
+                      std::size_t batch, std::span<double> output) {
     std::vector<double> s(inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         for (std::size_t i = 0; i < inputs; ++i) s[i] = detail::silu_value(input[b * inputs + i], unguarded);
@@ -71,8 +71,7 @@ void residual_backward(std::span<const double> w, std::size_t inputs, std::size_
 }
 
 Carrier basis_carrier(BasisConfig basis) {
-    if (auto* rbf = std::get_if<TrainableRbfConfig>(&basis))
-        return TrainableRbfEdges{std::move(*rbf), {}};
+    if (auto* rbf = std::get_if<TrainableRbfConfig>(&basis)) return TrainableRbfEdges{std::move(*rbf), {}};
     return BasisEdges{std::move(basis), {}};
 }
 } // namespace
@@ -80,9 +79,11 @@ Carrier basis_carrier(BasisConfig basis) {
 Layer::Layer(std::size_t inputs, std::size_t outputs, BasisConfig basis)
     : inputs_(inputs), outputs_(outputs), carrier_(basis_carrier(std::move(basis))) {
     if (inputs == 0 || outputs == 0) throw std::invalid_argument("layer dimensions must be positive");
-    std::visit([](const auto& edges) {
-        if constexpr (requires { edges.basis; }) validate_basis(edges.basis);
-    }, carrier_);
+    std::visit(
+        [](const auto& edges) {
+            if constexpr (requires { edges.basis; }) validate_basis(edges.basis);
+        },
+        carrier_);
     if (const auto* edges = std::get_if<BasisEdges>(&carrier_)) detail::check_grids(edges->basis, inputs);
     coefficients_of(carrier_).resize(checked_size(checked_size(inputs, outputs), terms()), 0.0);
     bias_.resize(checked_size(outputs, 1), 0.0);
@@ -141,7 +142,8 @@ void Layer::set_parameters(std::span<const double> coefficients, std::span<const
         throw std::invalid_argument("parameter shape mismatch");
     require_finite(coefficients);
     require_finite(bias);
-    std::vector<double> next_coefficients(coefficients.begin(), coefficients.end()), next_bias(bias.begin(), bias.end());
+    std::vector<double> next_coefficients(coefficients.begin(), coefficients.end()),
+        next_bias(bias.begin(), bias.end());
     current.swap(next_coefficients);
     bias_.swap(next_bias);
 }
@@ -157,11 +159,13 @@ void Layer::set_carrier(Carrier carrier, std::span<const double> bias) {
 }
 
 void Layer::replace(Carrier carrier, std::span<const double> bias) {
-    std::visit([&](const auto& edges) {
-        detail::validate(edges, {inputs_, outputs_});
-        require_finite(edges.coefficients);
-        detail::require_finite_nonlinear(edges);
-    }, carrier);
+    std::visit(
+        [&](const auto& edges) {
+            detail::validate(edges, {inputs_, outputs_});
+            require_finite(edges.coefficients);
+            detail::require_finite_nonlinear(edges);
+        },
+        carrier);
     if (bias.size() != outputs_) throw std::invalid_argument("parameter shape mismatch");
     require_finite(bias);
     std::vector<double> next_bias(bias.begin(), bias.end());
@@ -172,7 +176,8 @@ void Layer::replace(Carrier carrier, std::span<const double> bias) {
 void Layer::set_residual(std::optional<SiluResidual> residual) {
     validate_state();
     if (residual) {
-        if (residual->weights.size() != inputs_ * outputs_) throw std::invalid_argument("residual weight shape mismatch");
+        if (residual->weights.size() != inputs_ * outputs_)
+            throw std::invalid_argument("residual weight shape mismatch");
         require_finite(residual->weights);
     }
     residual_ = std::move(residual);
@@ -185,9 +190,8 @@ std::vector<double> Layer::forward(std::span<const double> input, std::size_t ba
     require_finite(input);
     std::vector<double> output(output_size);
     // Configuration and inputs are validated above; carriers evaluate without revalidating.
-    std::visit([&](const auto& edges) {
-        detail::forward(edges, {inputs_, outputs_}, bias_, input, batch, output);
-    }, carrier_);
+    std::visit([&](const auto& edges) { detail::forward(edges, {inputs_, outputs_}, bias_, input, batch, output); },
+               carrier_);
     if (residual_) residual_forward(residual_->weights, inputs_, outputs_, input, batch, output);
     result_finite(output);
     return output;
@@ -203,17 +207,20 @@ LayerGradients Layer::backward(std::span<const double> input, std::size_t batch,
     require_finite(output_gradient);
     LayerGradients gradient{std::vector<double>(input_size, 0.0),
                             std::vector<double>(coefficients().size(), 0.0),
-                            std::vector<double>(outputs_, 0.0), {},
+                            std::vector<double>(outputs_, 0.0),
+                            {},
                             std::vector<double>(residual_ ? residual_->weights.size() : 0, 0.0)};
     for (std::size_t b = 0; b < batch; ++b)
         for (std::size_t o = 0; o < outputs_; ++o) gradient.bias[o] += output_gradient[b * outputs_ + o];
-    std::visit([&](const auto& edges) {
-        auto nonlinear = detail::zero_nonlinear(edges);
-        detail::backward(edges, {inputs_, outputs_}, input, batch, output_gradient, gradient.input,
-                         gradient.coefficients, nonlinear);
-        detail::check_result(nonlinear);
-        gradient.nonlinear = std::move(nonlinear);
-    }, carrier_);
+    std::visit(
+        [&](const auto& edges) {
+            auto nonlinear = detail::zero_nonlinear(edges);
+            detail::backward(edges, {inputs_, outputs_}, input, batch, output_gradient, gradient.input,
+                             gradient.coefficients, nonlinear);
+            detail::check_result(nonlinear);
+            gradient.nonlinear = std::move(nonlinear);
+        },
+        carrier_);
     if (residual_)
         residual_backward(residual_->weights, inputs_, outputs_, input, batch, output_gradient, gradient.input,
                           gradient.residual);
@@ -236,19 +243,21 @@ void Layer::sgd(const LayerGradients& gradients, double learning_rate) {
     require_finite(gradients.bias);
     require_finite(gradients.residual);
     // Validate every gradient and candidate before committing any parameter.
-    auto next = std::visit([&](const auto& edges) -> Carrier {
-        using Edges = std::decay_t<decltype(edges)>;
-        const auto* nonlinear = std::get_if<detail::nonlinear_t<Edges>>(&gradients.nonlinear);
-        if (!nonlinear) throw std::invalid_argument("nonlinear gradient type does not match the carrier");
-        detail::check_gradient(edges, *nonlinear);
-        auto candidate = edges;
-        detail::update_nonlinear(candidate, *nonlinear, learning_rate);
-        auto& coefficients = candidate.coefficients;
-        for (std::size_t i = 0; i < coefficients.size(); ++i)
-            coefficients[i] -= learning_rate * gradients.coefficients[i];
-        result_finite(coefficients);
-        return candidate;
-    }, carrier_);
+    auto next = std::visit(
+        [&](const auto& edges) -> Carrier {
+            using Edges = std::decay_t<decltype(edges)>;
+            const auto* nonlinear = std::get_if<detail::nonlinear_t<Edges>>(&gradients.nonlinear);
+            if (!nonlinear) throw std::invalid_argument("nonlinear gradient type does not match the carrier");
+            detail::check_gradient(edges, *nonlinear);
+            auto candidate = edges;
+            detail::update_nonlinear(candidate, *nonlinear, learning_rate);
+            auto& coefficients = candidate.coefficients;
+            for (std::size_t i = 0; i < coefficients.size(); ++i)
+                coefficients[i] -= learning_rate * gradients.coefficients[i];
+            result_finite(coefficients);
+            return candidate;
+        },
+        carrier_);
     auto next_bias = bias_;
     for (std::size_t i = 0; i < next_bias.size(); ++i) next_bias[i] -= learning_rate * gradients.bias[i];
     result_finite(next_bias);
@@ -271,9 +280,8 @@ RegularizationResult Layer::regularization(double lambda) const {
     RegularizationResult r;
     r.gradients.coefficients.resize(coefficients.size());
     r.gradients.bias.resize(outputs_);
-    r.gradients.nonlinear = std::visit([](const auto& edges) -> NonlinearGradients {
-        return detail::zero_nonlinear(edges);
-    }, carrier_);
+    r.gradients.nonlinear =
+        std::visit([](const auto& edges) -> NonlinearGradients { return detail::zero_nonlinear(edges); }, carrier_);
     for (std::size_t j = 0; j < coefficients.size(); ++j) {
         const double g = lambda * coefficients[j];
         r.gradients.coefficients[j] = g;

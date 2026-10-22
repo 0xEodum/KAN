@@ -23,8 +23,8 @@ void expansion_forward(const Config& basis, const std::vector<double>& coefficie
     Expansion expansion(basis_view(basis), shape.inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);
-        contract(coefficients.data(), bias.data(), expansion.values.data(), shape.outputs,
-                 expansion.width(), output.data() + b * shape.outputs);
+        contract(coefficients.data(), bias.data(), expansion.values.data(), shape.outputs, expansion.width(),
+                 output.data() + b * shape.outputs);
     }
 }
 
@@ -36,7 +36,8 @@ std::size_t knot_stride(const BSplineConfig& spline) {
 } // namespace
 
 void check_grids(const BasisConfig& basis, std::size_t inputs) {
-    if (const auto* spline = std::get_if<BSplineConfig>(&basis); spline && spline->grids != 1 && spline->grids != inputs)
+    if (const auto* spline = std::get_if<BSplineConfig>(&basis);
+        spline && spline->grids != 1 && spline->grids != inputs)
         throw std::invalid_argument("spline grids must be 1 (shared) or the layer's input count");
 }
 
@@ -57,8 +58,8 @@ void validate(const TrainableRbfEdges& edges, EdgeShape shape) {
 }
 
 // B-splines take the sparse engine (backlog C5): bitwise the dense result.
-void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> bias,
-             std::span<const double> input, std::size_t batch, std::span<double> output) {
+void forward(const BasisEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output) {
     if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
         if (batch == 0) return;
         SplineExpansion expansion(basis_view(*spline), shape.inputs, knot_stride(*spline));
@@ -79,13 +80,14 @@ void forward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const do
     expansion_forward(edges.basis, edges.coefficients, shape, bias, input, batch, output);
 }
 
-void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, std::monostate&) {
     if (batch == 0) return;
     if (const auto* spline = std::get_if<BSplineConfig>(&edges.basis)) {
         SplineExpansion expansion(basis_view(*spline), shape.inputs, knot_stride(*spline));
-        const auto magnitudes = edge_magnitudes(edges.coefficients.data(), shape.inputs * shape.outputs, expansion.terms());
+        const auto magnitudes =
+            edge_magnitudes(edges.coefficients.data(), shape.inputs * shape.outputs, expansion.terms());
         for (std::size_t b = 0; b < batch; ++b) {
             expansion.expand(input.data() + b * shape.inputs);
             contract_vjp_sparse(edges.coefficients.data(), magnitudes.data(), upstream.data() + b * shape.outputs,
@@ -97,14 +99,14 @@ void backward(const BasisEdges& edges, EdgeShape shape, std::span<const double> 
     Expansion expansion(basis_view(edges.basis), shape.inputs);
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);
-        contract_vjp(edges.coefficients.data(), upstream.data() + b * shape.outputs, expansion,
-                     shape.inputs, shape.outputs, coefficient_gradient.data(),
-                     input_gradient.data() + b * shape.inputs, [](std::size_t, std::size_t, double) {});
+        contract_vjp(edges.coefficients.data(), upstream.data() + b * shape.outputs, expansion, shape.inputs,
+                     shape.outputs, coefficient_gradient.data(), input_gradient.data() + b * shape.inputs,
+                     [](std::size_t, std::size_t, double) {});
     }
 }
 
-void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, TrainableRbfGradients& nonlinear) {
     if (batch == 0) return;
     Expansion expansion(basis_view(edges.basis), shape.inputs);
@@ -114,9 +116,8 @@ void backward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const d
     const double* log_width_partials = expansion.log_width_derivatives.data();
     for (std::size_t b = 0; b < batch; ++b) {
         expansion.expand(input.data() + b * shape.inputs);
-        contract_vjp(edges.coefficients.data(), upstream.data() + b * shape.outputs, expansion,
-                     shape.inputs, shape.outputs, coefficient_gradient.data(),
-                     input_gradient.data() + b * shape.inputs,
+        contract_vjp(edges.coefficients.data(), upstream.data() + b * shape.outputs, expansion, shape.inputs,
+                     shape.outputs, coefficient_gradient.data(), input_gradient.data() + b * shape.inputs,
                      [&](std::size_t k, std::size_t j, double weighted) {
                          centers[k] += weighted * center_partials[j];
                          log_widths[k] += weighted * log_width_partials[j];

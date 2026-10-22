@@ -18,7 +18,11 @@ void compare(std::span<const double> a, std::span<const double> b) {
 }
 kan::Layer rational(DenominatorPolicy policy, std::size_t in, std::size_t out, std::size_t m, std::size_t n) {
     kan::RationalConfig r;
-    r.numerator_degree = m; r.denominator_degree = n; r.center = 0.1; r.scale = 1.3; r.denominator_policy = policy;
+    r.numerator_degree = m;
+    r.denominator_degree = n;
+    r.center = 0.1;
+    r.scale = 1.3;
+    r.denominator_policy = policy;
     kan::Layer l(in, out, r);
     std::vector<double> a(l.coefficients().size()), b(test::denominators(l).size());
     for (std::size_t k = 0; k < a.size(); ++k) a[k] = 0.3 * std::sin(static_cast<double>(k + 1));
@@ -36,14 +40,16 @@ TEST(policy_mixed_network_all_vjps_and_trajectory_match_cpu) {
             if (policy == DenominatorPolicy::Guarded && orders.second == 16) continue;
             kan::Layer basis(3, 2, kan::ChebyshevConfig{3});
             basis.set_parameters(std::vector<double>(18, 0.02), std::vector<double>(2, 0));
-            kan::Network cpu({rational(policy, 2, 3, orders.first, orders.second), basis,
-                              rational(policy, 2, 1, 3, 2)});
+            kan::Network cpu(
+                {rational(policy, 2, 3, orders.first, orders.second), basis, rational(policy, 2, 1, 3, 2)});
             kan::cuda::ResidentNetwork gpu(cpu, 8);
             const auto count = gpu.workspace_allocations();
             const std::vector<double> x{-0.5, 0.2, 0.8, -0.2, 0.1, 0.4}, dy{0.2, -0.1, 0.3};
-            gpu.upload_input(x, 3); gpu.upload_output_gradient(dy);
+            gpu.upload_input(x, 3);
+            gpu.upload_output_gradient(dy);
             for (int step = 0; step < 3; ++step) {
-                gpu.forward(); compare(gpu.download_output(), cpu.forward(x, 3));
+                gpu.forward();
+                compare(gpu.download_output(), cpu.forward(x, 3));
                 gpu.backward(0.1);
                 auto expected = cpu.backward(x, 3, dy);
                 const auto reg = cpu.regularization(0.1).gradients;
@@ -57,7 +63,8 @@ TEST(policy_mixed_network_all_vjps_and_trajectory_match_cpu) {
                     compare(test::denominators(test::grad(actual, j)), test::denominators(test::grad(expected, j)));
                     compare(test::grad(actual, j).bias, test::grad(expected, j).bias);
                 }
-                gpu.sgd(0.03); cpu.sgd(expected, 0.03);
+                gpu.sgd(0.03);
+                cpu.sgd(expected, 0.03);
             }
             const auto trained = gpu.download_parameters();
             for (std::size_t j = 0; j < cpu.layers().size(); ++j) {
@@ -65,7 +72,8 @@ TEST(policy_mixed_network_all_vjps_and_trajectory_match_cpu) {
                 compare(test::denominators(test::layer(trained, j)), test::denominators(test::layer(cpu, j)));
                 REQUIRE(test::layer(trained, j).carrier().index() == test::layer(cpu, j).carrier().index());
             }
-            REQUIRE(std::get<kan::RationalEdges>(test::layer(trained, 0).carrier()).config.denominator_policy == policy);
+            REQUIRE(std::get<kan::RationalEdges>(test::layer(trained, 0).carrier()).config.denominator_policy ==
+                    policy);
             REQUIRE(count == gpu.workspace_allocations());
         }
 }
@@ -73,7 +81,9 @@ TEST(policy_mixed_network_all_vjps_and_trajectory_match_cpu) {
 namespace {
 kan::Network pole_network(DenominatorPolicy policy) {
     kan::RationalConfig r;
-    r.numerator_degree = 0; r.denominator_degree = 1; r.denominator_policy = policy;
+    r.numerator_degree = 0;
+    r.denominator_degree = 1;
+    r.denominator_policy = policy;
     kan::Layer layer(1, 1, r);
     kan::set_rational_parameters(layer, std::vector<double>{1}, std::vector<double>{-0.5}, std::vector<double>{0});
     return kan::Network({layer});
@@ -82,7 +92,8 @@ double resident_step(kan::cuda::ResidentNetwork& gpu) {
     gpu.forward();
     const double u = gpu.download_output()[0] - 4;
     gpu.upload_output_gradient(std::vector<double>{u});
-    gpu.backward(); gpu.sgd(0.0625);
+    gpu.backward();
+    gpu.sgd(0.0625);
     return 0.5 * u * u;
 }
 } // namespace
@@ -118,13 +129,16 @@ TEST(resident_sgd_into_a_pole_stops_guarded_but_continues_under_safe_policies) {
 TEST(resident_safe_policies_report_overflow_not_poles) {
     for (auto policy : safe_policies) {
         kan::RationalConfig r;
-        r.numerator_degree = 1; r.denominator_degree = 1; r.denominator_policy = policy;
+        r.numerator_degree = 1;
+        r.denominator_degree = 1;
+        r.denominator_policy = policy;
         kan::Layer l(1, 1, r);
         kan::set_rational_parameters(l, std::vector<double>{1, -1}, std::vector<double>{-1}, std::vector<double>{0});
         kan::cuda::ResidentNetwork gpu(kan::Network({l}), 1);
         gpu.upload_input(std::vector<double>{1}, 1);
         gpu.upload_output_gradient(std::vector<double>{1});
-        gpu.forward(); gpu.backward();
+        gpu.forward();
+        gpu.backward();
         test::near(gpu.download_output()[0], 0);
         r.numerator_degree = 0;
         kan::Layer huge(1, 1, r);
@@ -146,6 +160,9 @@ TEST(resident_safe_policies_report_overflow_not_poles) {
 }
 
 int main() {
-    if (!kan::cuda::available()) { std::cout << "CUDA device unavailable\n"; return 0; }
+    if (!kan::cuda::available()) {
+        std::cout << "CUDA device unavailable\n";
+        return 0;
+    }
     return test::run();
 }

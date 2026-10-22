@@ -28,13 +28,11 @@
 
 namespace kan::detail {
 
-template<DenominatorPolicy Policy>
-using PolicyConstant = std::integral_constant<DenominatorPolicy, Policy>;
+template<DenominatorPolicy Policy> using PolicyConstant = std::integral_constant<DenominatorPolicy, Policy>;
 
 // Host-side dispatch of a validated runtime policy to a compile-time one:
 // f(PolicyConstant<P>{}) is called once per operation, not per sample.
-template<class F>
-decltype(auto) visit_denominator_policy(DenominatorPolicy policy, F&& f) {
+template<class F> decltype(auto) visit_denominator_policy(DenominatorPolicy policy, F&& f) {
     switch (policy) {
     case DenominatorPolicy::Guarded: return f(PolicyConstant<DenominatorPolicy::Guarded>{});
     case DenominatorPolicy::Absolute: return f(PolicyConstant<DenominatorPolicy::Absolute>{});
@@ -44,14 +42,12 @@ decltype(auto) visit_denominator_policy(DenominatorPolicy policy, F&& f) {
 }
 
 // Device-side rational configuration in the executor's precision.
-template<class Scalar>
-struct RationalScalars {
+template<class Scalar> struct RationalScalars {
     std::size_t numerator_degree, denominator_degree;
     Scalar center, scale, epsilon;
 };
 
-template<class Scalar>
-struct RationalHornerOf {
+template<class Scalar> struct RationalHornerOf {
     Scalar z;
     Scalar p, dp; // numerator and its z-derivative
     Scalar q, dq; // denominator Q and its z-derivative Q' = g S'
@@ -61,8 +57,7 @@ struct RationalHornerOf {
 };
 using RationalHorner = RationalHornerOf<double>;
 
-template<class Scalar>
-struct RationalEdgeOf {
+template<class Scalar> struct RationalEdgeOf {
     Scalar value;
     Scalar input_derivative;
 };
@@ -71,11 +66,12 @@ using RationalEdge = RationalEdgeOf<double>;
 // a*b rounded on its own in every build: an FMA (KAN_CUDA_FMA=ON) build may
 // otherwise contract the guarded product into a following addition, so that
 // the value used differs from the value checked (and from the CPU's).
-template<class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rounded_product(Scalar a, Scalar b) {
+template<class Scalar> KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rounded_product(Scalar a, Scalar b) {
 #if defined(__CUDA_ARCH__)
-    if constexpr (std::is_same_v<Scalar, double>) return __dmul_rn(a, b);
-    else return __fmul_rn(a, b);
+    if constexpr (std::is_same_v<Scalar, double>)
+        return __dmul_rn(a, b);
+    else
+        return __fmul_rn(a, b);
 #else
     return a * b;
 #endif
@@ -90,9 +86,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_argument(const Config& c, Scala
 // argument z = rational_argument(c, x). `numerator` holds numerator_degree+1
 // coefficients, `denominator` holds denominator_degree.
 template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(const Config& c, Scalar z,
-                                                  const Scalar* numerator,
-                                                  const Scalar* denominator, const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar>
+rational_horner_at(const Config& c, Scalar z, const Scalar* numerator, const Scalar* denominator, const Guard& guard) {
     RationalHornerOf<Scalar> h{};
     h.z = z;
     const auto m = c.numerator_degree, n = c.denominator_degree;
@@ -106,7 +101,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(con
         h.dp = h.dp * h.z + h.p;
         h.p = h.p * h.z + numerator[k - 1];
     }
-    guard(h.p); guard(h.dp);
+    guard(h.p);
+    guard(h.dp);
     if constexpr (Policy == DenominatorPolicy::Guarded) {
         h.q = n ? denominator[n - 1] : Scalar(1);
         h.bound = n ? math::abs(denominator[n - 1]) : Scalar(1);
@@ -116,7 +112,9 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(con
             h.q = h.q * h.z + next;
             h.bound = h.bound * math::abs(h.z) + math::abs(next);
         }
-        guard(h.q); guard(h.dq); guard(h.bound);
+        guard(h.q);
+        guard(h.dq);
+        guard(h.bound);
     } else {
         // S and S' by Horner without the constant term, then Q = 1 + f(S) >= 1.
         Scalar s = n ? denominator[n - 1] : Scalar(0);
@@ -124,7 +122,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(con
             h.ds = h.ds * h.z + s;
             s = k == 1 ? s * h.z : s * h.z + denominator[k - 2];
         }
-        guard(s); guard(h.ds);
+        guard(s);
+        guard(h.ds);
         if constexpr (Policy == DenominatorPolicy::Absolute) {
             h.gain = s > 0 ? Scalar(1) : s < 0 ? Scalar(-1) : Scalar(0);
             h.q = guard(1 + math::abs(s));
@@ -138,9 +137,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner_at(con
 }
 // The same at the input x.
 template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const Config& c, Scalar x,
-                                               const Scalar* numerator,
-                                               const Scalar* denominator, const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar>
+rational_horner(const Config& c, Scalar x, const Scalar* numerator, const Scalar* denominator, const Guard& guard) {
     return rational_horner_at<Policy>(c, rational_argument(c, x, guard), numerator, denominator, guard);
 }
 
@@ -149,8 +147,7 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalHornerOf<Scalar> rational_horner(const 
 template<DenominatorPolicy Policy, class Config, class Scalar>
 KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_pole(const Config& c, const RationalHornerOf<Scalar>& h) {
     if constexpr (Policy == DenominatorPolicy::Guarded)
-        return math::finite(h.q) && math::finite(h.bound) &&
-               math::abs(h.q) <= static_cast<Scalar>(c.epsilon) * h.bound;
+        return math::finite(h.q) && math::finite(h.bound) && math::abs(h.q) <= static_cast<Scalar>(c.epsilon) * h.bound;
     else
         return false;
 }
@@ -160,18 +157,24 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_pole(const Config& c, const Ratio
 // Q' = 2 S S' may underflow although r Q'/Q is representable.
 template<DenominatorPolicy Policy, class Scalar>
 KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_slope_nonzero(const RationalHornerOf<Scalar>& h) {
-    if constexpr (Policy == DenominatorPolicy::Smooth) return h.gain != 0 && h.ds != 0;
-    else return h.dq != 0;
+    if constexpr (Policy == DenominatorPolicy::Smooth)
+        return h.gain != 0 && h.ds != 0;
+    else
+        return h.dq != 0;
 }
 template<DenominatorPolicy Policy, class Scalar>
 KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_log_slope(const RationalHornerOf<Scalar>& h) {
-    if constexpr (Policy == DenominatorPolicy::Smooth) return math::log(math::abs(h.gain)) + math::log(math::abs(h.ds));
-    else return math::log(math::abs(h.dq));
+    if constexpr (Policy == DenominatorPolicy::Smooth)
+        return math::log(math::abs(h.gain)) + math::log(math::abs(h.ds));
+    else
+        return math::log(math::abs(h.dq));
 }
 template<DenominatorPolicy Policy, class Scalar>
 KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_slope_negative(const RationalHornerOf<Scalar>& h) {
-    if constexpr (Policy == DenominatorPolicy::Smooth) return math::signbit(h.gain) != math::signbit(h.ds);
-    else return math::signbit(h.dq);
+    if constexpr (Policy == DenominatorPolicy::Smooth)
+        return math::signbit(h.gain) != math::signbit(h.ds);
+    else
+        return math::signbit(h.dq);
 }
 
 template<class Scalar, class Guard>
@@ -183,8 +186,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_signed_exp(Scalar exponent, boo
 // representable final derivative is restored in log space; the ordinary
 // Horner/quotient path is unchanged.
 template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
-KAN_HOST_DEVICE KAN_FORCE_INLINE RationalEdgeOf<Scalar> rational_edge(const Config& c, const RationalHornerOf<Scalar>& h,
-                                           const Guard& guard) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE RationalEdgeOf<Scalar>
+rational_edge(const Config& c, const RationalHornerOf<Scalar>& h, const Guard& guard) {
     const Scalar scale = static_cast<Scalar>(c.scale);
     RationalEdgeOf<Scalar> e{};
     e.value = guard(h.p / h.q);
@@ -192,18 +195,19 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalEdgeOf<Scalar> rational_edge(const Conf
     const Scalar denominator_term = guard(e.value * denominator_ratio);
     e.input_derivative = guard(guard(numerator_term - denominator_term) / scale);
     const bool tiny_numerator = h.dp != 0 && math::tiny(numerator_term);
-    const bool tiny_denominator = h.p != 0 && rational_slope_nonzero<Policy>(h) &&
+    const bool tiny_denominator =
+        h.p != 0 && rational_slope_nonzero<Policy>(h) &&
         (math::tiny(e.value) || math::tiny(denominator_ratio) || math::tiny(denominator_term));
     if (tiny_numerator || tiny_denominator) {
         const Scalar lq = math::log(math::abs(h.q)), ls = math::log(scale);
-        const Scalar first = tiny_numerator
-            ? rational_signed_exp(math::log(math::abs(h.dp)) - lq - ls,
-                                  math::signbit(h.dp) != math::signbit(h.q), guard)
-            : guard(numerator_term / scale);
-        const Scalar second = tiny_denominator
-            ? rational_signed_exp(math::log(math::abs(h.p)) + rational_log_slope<Policy>(h) - 2 * lq - ls,
-                                  math::signbit(h.p) != rational_slope_negative<Policy>(h), guard)
-            : guard(denominator_term / scale);
+        const Scalar first = tiny_numerator ? rational_signed_exp(math::log(math::abs(h.dp)) - lq - ls,
+                                                                  math::signbit(h.dp) != math::signbit(h.q), guard)
+                                            : guard(numerator_term / scale);
+        const Scalar second =
+            tiny_denominator
+                ? rational_signed_exp(math::log(math::abs(h.p)) + rational_log_slope<Policy>(h) - 2 * lq - ls,
+                                      math::signbit(h.p) != rational_slope_negative<Policy>(h), guard)
+                : guard(denominator_term / scale);
         e.input_derivative = guard(first - second);
     }
     return e;
@@ -215,7 +219,7 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE RationalEdgeOf<Scalar> rational_edge(const Conf
 // dr/da_k = z^k / Q (every policy).
 template<class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_numerator_vjp(Scalar q, Scalar z, std::size_t k, Scalar power,
-                                              Scalar divided, const Guard& guard) {
+                                                               Scalar divided, const Guard& guard) {
     if (z != 0 && (math::tiny(power) || math::tiny(divided)))
         return rational_signed_exp(static_cast<Scalar>(k) * math::log(math::abs(z)) - math::log(math::abs(q)),
                                    math::signbit(q) != (math::signbit(z) && k % 2 != 0), guard);
@@ -226,8 +230,8 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_numerator_vjp(Scalar q, Scalar 
 // (ignored by Guarded, where g = 1).
 template<DenominatorPolicy Policy, class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_denominator_vjp(Scalar p, Scalar q, Scalar value, Scalar gain,
-                                                Scalar z, std::size_t k, Scalar power, Scalar divided,
-                                                const Guard& guard) {
+                                                                 Scalar z, std::size_t k, Scalar power, Scalar divided,
+                                                                 const Guard& guard) {
     if constexpr (Policy == DenominatorPolicy::Guarded) {
         const Scalar derivative = guard(-value * divided);
         if (p != 0 && z != 0 && (math::tiny(power) || math::tiny(divided) || math::tiny(value)))
@@ -237,17 +241,16 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_denominator_vjp(Scalar p, Scala
         return derivative;
     } else if constexpr (Policy == DenominatorPolicy::Absolute) {
         // g in {-1, 0, 1}: the guarded-form derivative times g, exactly.
-        return gain * rational_denominator_vjp<DenominatorPolicy::Guarded>(p, q, value, gain, z, k, power,
-                                                                           divided, guard);
+        return gain *
+               rational_denominator_vjp<DenominatorPolicy::Guarded>(p, q, value, gain, z, k, power, divided, guard);
     } else {
         const Scalar scaled = guard(gain * divided), derivative = guard(-value * scaled);
         if (p != 0 && z != 0 && gain != 0 &&
             (math::tiny(power) || math::tiny(divided) || math::tiny(value) || math::tiny(gain) || math::tiny(scaled)))
-            return rational_signed_exp(math::log(math::abs(p)) + math::log(math::abs(gain)) +
-                                           static_cast<Scalar>(k) * math::log(math::abs(z)) -
-                                           2 * math::log(math::abs(q)),
-                                       (math::signbit(p) != (math::signbit(z) && k % 2 != 0)) == math::signbit(gain),
-                                       guard);
+            return rational_signed_exp(
+                math::log(math::abs(p)) + math::log(math::abs(gain)) +
+                    static_cast<Scalar>(k) * math::log(math::abs(z)) - 2 * math::log(math::abs(q)),
+                (math::signbit(p) != (math::signbit(z) && k % 2 != 0)) == math::signbit(gain), guard);
         return derivative;
     }
 }
@@ -258,7 +261,7 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE Scalar rational_denominator_vjp(Scalar p, Scala
 // pass checks them so that its backward pass may recompute them unguarded.
 template<DenominatorPolicy Policy, class Config, class Scalar, class Guard>
 KAN_HOST_DEVICE KAN_FORCE_INLINE void rational_parameter_vjps_check(const Config& c, const RationalHornerOf<Scalar>& h,
-                                                   Scalar value, const Guard& guard) {
+                                                                    Scalar value, const Guard& guard) {
     const auto m = c.numerator_degree, n = c.denominator_degree;
     Scalar power = 1;
     for (std::size_t k = 0; k <= (m > n ? m : n); ++k) {
@@ -288,10 +291,10 @@ KAN_HOST_DEVICE KAN_FORCE_INLINE void rational_parameter_vjps_check(const Config
 //   before): at most 2^52 (FP64) or 2^23 (FP32).
 // The proof and its test cases are in docs/evidence/backlog/C6-C8.md.
 template<class Scalar> inline constexpr Scalar rational_vjp_limit = Scalar(0x1.fffffffffffffp+1021); // DBL_MAX/4
-template<> inline constexpr float rational_vjp_limit<float> = 0x1.fffffep+125f;                       // FLT_MAX/4
+template<> inline constexpr float rational_vjp_limit<float> = 0x1.fffffep+125f;                      // FLT_MAX/4
 template<DenominatorPolicy Policy, class Config, class Scalar>
-KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_parameter_vjps_bounded(const Config& c, const RationalHornerOf<Scalar>& h,
-                                                     Scalar value) {
+KAN_HOST_DEVICE KAN_FORCE_INLINE bool rational_parameter_vjps_bounded(const Config& c,
+                                                                      const RationalHornerOf<Scalar>& h, Scalar value) {
     constexpr Scalar limit = rational_vjp_limit<Scalar>;
     const auto m = c.numerator_degree, n = c.denominator_degree, degree = m > n ? m : n;
     const Scalar magnitude = math::abs(h.z), q = math::abs(h.q);

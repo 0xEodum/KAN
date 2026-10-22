@@ -31,8 +31,7 @@ struct RationalEvaluation {
 };
 
 void validate_rational(const RationalConfig& config);
-RationalEvaluation evaluate_rational(const RationalConfig& config, double x,
-                                    std::span<const double> numerator,
-                                    std::span<const double> denominator);
+RationalEvaluation evaluate_rational(const RationalConfig& config, double x, std::span<const double> numerator,
+                                     std::span<const double> denominator);
 
 } // namespace kan

@@ -10,18 +10,15 @@
 
 namespace kan::detail {
 
-template<class Config>
-BasisView basis_view(const Config& c) {
+template<class Config> BasisView basis_view(const Config& c) {
     using T = std::decay_t<Config>;
-    BasisView view{BasisKind::Chebyshev, basis_size(c), 0, 0, 1, 1,
-                   nullptr, nullptr, nullptr, nullptr, 0, false};
+    BasisView view{BasisKind::Chebyshev, basis_size(c), 0, 0, 1, 1, nullptr, nullptr, nullptr, nullptr, 0, false};
     if constexpr (std::is_same_v<T, ChebyshevConfig>) {
         view.kind = BasisKind::Chebyshev;
     } else if constexpr (std::is_same_v<T, LegendreConfig>) {
         view.kind = BasisKind::Legendre;
     } else if constexpr (std::is_same_v<T, HermiteConfig>) {
-        view.kind = c.normalization == HermiteNormalization::Function ? BasisKind::HermiteFunction
-                                                                      : BasisKind::Hermite;
+        view.kind = c.normalization == HermiteNormalization::Function ? BasisKind::HermiteFunction : BasisKind::Hermite;
     } else if constexpr (std::is_same_v<T, JacobiConfig>) {
         view.kind = BasisKind::Jacobi;
         view.alpha = c.alpha;

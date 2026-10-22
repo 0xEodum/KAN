@@ -33,7 +33,8 @@ kan::BSplineConfig grids(std::size_t p, std::size_t terms, std::size_t inputs) {
     for (std::size_t i = 0; i < inputs; ++i) {
         const double lo = -1 - 0.1 * double(i % 5), hi = 1 + 0.2 * double(i % 3), power = 1 + 0.15 * double(i % 4);
         c.knots.insert(c.knots.end(), p + 1, lo);
-        for (std::size_t j = 1; j < intervals; ++j) c.knots.push_back(lo + (hi - lo) * std::pow(double(j) / double(intervals), power));
+        for (std::size_t j = 1; j < intervals; ++j)
+            c.knots.push_back(lo + (hi - lo) * std::pow(double(j) / double(intervals), power));
         c.knots.insert(c.knots.end(), p + 1, hi);
     }
     return c;
@@ -56,7 +57,9 @@ std::string test_digits(double v) {
     std::snprintf(text, sizeof text, "%.17g", v);
     return text;
 }
-struct Tolerance { double relative, floor; };
+struct Tolerance {
+    double relative, floor;
+};
 Tolerance tolerance(Precision p) {
     if (p == Precision::Float64) return {1e-11, 1e-12};
     if (p == Precision::Float32) return {2e-4, 5e-5};
@@ -131,7 +134,8 @@ TEST(per_input_layers_match_the_cpu) {
                     ResidentNetwork gpu(network, 70, p);
                     REQUIRE(layout.sparse.at(1) == (path == SplinePath::Sparse && degree <= 3));
                     const auto what = std::string(name(p)) + " degree " + std::to_string(degree) +
-                                      (path == SplinePath::Sparse ? " sparse" : " dense") + (residual ? " residual" : "");
+                                      (path == SplinePath::Sparse ? " sparse" : " dense") +
+                                      (residual ? " residual" : "");
                     check_against_cpu(gpu, 70, 0.01, p, what);
                     check_against_cpu(gpu, 33, 0.0, p, what + " partial");
                     gpu.upload_input({}, 0);
@@ -159,7 +163,12 @@ TEST(identical_per_input_grids_match_the_shared_layer_bitwise) {
                 ResidentNetwork ga(kan::Network({a}), 40, p), gb(kan::Network({b}), 40, p);
                 const auto x = inputs(40 * 19);
                 const auto dy = wave(40 * 6, 0.5, 0.3);
-                for (auto* g : {&ga, &gb}) { g->upload_input(x, 40); g->upload_output_gradient(dy); g->forward(); g->backward(0.02); }
+                for (auto* g : {&ga, &gb}) {
+                    g->upload_input(x, 40);
+                    g->upload_output_gradient(dy);
+                    g->forward();
+                    g->backward(0.02);
+                }
                 REQUIRE(same_bits(ga.download_output(), gb.download_output()));
                 const auto da = ga.download_gradients(), db = gb.download_gradients();
                 REQUIRE(same_bits(da.input, db.input));
@@ -174,14 +183,16 @@ TEST(device_refit_matches_the_cpu_refit) {
     for (auto p : precisions)
         for (auto path : {SplinePath::Dense, SplinePath::Sparse})
             for (std::size_t degree : {0u, 1u, 3u, 5u}) {
-                kan::Network network({kan::NetworkLayer(kan::InputMap(13, kan::TanhMap{1.2})),
-                                      kan::NetworkLayer(seeded(kan::Layer(13, 21, grids(degree, degree + 6, 13)), 0.3)),
-                                      kan::NetworkLayer(seeded(kan::Layer(21, 7, kan::ChebyshevConfig{4}), 0.6)),
-                                      kan::NetworkLayer(seeded(kan::Layer(7, 3, shared_grid(degree, degree + 9)), 0.1))});
+                kan::Network network(
+                    {kan::NetworkLayer(kan::InputMap(13, kan::TanhMap{1.2})),
+                     kan::NetworkLayer(seeded(kan::Layer(13, 21, grids(degree, degree + 6, 13)), 0.3)),
+                     kan::NetworkLayer(seeded(kan::Layer(21, 7, kan::ChebyshevConfig{4}), 0.6)),
+                     kan::NetworkLayer(seeded(kan::Layer(7, 3, shared_grid(degree, degree + 9)), 0.1))});
                 for (bool per_input : {true, false}) {
                     if (!per_input) { // a shared first layer refits to a shared grid
                         auto layers = std::vector<kan::NetworkLayer>(network.layers().begin(), network.layers().end());
-                        std::get<kan::Layer>(layers[1]) = seeded(kan::Layer(13, 21, shared_grid(degree, degree + 6)), 0.3);
+                        std::get<kan::Layer>(layers[1]) =
+                            seeded(kan::Layer(13, 21, shared_grid(degree, degree + 6)), 0.3);
                         network = kan::Network(std::move(layers));
                     }
                     ResidentTestScope scope(path);
@@ -209,18 +220,22 @@ TEST(device_refit_matches_the_cpu_refit) {
                     REQUIRE(cpu.refit_grids(x, batch, options) == 2);
                     const auto refit = device.download_parameters();
                     const auto what = std::string(name(p)) + " degree " + std::to_string(degree) +
-                                      (path == SplinePath::Sparse ? " sparse" : " dense") + (per_input ? "" : " shared");
+                                      (path == SplinePath::Sparse ? " sparse" : " dense") +
+                                      (per_input ? "" : " shared");
                     for (std::size_t j : {1u, 3u}) {
                         const auto& a = spline_of(refit, j);
                         const auto& e = spline_of(cpu, j);
                         REQUIRE(a.grids == e.grids && a.degree == e.degree && a.knots.size() == e.knots.size());
                         // Samples are device activations (FP64: the tanh map within its parity tolerance).
-                        if (p == Precision::Float64) compare(a.knots, e.knots, {1e-12, 1e-13}, what + " knots");
-                        else compare(a.knots, e.knots, {1e-5, 1e-5}, what + " knots");
+                        if (p == Precision::Float64)
+                            compare(a.knots, e.knots, {1e-12, 1e-13}, what + " knots");
+                        else
+                            compare(a.knots, e.knots, {1e-5, 1e-5}, what + " knots");
                     }
                     const auto xa = refit_samples(97, 13, 0.7);
                     compare(refit.forward(xa, 97), cpu.forward(xa, 97),
-                            p == Precision::Float64 ? Tolerance{1e-10, 1e-11} : Tolerance{2e-3, 2e-3}, what + " refit functions");
+                            p == Precision::Float64 ? Tolerance{1e-10, 1e-11} : Tolerance{2e-3, 2e-3},
+                            what + " refit functions");
                 }
             }
 }
@@ -231,7 +246,8 @@ TEST(device_refit_matches_the_cpu_refit) {
 TEST(refit_keeps_graphs_uploads_and_allocations) {
     for (auto p : precisions)
         for (auto path : {SplinePath::Dense, SplinePath::Sparse}) {
-            kan::Network network({seeded(kan::Layer(24, 16, grids(3, 10, 24)), 0.3), seeded(kan::Layer(16, 4, grids(2, 9, 16)), 0.8)});
+            kan::Network network(
+                {seeded(kan::Layer(24, 16, grids(3, 10, 24)), 0.3), seeded(kan::Layer(16, 4, grids(2, 9, 16)), 0.8)});
             ResidentTestScope scope(path);
             const std::size_t batch = 128;
             const auto x = refit_samples(batch, 24);
@@ -250,11 +266,16 @@ TEST(refit_keeps_graphs_uploads_and_allocations) {
             a.upload_parameters(refit);
             ResidentNetwork b(refit, batch, p);
             b.upload_input(x, batch);
-            for (auto* g : {&a, &b}) { g->upload_output_gradient(dy); for (int k = 0; k < 4; ++k) g->train_step(0.05); g->synchronize(); }
+            for (auto* g : {&a, &b}) {
+                g->upload_output_gradient(dy);
+                for (int k = 0; k < 4; ++k) g->train_step(0.05);
+                g->synchronize();
+            }
             const auto pa = a.download_parameters(), pb = b.download_parameters();
             for (std::size_t j = 0; j < 2; ++j) {
                 REQUIRE(spline_of(pa, j) == spline_of(pb, j));
-                REQUIRE(same_bits(std::get<kan::Layer>(pa.layers()[j]).coefficients(), std::get<kan::Layer>(pb.layers()[j]).coefficients()));
+                REQUIRE(same_bits(std::get<kan::Layer>(pa.layers()[j]).coefficients(),
+                                  std::get<kan::Layer>(pb.layers()[j]).coefficients()));
             }
             // Output and gradients are stale after a refit; input and upstream stay.
             a.forward();
@@ -282,7 +303,8 @@ TEST(refit_failures_leave_the_executor_unchanged) {
             const auto now = gpu.download_parameters();
             for (std::size_t j : {0u, 2u}) {
                 REQUIRE(spline_of(now, j) == spline_of(before, j));
-                REQUIRE(same_bits(std::get<kan::Layer>(now.layers()[j]).coefficients(), std::get<kan::Layer>(before.layers()[j]).coefficients()));
+                REQUIRE(same_bits(std::get<kan::Layer>(now.layers()[j]).coefficients(),
+                                  std::get<kan::Layer>(before.layers()[j]).coefficients()));
             }
         };
         // Constant activations of the last layer (zero Chebyshev layer): no interval.
@@ -335,8 +357,8 @@ TEST(fp64_refit_on_the_network_input_follows_the_cpu) {
                 cpu.refit_grids(x, batch, kan::GridRefit{0, eps});
                 const auto refit = gpu.download_parameters();
                 compare(spline_of(refit, 0).knots, spline_of(cpu, 0).knots, {1e-15, 0}, "f64 knots");
-                compare(std::get<kan::Layer>(refit.layers()[0]).coefficients(), std::get<kan::Layer>(cpu.layers()[0]).coefficients(),
-                        {1e-11, 1e-12}, "f64 refit coefficients");
+                compare(std::get<kan::Layer>(refit.layers()[0]).coefficients(),
+                        std::get<kan::Layer>(cpu.layers()[0]).coefficients(), {1e-11, 1e-12}, "f64 refit coefficients");
             }
         }
 }
@@ -369,8 +391,12 @@ TEST(nonfinite_refit_samples_are_rejected) {
         kan::Network network({seeded(kan::Layer(1, 2, grids(1, 6, 1)), 0.3)});
         ResidentNetwork gpu(network, 4, p);
         gpu.upload_input(std::vector<double>{-3.4e38, -1e38, 0, -5}, 4);
-        try { gpu.refit_grids(); REQUIRE(false); }
-        catch (const std::invalid_argument& e) { REQUIRE(std::string(e.what()).find("singular") == std::string::npos); }
+        try {
+            gpu.refit_grids();
+            REQUIRE(false);
+        } catch (const std::invalid_argument& e) {
+            REQUIRE(std::string(e.what()).find("singular") == std::string::npos);
+        }
     }
 }
 

@@ -16,8 +16,8 @@ using init::portable_exp;
 
 constexpr std::size_t panel_nodes = 8;
 constexpr std::size_t panels = 36;
-constexpr double rbf_window = 9;   // exp(-2*81) is far below double resolution
-constexpr double hat_window = 12;  // (1-q^2)^2 exp(-q^2) at q = 12: about 1e-58
+constexpr double rbf_window = 9;  // exp(-2*81) is far below double resolution
+constexpr double hat_window = 12; // (1-q^2)^2 exp(-q^2) at q = 12: about 1e-58
 
 BasisMoments constant_moments(std::size_t terms, double variance, double first, double rest) {
     BasisMoments m{variance, std::vector<double>(terms, rest)};
@@ -40,8 +40,8 @@ BasisMoments moments(const JacobiConfig& c) {
     if (c.size > 1) m.second_moments[1] = (a + 1) * (b + 1) / (ab + 3);
     for (std::size_t k = 2; k < c.size; ++k) {
         const double n = double(k);
-        m.second_moments[k] = m.second_moments[k - 1] * ((a + n) * (b + n) / (n * (ab + n))) *
-                              ((2 * n + ab - 1) / (2 * n + ab + 1));
+        m.second_moments[k] =
+            m.second_moments[k - 1] * ((a + n) * (b + n) / (n * (ab + n))) * ((2 * n + ab - 1) / (2 * n + ab + 1));
     }
     return m;
 }
@@ -68,8 +68,7 @@ BasisMoments moments(const FourierConfig& c) { // uniform on [-pi/w, pi/w]
 
 // Uniform on [lo, hi]: E[f] = (1/(hi-lo)) * integral over [a, b] of f by
 // `count` panels of the 8-point rule.
-template<class F>
-double uniform_mean(F f, double lo, double hi, double a, double b, std::size_t count) {
+template<class F> double uniform_mean(F f, double lo, double hi, double a, double b, std::size_t count) {
     static const auto rule = gauss_legendre(panel_nodes);
     const double width = (b - a) / double(count);
     double sum = 0;
@@ -100,10 +99,12 @@ BasisMoments gaussian_moments(const std::vector<double>& centers, const std::vec
     for (std::size_t k = 0; k < centers.size(); ++k) {
         const double c = centers[k], w = widths[k];
         const double a = std::max(lo, c - rbf_window * w), b = std::min(hi, c + rbf_window * w);
-        m.second_moments[k] = uniform_mean([&](double x) {
-            const double q = (x - c) / w;
-            return portable_exp(-2 * q * q);
-        }, lo, hi, a, b, panels);
+        m.second_moments[k] = uniform_mean(
+            [&](double x) {
+                const double q = (x - c) / w;
+                return portable_exp(-2 * q * q);
+            },
+            lo, hi, a, b, panels);
     }
     return m;
 }
@@ -122,15 +123,18 @@ double mexican_hat_moment(double center, double s, double lo, double hi) {
     const double sqrt_pi = std::sqrt(std::numbers::pi);
     const double amplitude2 = 4 / (3 * sqrt_pi * s);
     const double a = std::max(lo, center - hat_window * s), b = std::min(hi, center + hat_window * s);
-    return uniform_mean([&](double x) {
-        const double q = (x - center) / s, r = 1 - q * q;
-        return amplitude2 * r * r * portable_exp(-q * q);
-    }, lo, hi, a, b, panels);
+    return uniform_mean(
+        [&](double x) {
+            const double q = (x - center) / s, r = 1 - q * q;
+            return amplitude2 * r * r * portable_exp(-q * q);
+        },
+        lo, hi, a, b, panels);
 }
 BasisMoments moments(const MexicanHatConfig& c) {
     const auto [lo, hi] = center_range(c.centers, *std::max_element(c.scales.begin(), c.scales.end()));
     BasisMoments m{uniform_variance(lo, hi), std::vector<double>(c.centers.size())};
-    for (std::size_t k = 0; k < c.centers.size(); ++k) m.second_moments[k] = mexican_hat_moment(c.centers[k], c.scales[k], lo, hi);
+    for (std::size_t k = 0; k < c.centers.size(); ++k)
+        m.second_moments[k] = mexican_hat_moment(c.centers[k], c.scales[k], lo, hi);
     return m;
 }
 // Uniform on the domain [t_p, t_K]: the (p+1)-point rule is exact on each span.
@@ -146,7 +150,8 @@ BasisMoments moments(const BSplineConfig& c) {
         const double half = t[j + 1] / 2 - t[j] / 2, mid = t[j] + half;
         for (std::size_t i = 0; i < rule.nodes.size(); ++i) {
             const auto values = evaluate_basis(config, mid + half * rule.nodes[i]).values;
-            for (std::size_t k = 0; k < terms; ++k) m.second_moments[k] += rule.weights[i] * half * values[k] * values[k];
+            for (std::size_t k = 0; k < terms; ++k)
+                m.second_moments[k] += rule.weights[i] * half * values[k] * values[k];
         }
     }
     const double length = 2 * (hi / 2 - lo / 2);
@@ -223,8 +228,9 @@ std::vector<double> rational_moments(DenominatorPolicy policy, std::size_t numer
             const double u = mid + half * rule.nodes[i];
             double s = 0;
             for (std::size_t k = beta.size(); k > 0; --k) s = (s + beta[k - 1]) * u;
-            const double q = policy == DenominatorPolicy::Guarded ? 1 + s
-                           : policy == DenominatorPolicy::Absolute ? 1 + std::abs(s) : 1 + s * s;
+            const double q = policy == DenominatorPolicy::Guarded    ? 1 + s
+                             : policy == DenominatorPolicy::Absolute ? 1 + std::abs(s)
+                                                                     : 1 + s * s;
             const double weight = rule.weights[i] * half / (2 * q * q);
             double power = 1; // u^(2k)
             for (std::size_t k = 0; k <= numerator_degree; ++k) {

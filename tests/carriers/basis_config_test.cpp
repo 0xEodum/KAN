@@ -40,8 +40,7 @@ TEST(default_configurations_of_global_families_are_valid) {
 TEST(localized_families_reject_empty_and_mismatched_vectors) {
     for (const kan::BasisConfig bad :
          {kan::BasisConfig{kan::GaussianRbfConfig{}}, kan::BasisConfig{kan::TrainableRbfConfig{}},
-          kan::BasisConfig{kan::MexicanHatConfig{}},
-          kan::BasisConfig{kan::TrainableRbfConfig{{0, 1}, {0}}},
+          kan::BasisConfig{kan::MexicanHatConfig{}}, kan::BasisConfig{kan::TrainableRbfConfig{{0, 1}, {0}}},
           kan::BasisConfig{kan::MexicanHatConfig{{0, 1}, {1}}}})
         test::throws<std::invalid_argument>([&] { kan::validate_basis(bad); });
 }
@@ -81,17 +80,17 @@ TEST(layer_exposes_its_typed_configuration) {
     REQUIRE(spline.coefficients().size() == 2 * 4);
 
     kan::Layer fixed(1, 1, kan::GaussianRbfConfig{{0, 1}, 0.7});
-    test::throws<std::invalid_argument>([&] {
-        kan::set_rbf_parameters(fixed, std::vector<double>{0, 1}, std::vector<double>{0, 0});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_rbf_parameters(fixed, std::vector<double>{0, 1}, std::vector<double>{0, 0}); });
     kan::Layer trainable(1, 1, kan::TrainableRbfConfig{{0, 1}, {0, 0}});
     kan::set_rbf_parameters(trainable, std::vector<double>{0.1, 0.9}, std::vector<double>{-0.1, 0.1});
-    const auto rbf_basis = [](const kan::Layer& layer) { return std::get<kan::TrainableRbfEdges>(layer.carrier()).basis; };
+    const auto rbf_basis = [](const kan::Layer& layer) {
+        return std::get<kan::TrainableRbfEdges>(layer.carrier()).basis;
+    };
     const auto before = rbf_basis(trainable);
     // The derived term count cannot change through the parameter setter.
-    test::throws<std::invalid_argument>([&] {
-        kan::set_rbf_parameters(trainable, std::vector<double>{0, 1, 2}, std::vector<double>{0, 0, 0});
-    });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_rbf_parameters(trainable, std::vector<double>{0, 1, 2}, std::vector<double>{0, 0, 0}); });
     REQUIRE(rbf_basis(trainable) == before);
     const auto rbf = rbf_basis(trainable);
     REQUIRE(rbf.centers == (std::vector<double>{0.1, 0.9}));

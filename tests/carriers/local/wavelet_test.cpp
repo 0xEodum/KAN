@@ -29,7 +29,8 @@ Closed closed(double x, double tau, double l) {
 void close(double actual, long double expected, double relative, double absolute = 0) {
     if (!std::isfinite(actual) || std::abs(actual - static_cast<double>(expected)) >
                                       relative * std::abs(static_cast<double>(expected)) + absolute)
-        throw std::runtime_error("actual=" + std::to_string(actual) + " expected=" + std::to_string(static_cast<double>(expected)));
+        throw std::runtime_error("actual=" + std::to_string(actual) +
+                                 " expected=" + std::to_string(static_cast<double>(expected)));
 }
 
 std::vector<double> wave(std::size_t n, double scale, double frequency, double phase = 0) {
@@ -48,10 +49,13 @@ kan::Layer wavelet(std::size_t in, std::size_t out, std::size_t size) {
 }
 
 const kan::WaveletEdges& edges_of(const kan::Layer& layer) { return std::get<kan::WaveletEdges>(layer.carrier()); }
-const kan::WaveletGradients& nonlinear(const kan::LayerGradients& g) { return std::get<kan::WaveletGradients>(g.nonlinear); }
+const kan::WaveletGradients& nonlinear(const kan::LayerGradients& g) {
+    return std::get<kan::WaveletGradients>(g.nonlinear);
+}
 
 // sum(u * layer.forward(x)), the scalar whose gradient backward returns.
-double objective(const kan::Layer& layer, const std::vector<double>& x, std::size_t batch, const std::vector<double>& u) {
+double objective(const kan::Layer& layer, const std::vector<double>& x, std::size_t batch,
+                 const std::vector<double>& u) {
     const auto y = layer.forward(x, batch);
     long double sum = 0;
     for (std::size_t j = 0; j < y.size(); ++j) sum += static_cast<long double>(u[j]) * y[j];
@@ -101,9 +105,12 @@ TEST(wavelet_derivatives_match_finite_differences) {
             for (double x : {-2.0, -0.6, 0.1, 0.45, 1.7}) {
                 const auto r = kan::evaluate_wavelet(x, tau, l);
                 const double h = 1e-6;
-                const double dx = (kan::evaluate_wavelet(x + h, tau, l).value - kan::evaluate_wavelet(x - h, tau, l).value) / (2 * h);
-                const double dt = (kan::evaluate_wavelet(x, tau + h, l).value - kan::evaluate_wavelet(x, tau - h, l).value) / (2 * h);
-                const double dl = (kan::evaluate_wavelet(x, tau, l + h).value - kan::evaluate_wavelet(x, tau, l - h).value) / (2 * h);
+                const double dx =
+                    (kan::evaluate_wavelet(x + h, tau, l).value - kan::evaluate_wavelet(x - h, tau, l).value) / (2 * h);
+                const double dt =
+                    (kan::evaluate_wavelet(x, tau + h, l).value - kan::evaluate_wavelet(x, tau - h, l).value) / (2 * h);
+                const double dl =
+                    (kan::evaluate_wavelet(x, tau, l + h).value - kan::evaluate_wavelet(x, tau, l - h).value) / (2 * h);
                 test::near(r.input_derivative, dx, 1e-7);
                 test::near(r.translation_derivative, dt, 1e-7);
                 test::near(r.log_scale_derivative, dl, 1e-7);
@@ -131,7 +138,8 @@ TEST(wavelet_tails_keep_representable_values_and_derivatives) {
     REQUIRE(far.value == 0 && far.input_derivative == 0 && far.log_scale_derivative == 0);
     // x - tau overflows, q is finite: still finite results.
     const auto wide = kan::evaluate_wavelet(1.5e308, -1.5e308, 700);
-    REQUIRE(std::isfinite(wide.value) && std::isfinite(wide.input_derivative) && std::isfinite(wide.log_scale_derivative));
+    REQUIRE(std::isfinite(wide.value) && std::isfinite(wide.input_derivative) &&
+            std::isfinite(wide.log_scale_derivative));
     // The retried distance x r - tau r lands in the direct range: closed form.
     {
         const double x = 1e308, tau = -1e308, l = 709;
@@ -203,7 +211,8 @@ TEST(wavelet_layer_vjps_match_finite_differences) {
         const double h = 1e-6;
         for (std::size_t j = 0; j < x.size(); ++j) {
             auto a = x, b = x;
-            a[j] += h; b[j] -= h;
+            a[j] += h;
+            b[j] -= h;
             test::near(g.input[j], (objective(layer, a, batch, u) - objective(layer, b, batch, u)) / (2 * h), 1e-7);
         }
         const auto& e = edges_of(layer);
@@ -233,7 +242,10 @@ TEST(wavelet_layer_matches_the_fixed_dictionary) {
     const auto w = wave(18, 0.6, 0.8, 0.1), bias = wave(3, 0.2, 1.0, 0.3);
     fixed.set_parameters(w, bias);
     std::vector<double> tau(18), l(18);
-    for (std::size_t j = 0; j < 18; ++j) { tau[j] = centers[j % 3]; l[j] = std::log(scales[j % 3]); }
+    for (std::size_t j = 0; j < 18; ++j) {
+        tau[j] = centers[j % 3];
+        l[j] = std::log(scales[j % 3]);
+    }
     kan::set_wavelet_parameters(trainable, w, tau, l, bias);
     const auto x = wave(8, 1.3, 0.5, 0.7), u = wave(12, 0.7, 0.9, 0.2);
     const auto a = fixed.forward(x, 4), b = trainable.forward(x, 4);
@@ -247,18 +259,27 @@ TEST(wavelet_setters_validate_and_are_atomic) {
     auto layer = wavelet(2, 1, 2);
     const auto before = layer.carrier();
     const std::vector<double> four(4, 0.1), bias{0.5};
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, std::vector<double>(3), four, four, bias); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, four, std::vector<double>(5), four, bias); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, four, four, four, std::vector<double>(2)); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, four, std::vector<double>{0, inf, 0, 0}, four, bias); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, four, four, std::vector<double>{0, 0, 710, 0}, bias); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, four, four, std::vector<double>{not_a_number, 0, 0, 0}, bias); });
-    test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(layer, std::vector<double>{inf, 0, 0, 0}, four, four, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, std::vector<double>(3), four, four, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, four, std::vector<double>(5), four, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, four, four, four, std::vector<double>(2)); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, four, std::vector<double>{0, inf, 0, 0}, four, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, four, four, std::vector<double>{0, 0, 710, 0}, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, four, four, std::vector<double>{not_a_number, 0, 0, 0}, bias); });
+    test::throws<std::invalid_argument>(
+        [&] { kan::set_wavelet_parameters(layer, std::vector<double>{inf, 0, 0, 0}, four, four, bias); });
     test::throws<std::invalid_argument>([&] {
         layer.set_carrier(kan::WaveletEdges{kan::WaveletConfig{2}, four, four, std::vector<double>{-800, 0, 0, 0}});
     });
-    test::throws<std::invalid_argument>([&] { layer.set_carrier(kan::WaveletEdges{kan::WaveletConfig{2}, four, four, std::vector<double>(3)}); });
-    test::throws<std::invalid_argument>([&] { layer.set_carrier(kan::WaveletEdges{kan::WaveletConfig{0}, {}, {}, {}}); });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::WaveletEdges{kan::WaveletConfig{2}, four, four, std::vector<double>(3)}); });
+    test::throws<std::invalid_argument>(
+        [&] { layer.set_carrier(kan::WaveletEdges{kan::WaveletConfig{0}, {}, {}, {}}); });
     REQUIRE(layer.carrier() == before);
     kan::Layer chebyshev(2, 1, kan::ChebyshevConfig{2});
     test::throws<std::invalid_argument>([&] { kan::set_wavelet_parameters(chebyshev, four, four, four, bias); });
@@ -365,7 +386,8 @@ TEST(wavelet_networks_differentiate_and_learn) {
     };
     for (std::size_t j = 0; j < 6; ++j) {
         auto a = x, b = x;
-        a[j] += 1e-6; b[j] -= 1e-6;
+        a[j] += 1e-6;
+        b[j] -= 1e-6;
         test::near(g.input[j], (loss(a) - loss(b)) / 2e-6, 1e-7);
     }
     // Full-batch MSE training moves every translation and log scale, and the

@@ -30,7 +30,8 @@ class Network {
 public:
     explicit Network(std::vector<NetworkLayer> layers);
     // KAN layers only (unchanged pre-M1 construction).
-    template<class L> requires std::same_as<L, Layer>
+    template<class L>
+        requires std::same_as<L, Layer>
     explicit Network(std::vector<L> layers)
         : Network(std::vector<NetworkLayer>(std::make_move_iterator(layers.begin()),
                                             std::make_move_iterator(layers.end()))) {}
@@ -61,6 +62,7 @@ public:
     // weights, Layer::regularization); input maps contribute zero value and
     // zero gradients of their trainable parameters.
     NetworkRegularizationResult regularization(double coefficient_l2) const;
+
 private:
     void validate_state() const;
     Layer& kan_layer(std::size_t index);

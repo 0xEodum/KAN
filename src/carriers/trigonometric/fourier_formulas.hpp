@@ -20,8 +20,8 @@
 namespace kan::detail {
 
 template<class Scalar, class Guard>
-KAN_HOST_DEVICE void fourier_terms(Scalar frequency, std::size_t terms, Scalar x, Scalar* v,
-                                   Scalar* d, const Guard& guard) {
+KAN_HOST_DEVICE void fourier_terms(Scalar frequency, std::size_t terms, Scalar x, Scalar* v, Scalar* d,
+                                   const Guard& guard) {
     v[0] = 1;
     d[0] = 0;
     for (std::size_t k = 1; k <= terms / 2; ++k) {

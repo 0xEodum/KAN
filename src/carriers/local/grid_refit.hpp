@@ -31,17 +31,19 @@ namespace kan::detail {
 // sample k) with the relative margin m >= 0. With m = 0 the endpoints are the
 // extreme samples exactly.
 template<class Load>
-KAN_HOST_DEVICE inline double refit_knot(const Load& sorted, std::size_t n, std::size_t intervals, std::size_t j, double eps,
-                                         double margin) {
+KAN_HOST_DEVICE inline double refit_knot(const Load& sorted, std::size_t n, std::size_t intervals, std::size_t j,
+                                         double eps, double margin) {
     const double first = sorted(0), last = sorted(n - 1), extension = margin * (last - first);
     const double lo = first - extension, hi = last + extension;
     if (j == 0) return lo;
     if (j >= intervals) return hi;
-    auto rank = static_cast<std::size_t>(static_cast<double>(n) / static_cast<double>(intervals) * static_cast<double>(j));
+    auto rank =
+        static_cast<std::size_t>(static_cast<double>(n) / static_cast<double>(intervals) * static_cast<double>(j));
     if (rank > n - 1) rank = n - 1;
     const double h = (hi - lo) / static_cast<double>(intervals);
-    const double uniform = math::finite(h) ? lo + h * static_cast<double>(j)
-                                           : 2 * (lo / 2 + (hi / 2 - lo / 2) / static_cast<double>(intervals) * static_cast<double>(j));
+    const double uniform =
+        math::finite(h) ? lo + h * static_cast<double>(j)
+                        : 2 * (lo / 2 + (hi / 2 - lo / 2) / static_cast<double>(intervals) * static_cast<double>(j));
     return eps * uniform + (1 - eps) * sorted(rank);
 }
 
@@ -56,8 +58,10 @@ KAN_HOST_DEVICE inline std::size_t spline_first_term(const Scalar* t, std::size_
         std::size_t lo = degree, hi = terms;
         while (lo < hi) {
             const auto mid = lo + (hi - lo) / 2;
-            if (t[mid] <= x) lo = mid + 1;
-            else hi = mid;
+            if (t[mid] <= x)
+                lo = mid + 1;
+            else
+                hi = mid;
         }
         span = lo - 1;
     }
@@ -69,15 +73,18 @@ KAN_HOST_DEVICE inline std::size_t spline_first_term(const Scalar* t, std::size_
 // v[0..degree] for terms g..g+degree, or returns `terms` outside the domain
 // (nothing written).
 template<class Scalar>
-KAN_HOST_DEVICE inline std::size_t spline_values(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x, Scalar* v) {
+KAN_HOST_DEVICE inline std::size_t spline_values(const Scalar* t, std::size_t terms, std::size_t degree, Scalar x,
+                                                 Scalar* v) {
     if (!(x >= t[degree] && x <= t[terms])) return terms; // NaN: outside
     std::size_t span = terms - 1;
     if (x != t[terms]) {
         std::size_t lo = degree, hi = terms;
         while (lo < hi) {
             const auto mid = lo + (hi - lo) / 2;
-            if (t[mid] <= x) lo = mid + 1;
-            else hi = mid;
+            if (t[mid] <= x)
+                lo = mid + 1;
+            else
+                hi = mid;
         }
         span = lo - 1;
     }
@@ -108,8 +115,9 @@ KAN_HOST_DEVICE inline std::size_t spline_values(const Scalar* t, std::size_t te
 // executor, whose samples and knots are float); products and sums in double.
 // Returns false if the sample's first terms are not (g, g').
 template<unsigned Width, class Scalar>
-KAN_HOST_DEVICE bool refit_sample(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current, std::size_t current_terms,
-                                  std::size_t degree, Scalar x, std::size_t g, std::size_t g_current, double* nn, double* no) {
+KAN_HOST_DEVICE bool refit_sample(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current,
+                                  std::size_t current_terms, std::size_t degree, Scalar x, std::size_t g,
+                                  std::size_t g_current, double* nn, double* no) {
     constexpr std::size_t Most = Width ? Width : max_spline_degree + 1;
     // A compile-time degree keeps the Cox-de Boor scratch in registers (nvcc
     // -Xptxas -v: 144-352 bytes of stack per thread with the runtime degree).
@@ -129,14 +137,19 @@ KAN_HOST_DEVICE bool refit_sample(const Scalar* fresh, std::size_t fresh_terms, 
 // The products of one run of sorted samples x(begin..end-1) in sample order
 // (the accumulators are zeroed first); false if a sample is not of the run.
 template<unsigned Width, class Scalar, class Load>
-KAN_HOST_DEVICE bool refit_run_sums(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current, std::size_t current_terms,
-                                    std::size_t degree, const Load& x, std::size_t begin, std::size_t end, std::size_t g,
-                                    std::size_t g_current, double* nn, double* no) {
+KAN_HOST_DEVICE bool refit_run_sums(const Scalar* fresh, std::size_t fresh_terms, const Scalar* current,
+                                    std::size_t current_terms, std::size_t degree, const Load& x, std::size_t begin,
+                                    std::size_t end, std::size_t g, std::size_t g_current, double* nn, double* no) {
     const std::size_t P = Width ? Width : degree + 1;
-    for (std::size_t k = 0; k < P * P; ++k) { nn[k] = 0; no[k] = 0; }
+    for (std::size_t k = 0; k < P * P; ++k) {
+        nn[k] = 0;
+        no[k] = 0;
+    }
     bool consistent = true;
     for (std::size_t b = begin; b < end; ++b)
-        consistent = refit_sample<Width>(fresh, fresh_terms, current, current_terms, degree, x(b), g, g_current, nn, no) && consistent;
+        consistent =
+            refit_sample<Width>(fresh, fresh_terms, current, current_terms, degree, x(b), g, g_current, nn, no) &&
+            consistent;
     return consistent;
 }
 
@@ -165,7 +178,8 @@ KAN_HOST_DEVICE inline bool band_cholesky(double* band, std::size_t terms, std::
 }
 
 // Solves L L^T x = b in place for one right-hand side x[k*stride], k < terms.
-KAN_HOST_DEVICE inline void band_solve(const double* band, std::size_t terms, std::size_t degree, double* x, std::size_t stride) {
+KAN_HOST_DEVICE inline void band_solve(const double* band, std::size_t terms, std::size_t degree, double* x,
+                                       std::size_t stride) {
     const std::size_t P = degree + 1;
     for (std::size_t k = 0; k < terms; ++k) {
         double s = x[k * stride];

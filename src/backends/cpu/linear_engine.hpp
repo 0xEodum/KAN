@@ -26,9 +26,8 @@ namespace kan::detail {
 class Expansion {
 public:
     Expansion(const BasisView& view, std::size_t inputs)
-        : view_(view), inputs_(inputs), width_(checked_size(inputs, view.terms)),
-          values(width_), derivatives(width_), center_derivatives(view.trainable ? width_ : 0),
-          log_width_derivatives(view.trainable ? width_ : 0) {}
+        : view_(view), inputs_(inputs), width_(checked_size(inputs, view.terms)), values(width_), derivatives(width_),
+          center_derivatives(view.trainable ? width_ : 0), log_width_derivatives(view.trainable ? width_ : 0) {}
     std::size_t terms() const noexcept { return view_.terms; }
     std::size_t width() const noexcept { return width_; }
     // x: the sample's `inputs` values, finite.
@@ -53,8 +52,8 @@ public:
 };
 
 // One sample: output[o] = bias[o] + sum_j coefficients[o*width + j] * phi[j].
-inline void contract(const double* coefficients, const double* bias, const double* phi,
-                     std::size_t outputs, std::size_t width, double* output) {
+inline void contract(const double* coefficients, const double* bias, const double* phi, std::size_t outputs,
+                     std::size_t width, double* output) {
     for (std::size_t o = 0; o < outputs; ++o) {
         const double* row = coefficients + o * width;
         double sum = bias[o];
@@ -70,9 +69,8 @@ inline void contract(const double* coefficients, const double* bias, const doubl
 // each term, j = i*K + k, so a carrier with trainable basis parameters adds
 // their VJPs inside the same loop; it is a no-op for linear carriers.
 template<class Nonlinear>
-void contract_vjp(const double* coefficients, const double* upstream, const Expansion& expansion,
-                  std::size_t inputs, std::size_t outputs, double* coefficient_gradient,
-                  double* input_gradient, Nonlinear&& nonlinear) {
+void contract_vjp(const double* coefficients, const double* upstream, const Expansion& expansion, std::size_t inputs,
+                  std::size_t outputs, double* coefficient_gradient, double* input_gradient, Nonlinear&& nonlinear) {
     const auto terms = expansion.terms();
     const double* phi = expansion.values.data();
     const double* slope = expansion.derivatives.data();
@@ -120,8 +118,9 @@ public:
     // Expansion::expand (input by input, the same formula operations).
     void expand(const double* x) {
         for (std::size_t i = 0; i < inputs_; ++i)
-            first[i] = spline_span_terms(view_.knots + i * knot_stride_, view_.terms, view_.degree, x[i], values.data() + i * width_,
-                                         derivatives.data() + i * width_, FiniteBasisGuard{});
+            first[i] =
+                spline_span_terms(view_.knots + i * knot_stride_, view_.terms, view_.degree, x[i],
+                                  values.data() + i * width_, derivatives.data() + i * width_, FiniteBasisGuard{});
     }
     // Dense Phi / Phi' entry k of input i (zero outside the span).
     double value(std::size_t i, std::size_t k) const noexcept { return entry(values, i, k); }
@@ -129,7 +128,8 @@ public:
 
 private:
     double entry(const std::vector<double>& rows, std::size_t i, std::size_t k) const noexcept {
-        return first[i] != view_.terms && k >= first[i] && k - first[i] < width_ ? rows[i * width_ + k - first[i]] : 0.0;
+        return first[i] != view_.terms && k >= first[i] && k - first[i] < width_ ? rows[i * width_ + k - first[i]]
+                                                                                 : 0.0;
     }
     BasisView view_;
     std::size_t inputs_, width_, knot_stride_;
@@ -167,7 +167,8 @@ inline void contract_sparse(const double* coefficients, const double* bias, cons
 inline std::vector<double> edge_magnitudes(const double* coefficients, std::size_t edges, std::size_t terms) {
     std::vector<double> result(edges, 0.0);
     for (std::size_t e = 0; e < edges; ++e)
-        for (std::size_t k = 0; k < terms; ++k) result[e] = std::fmax(result[e], std::fabs(coefficients[e * terms + k]));
+        for (std::size_t k = 0; k < terms; ++k)
+            result[e] = std::fmax(result[e], std::fabs(coefficients[e * terms + k]));
     return result;
 }
 

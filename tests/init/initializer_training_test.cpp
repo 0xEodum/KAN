@@ -10,7 +10,10 @@
 namespace {
 constexpr std::size_t width = 8, hidden_layers = 4, epochs = 3000;
 
-struct Data { std::vector<double> x, target; std::size_t batch; };
+struct Data {
+    std::vector<double> x, target;
+    std::size_t batch;
+};
 
 // f(x1, x2) = x1 * x2 on an 8 x 8 grid in [-0.9, 0.9]^2: not of the form
 // g(h1(x1) + h2(x2)), so it needs more than one effective hidden unit.
@@ -25,8 +28,7 @@ Data product_data() {
     return d;
 }
 
-template<class Config>
-kan::Network deep_network(const Config& config) {
+template<class Config> kan::Network deep_network(const Config& config) {
     std::vector<kan::NetworkLayer> stages;
     std::size_t in = 2;
     for (std::size_t l = 0; l <= hidden_layers; ++l) {
@@ -74,8 +76,7 @@ double target_variance(const Data& d) {
     return s / double(d.batch);
 }
 
-template<class Config>
-void demonstrate(const Config& config, const char* name, double rate) {
+template<class Config> void demonstrate(const Config& config, const char* name, double rate) {
     const auto d = product_data();
     const double variance = target_variance(d);
     const double zero = train(deep_network(config), d, rate, std::string(name) + " zero");
@@ -103,7 +104,9 @@ kan::RationalConfig rational(kan::DenominatorPolicy policy) {
 }
 } // namespace
 
-TEST(deep_chebyshev_trains_only_from_explicit_initialization) { demonstrate(kan::ChebyshevConfig{5}, "chebyshev", 0.03); }
+TEST(deep_chebyshev_trains_only_from_explicit_initialization) {
+    demonstrate(kan::ChebyshevConfig{5}, "chebyshev", 0.03);
+}
 TEST(deep_bspline_trains_only_from_explicit_initialization) { demonstrate(spline(), "bspline", 0.03); }
 TEST(deep_rational_guarded_trains_only_from_explicit_initialization) {
     demonstrate(rational(kan::DenominatorPolicy::Guarded), "rational guarded", 0.03);

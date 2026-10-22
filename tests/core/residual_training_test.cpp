@@ -13,7 +13,10 @@
 namespace {
 constexpr std::size_t width = 8, hidden_layers = 4, epochs = 3000, rational_noise_epochs = 10000;
 
-struct Data { std::vector<double> x, target; std::size_t batch; };
+struct Data {
+    std::vector<double> x, target;
+    std::size_t batch;
+};
 
 Data product_data() {
     Data d{{}, {}, 64};
@@ -28,8 +31,7 @@ Data product_data() {
 
 // [Tanh, KAN 2->8, (Tanh, KAN 8->8) x 3, Tanh, KAN 8->1], each KAN layer with
 // a (zero, to be initialized) residual branch.
-template<class Config>
-kan::Network deep_network(const Config& config) {
+template<class Config> kan::Network deep_network(const Config& config) {
     std::vector<kan::NetworkLayer> stages;
     std::size_t in = 2;
     for (std::size_t l = 0; l <= hidden_layers; ++l) {
@@ -56,7 +58,8 @@ double train(kan::Network net, const Data& d, double rate, const std::string& la
             s += (y[b] - d.target[b]) * (y[b] - d.target[b]);
         }
         last = s / double(d.batch);
-        if (epoch == 0 || epoch == 100 || epoch == 300 || epoch == 1000 || epoch == 3000 || epoch == 5000 || epoch == epochs)
+        if (epoch == 0 || epoch == 100 || epoch == 300 || epoch == 1000 || epoch == 3000 || epoch == 5000 ||
+            epoch == epochs)
             std::printf(" %zu:%.3e", epoch, last);
         if (epoch < epochs) net.sgd(net.backward(d.x, d.batch, upstream), rate);
     }
@@ -82,7 +85,7 @@ void demonstrate(const Config& config, const char* name, double rate, std::size_
     auto scaled = deep_network(config);
     kan::initialize(scaled, kan::VarianceScaling{1, kan::Distribution::Uniform, 1, {}});
     const double variance_scaled = train(scaled, d, rate, std::string(name) + " variance+residual", epochs);
-    REQUIRE(noise < 0.5 * variance);           // NoiseInit leaves the saddle with the branch
+    REQUIRE(noise < 0.5 * variance);            // NoiseInit leaves the saddle with the branch
     REQUIRE(variance_scaled < 0.05 * variance); // VarianceScaling (zero branch weights) still trains
 }
 

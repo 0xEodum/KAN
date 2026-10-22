@@ -10,12 +10,11 @@ namespace kan::detail {
 namespace {
 
 // Edge (o,i) of a validated carrier at x; Policy is its denominator policy.
-template<DenominatorPolicy Policy>
-RationalTerms edge_terms(const RationalEdges& edges, std::size_t edge, double x) {
+template<DenominatorPolicy Policy> RationalTerms edge_terms(const RationalEdges& edges, std::size_t edge, double x) {
     const auto m = edges.config.numerator_degree + 1, n = edges.config.denominator_degree;
     return evaluate_rational_trusted<Policy>(edges.config, x,
-                                     std::span<const double>(edges.coefficients).subspan(edge * m, m),
-                                     std::span<const double>(edges.denominators).subspan(edge * n, n));
+                                             std::span<const double>(edges.coefficients).subspan(edge * m, m),
+                                             std::span<const double>(edges.denominators).subspan(edge * n, n));
 }
 
 // The loops of one policy. Loop bounds are locals of these functions (not
@@ -36,8 +35,8 @@ void forward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const 
 }
 
 template<DenominatorPolicy Policy>
-void backward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const double> input,
-                    std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+                    std::span<const double> upstream, std::span<double> input_gradient,
                     std::span<double> coefficient_gradient, RationalGradients& nonlinear) {
     const auto inputs = shape.inputs, outputs = shape.outputs;
     const auto m = edges.config.numerator_degree + 1, n = edges.config.denominator_degree;
@@ -49,7 +48,8 @@ void backward_edges(const RationalEdges& edges, EdgeShape shape, std::span<const
                 const auto r = edge_terms<Policy>(edges, edge, input[b * inputs + i]);
                 const auto u = upstream[b * outputs + o];
                 input_gradient[b * inputs + i] += u * r.input_derivative;
-                for (std::size_t k = 0; k < m; ++k) coefficient_gradient[edge * m + k] += u * r.numerator_derivatives[k];
+                for (std::size_t k = 0; k < m; ++k)
+                    coefficient_gradient[edge * m + k] += u * r.numerator_derivatives[k];
                 for (std::size_t k = 0; k < n; ++k) denominators[edge * n + k] += u * r.denominator_derivatives[k];
             }
 }
@@ -69,15 +69,15 @@ void validate(const RationalEdges& edges, EdgeShape shape) {
 
 void require_finite_nonlinear(const RationalEdges& edges) { require_finite(edges.denominators); }
 
-void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias,
-             std::span<const double> input, std::size_t batch, std::span<double> output) {
+void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output) {
     visit_denominator_policy(edges.config.denominator_policy, [&](auto policy) {
         forward_edges<decltype(policy)::value>(edges, shape, bias, input, batch, output);
     });
 }
 
-void backward(const RationalEdges& edges, EdgeShape shape, std::span<const double> input,
-              std::size_t batch, std::span<const double> upstream, std::span<double> input_gradient,
+void backward(const RationalEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, RationalGradients& nonlinear) {
     visit_denominator_policy(edges.config.denominator_policy, [&](auto policy) {
         backward_edges<decltype(policy)::value>(edges, shape, input, batch, upstream, input_gradient,

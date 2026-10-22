@@ -42,27 +42,31 @@ template<class... Parts> std::string precise(const Parts&... parts) {
     return out.str();
 }
 // reduced: optional per-entry absolute term (the TF32 reduction allowance).
-void close(std::span<const double> actual, std::span<const double> expected,
-           double relative = -1, double floor = -1, std::span<const double> reduced = {}) {
-    if (relative < 0) { relative = call_relative; floor = call_floor; }
+void close(std::span<const double> actual, std::span<const double> expected, double relative = -1, double floor = -1,
+           std::span<const double> reduced = {}) {
+    if (relative < 0) {
+        relative = call_relative;
+        floor = call_floor;
+    }
     REQUIRE(actual.size() == expected.size());
     double scale = 0;
     for (double e : expected) scale = std::max(scale, std::abs(e));
     for (std::size_t i = 0; i < actual.size(); ++i) {
         REQUIRE(std::isfinite(actual[i]));
         const double allowance = reduced.empty() ? 0.0 : reduced[i];
-        if (std::abs(actual[i]-expected[i]) > relative*std::abs(expected[i]) + floor*scale + fp32_underflow + allowance)
+        if (std::abs(actual[i] - expected[i]) >
+            relative * std::abs(expected[i]) + floor * scale + fp32_underflow + allowance)
             throw std::runtime_error(precise("index ", i, " of ", actual.size(), " actual=", actual[i],
                                              " expected=", expected[i], " scale=", scale));
     }
 }
 std::vector<double> wave(std::size_t count, double scale, double frequency, double phase = 0) {
     std::vector<double> v(count);
-    for (std::size_t i = 0; i < count; ++i) v[i] = scale*std::sin(frequency*static_cast<double>(i)+phase);
+    for (std::size_t i = 0; i < count; ++i) v[i] = scale * std::sin(frequency * static_cast<double>(i) + phase);
     return v;
 }
 kan::Layer seeded(kan::Layer l, double phase) {
-    const auto scale = 1.0/std::sqrt(static_cast<double>(l.inputs()*l.terms()));
+    const auto scale = 1.0 / std::sqrt(static_cast<double>(l.inputs() * l.terms()));
     l.set_parameters(wave(l.coefficients().size(), scale, 0.731, phase), wave(l.outputs(), 0.05, 1.3, phase));
     return l;
 }
@@ -71,7 +75,11 @@ kan::Layer layer(std::size_t in, std::size_t out, kan::BasisConfig basis, double
 }
 kan::Layer rational(kan::DenominatorPolicy policy, std::size_t in, std::size_t out, std::size_t m, std::size_t n) {
     kan::RationalConfig r;
-    r.numerator_degree = m; r.denominator_degree = n; r.center = 0.1; r.scale = 1.3; r.denominator_policy = policy;
+    r.numerator_degree = m;
+    r.denominator_degree = n;
+    r.center = 0.1;
+    r.scale = 1.3;
+    r.denominator_policy = policy;
     kan::Layer l(in, out, r);
     const auto a = wave(l.coefficients().size(), 0.3, 1.0, 1.0);
     const auto b = wave(test::denominators(l).size(), 0.5, 2.0, 2.6);
@@ -81,16 +89,20 @@ kan::Layer rational(kan::DenominatorPolicy policy, std::size_t in, std::size_t o
 // Every basis family, with ordinary parameters.
 kan::BasisConfig family(test::Family kind) {
     test::FamilyParameters p{5};
-    p.alpha = 0.3; p.beta = -0.2; p.frequency = 1.7;
-    p.centers = {-1, -0.5, 0, 0.5, 1}; p.width = 0.8;
+    p.alpha = 0.3;
+    p.beta = -0.2;
+    p.frequency = 1.7;
+    p.centers = {-1, -0.5, 0, 0.5, 1};
+    p.width = 0.8;
     p.log_widths = {-0.3, -0.2, -0.1, -0.2, -0.3};
     p.scales = {0.6, 0.7, 0.8, 0.7, 0.6};
-    p.degree = 3; p.knots = {-1.5, -1.5, -1.5, -1.5, -0.5, 0.25, 1.5, 1.5, 1.5, 1.5};
+    p.degree = 3;
+    p.knots = {-1.5, -1.5, -1.5, -1.5, -0.5, 0.25, 1.5, 1.5, 1.5, 1.5};
     return test::basis(kind, p);
 }
-constexpr test::Family families[] = {test::Family::Chebyshev, test::Family::Legendre, test::Family::Jacobi,
-                                     test::Family::Hermite, test::Family::Fourier, test::Family::GaussianRbf,
-                                     test::Family::TrainableRbf, test::Family::BSpline, test::Family::MexicanHat,
+constexpr test::Family families[] = {test::Family::Chebyshev,      test::Family::Legendre, test::Family::Jacobi,
+                                     test::Family::Hermite,        test::Family::Fourier,  test::Family::GaussianRbf,
+                                     test::Family::TrainableRbf,   test::Family::BSpline,  test::Family::MexicanHat,
                                      test::Family::HermiteFunction};
 
 void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients& expected) {
@@ -98,13 +110,13 @@ void gradients(const kan::NetworkGradients& actual, const kan::NetworkGradients&
     // gradient; none for the last layer, whose U is the uploaded output gradient.
     const auto bias_allowance = [&](std::size_t j) {
         std::vector<double> sums;
-        if (call_reduction == 0 || j+1 == expected.layers.size()) return sums;
-        const auto u = std::holds_alternative<kan::InputMapGradients>(expected.layers[j+1])
-            ? std::span<const double>(test::map_grad(expected, j+1).input)
-            : std::span<const double>(test::grad(expected, j+1).input);
+        if (call_reduction == 0 || j + 1 == expected.layers.size()) return sums;
+        const auto u = std::holds_alternative<kan::InputMapGradients>(expected.layers[j + 1])
+                           ? std::span<const double>(test::map_grad(expected, j + 1).input)
+                           : std::span<const double>(test::grad(expected, j + 1).input);
         sums.assign(test::grad(expected, j).bias.size(), 0.0);
         REQUIRE(!sums.empty() && u.size() % sums.size() == 0);
-        for (std::size_t i = 0; i < u.size(); ++i) sums[i % sums.size()] += call_reduction*std::abs(u[i]);
+        for (std::size_t i = 0; i < u.size(); ++i) sums[i % sums.size()] += call_reduction * std::abs(u[i]);
         return sums;
     };
     close(actual.input, expected.input);
@@ -132,12 +144,19 @@ std::vector<double> flat(const kan::Network& network) {
     auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
     for (std::size_t j = 0; j < network.layers().size(); ++j) {
         if (std::holds_alternative<kan::InputMap>(network.layers()[j])) {
-            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) { add(n->gain); add(n->bias); }
+            if (const auto* n = std::get_if<kan::LayerNormMap>(&test::input_map(network, j).map())) {
+                add(n->gain);
+                add(n->bias);
+            }
             continue;
         }
         const auto& l = test::layer(network, j);
-        add(l.coefficients()); add(l.bias());
-        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) { add(t->basis.centers); add(t->basis.log_widths); }
+        add(l.coefficients());
+        add(l.bias());
+        if (const auto* t = std::get_if<kan::TrainableRbfEdges>(&l.carrier())) {
+            add(t->basis.centers);
+            add(t->basis.log_widths);
+        }
         add(test::denominators(l));
     }
     return v;
@@ -146,9 +165,17 @@ std::vector<double> flat(const kan::NetworkGradients& gradients) {
     std::vector<double> v;
     auto add = [&](std::span<const double> s) { v.insert(v.end(), s.begin(), s.end()); };
     for (const auto& stage : gradients.layers) {
-        if (const auto* m = std::get_if<kan::InputMapGradients>(&stage)) { add(m->gain); add(m->bias); continue; }
+        if (const auto* m = std::get_if<kan::InputMapGradients>(&stage)) {
+            add(m->gain);
+            add(m->bias);
+            continue;
+        }
         const auto& g = std::get<kan::LayerGradients>(stage);
-        add(g.coefficients); add(g.bias); add(test::centers(g)); add(test::log_widths(g)); add(test::denominators(g));
+        add(g.coefficients);
+        add(g.bias);
+        add(test::centers(g));
+        add(test::log_widths(g));
+        add(test::denominators(g));
     }
     return v;
 }
@@ -166,33 +193,38 @@ void train_like_cpu(kan::Network cpu, std::size_t batch, std::size_t capacity, d
     ResidentNetwork gpu(cpu, capacity, precision);
     REQUIRE(gpu.precision() == precision);
     const bool tf32 = precision == Precision::TensorFloat32;
-    call_relative = tf32 ? tf32_relative : fp32_relative; call_floor = tf32 ? tf32_floor : fp32_floor;
+    call_relative = tf32 ? tf32_relative : fp32_relative;
+    call_floor = tf32 ? tf32_floor : fp32_floor;
     call_reduction = tf32 ? tf32_reduction : 0;
     const auto allocations = gpu.workspace_allocations();
-    const auto x = wave(batch*cpu.inputs(), 0.9, 0.37), dy = wave(batch*cpu.outputs(), 0.2, 0.53, 1);
-    gpu.upload_input(x, batch); gpu.upload_output_gradient(dy);
+    const auto x = wave(batch * cpu.inputs(), 0.9, 0.37), dy = wave(batch * cpu.outputs(), 0.2, 0.53, 1);
+    gpu.upload_input(x, batch);
+    gpu.upload_output_gradient(dy);
     for (int step = 0; step < steps; ++step) {
         const auto reference = gpu.download_parameters();
-        gpu.forward(); close(gpu.download_output(), reference.forward(x, batch));
+        gpu.forward();
+        close(gpu.download_output(), reference.forward(x, batch));
         gpu.backward(lambda);
         auto expected = reference.backward(x, batch, dy);
         const auto penalty = reference.regularization(lambda).gradients;
         for (std::size_t j = 0; j < expected.layers.size(); ++j)
             if (auto* g = std::get_if<kan::LayerGradients>(&expected.layers[j]))
-                for (std::size_t k = 0; k < g->coefficients.size(); ++k) g->coefficients[k] += test::grad(penalty, j).coefficients[k];
+                for (std::size_t k = 0; k < g->coefficients.size(); ++k)
+                    g->coefficients[k] += test::grad(penalty, j).coefficients[k];
         const auto actual = gpu.download_gradients();
         gradients(actual, expected);
         gpu.sgd(rate);
         auto updated = flat(reference);
         const auto g = flat(actual);
-        for (std::size_t k = 0; k < updated.size(); ++k) updated[k] -= rate*g[k];
+        for (std::size_t k = 0; k < updated.size(); ++k) updated[k] -= rate * g[k];
         close(flat(gpu.download_parameters()), updated);
         // FP64 trajectory from the original parameters.
         auto total = cpu.backward(x, batch, dy);
         const auto cpu_penalty = cpu.regularization(lambda).gradients;
         for (std::size_t j = 0; j < total.layers.size(); ++j)
             if (auto* t = std::get_if<kan::LayerGradients>(&total.layers[j]))
-                for (std::size_t k = 0; k < t->coefficients.size(); ++k) t->coefficients[k] += test::grad(cpu_penalty, j).coefficients[k];
+                for (std::size_t k = 0; k < t->coefficients.size(); ++k)
+                    t->coefficients[k] += test::grad(cpu_penalty, j).coefficients[k];
         cpu.sgd(total, rate);
     }
     close(flat(gpu.download_parameters()), flat(cpu), trajectory_relative, tf32 ? tf32_floor : trajectory_floor);
@@ -218,8 +250,7 @@ TEST(float32_every_family_and_input_map_trains_like_fp64_cpu) {
         kan::Network cpu({kan::InputMap(3, kan::AffineMap{{0.9, -1.1, 0.7}, {0.05, 0.1, -0.1}}),
                           layer(3, 4, family(kind), 0.2),
                           kan::InputMap(4, kan::LayerNormMap{1e-3, {1.1, 0.9, 1.0, 1.2}, {0.1, -0.1, 0.0, 0.05}}),
-                          layer(4, 2, kan::ChebyshevConfig{4}, 0.4),
-                          kan::InputMap(2, kan::TanhMap{0.8})});
+                          layer(4, 2, kan::ChebyshevConfig{4}, 0.4), kan::InputMap(2, kan::TanhMap{0.8})});
         train_like_cpu(std::move(cpu), 9, 12, 0.05, 3);
     }
 }
@@ -227,10 +258,10 @@ TEST(float32_every_family_and_input_map_trains_like_fp64_cpu) {
 // High-degree three-term recurrences (including Jacobi with alpha + beta
 // close to -1 and Hermite growth) on the whole [-1, 1] domain.
 TEST(float32_high_degree_recurrences_match_fp64_cpu) {
-    for (kan::BasisConfig basis : {kan::BasisConfig{kan::ChebyshevConfig{12}}, kan::BasisConfig{kan::LegendreConfig{12}},
-                                   kan::BasisConfig{kan::JacobiConfig{10, 2.5, -0.7}},
-                                   kan::BasisConfig{kan::JacobiConfig{9, -0.4, -0.55}},
-                                   kan::BasisConfig{kan::HermiteConfig{8}}}) {
+    for (kan::BasisConfig basis :
+         {kan::BasisConfig{kan::ChebyshevConfig{12}}, kan::BasisConfig{kan::LegendreConfig{12}},
+          kan::BasisConfig{kan::JacobiConfig{10, 2.5, -0.7}}, kan::BasisConfig{kan::JacobiConfig{9, -0.4, -0.55}},
+          kan::BasisConfig{kan::HermiteConfig{8}}}) {
         kan::Network cpu({layer(3, 2, basis, 0.3)});
         train_like_cpu(std::move(cpu), 33, 33, 0.0, 2, 0.01);
     }
@@ -250,7 +281,8 @@ std::pair<std::vector<double>, std::vector<double>> resident_psi(double x, std::
     const auto out = gpu.download_output();
     gpu.upload_output_gradient(upstream);
     gpu.backward();
-    return {std::vector<double>(out.begin(), out.begin() + static_cast<std::ptrdiff_t>(terms)), gpu.download_gradients().input};
+    return {std::vector<double>(out.begin(), out.begin() + static_cast<std::ptrdiff_t>(terms)),
+            gpu.download_gradients().input};
 }
 
 // Backlog M5: the ranges where exp(-x^2/2) underflows. FP32 beyond 14.4 up to the
@@ -265,7 +297,8 @@ TEST(resident_hermite_functions_hold_where_the_weight_underflows) {
         for (std::size_t n = 0; n < terms; ++n) {
             const double dscale = std::sqrt(2.0 * double(n) + 1);
             if (std::abs(values[n] - expected.values[n]) > absolute + relative * std::abs(expected.values[n]) ||
-                std::abs(slopes[n] - expected.derivatives[n]) > dscale * absolute + relative * std::abs(expected.derivatives[n]))
+                std::abs(slopes[n] - expected.derivatives[n]) >
+                    dscale * absolute + relative * std::abs(expected.derivatives[n]))
                 throw std::runtime_error(precise("x=", x, " n=", n, " value ", values[n], " vs ", expected.values[n],
                                                  " slope ", slopes[n], " vs ", expected.derivatives[n]));
         }
@@ -289,10 +322,11 @@ TEST(float32_high_degree_hermite_functions_match_fp64_cpu) {
 }
 
 TEST(float32_rational_policies_match_fp64_cpu) {
-    for (auto policy : {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
+    for (auto policy :
+         {kan::DenominatorPolicy::Guarded, kan::DenominatorPolicy::Absolute, kan::DenominatorPolicy::Smooth})
         for (const auto orders : {std::pair<std::size_t, std::size_t>{0, 0}, {0, 3}, {4, 1}, {3, 2}}) {
-            kan::Network cpu({rational(policy, 2, 3, orders.first, orders.second), layer(3, 2, kan::ChebyshevConfig{3}, 0.5),
-                              rational(policy, 2, 1, 3, 2)});
+            kan::Network cpu({rational(policy, 2, 3, orders.first, orders.second),
+                              layer(3, 2, kan::ChebyshevConfig{3}, 0.5), rational(policy, 2, 1, 3, 2)});
             train_like_cpu(std::move(cpu), 7, 8, 0.1, 3, 0.03);
         }
 }
@@ -303,11 +337,13 @@ TEST(float32_rational_policies_match_fp64_cpu) {
 TEST(float32_contraction_paths_match_fp64_cpu) {
     kan::TrainableRbfConfig rbf{{-1, -0.6, -0.2, 0.2, 0.6, 1}, {-1, -0.9, -0.8, -0.8, -0.9, -1}};
     train_like_cpu(kan::Network({layer(37, 23, kan::ChebyshevConfig{7}, 0.1), layer(23, 41, rbf, 0.2),
-                                 layer(41, 5, kan::BSplineConfig{3, {-2,-2,-2,-2,-1,0,0.5,1,2,2,2,2}}, 0.3),
-                                 layer(5, 3, kan::FourierConfig{5, 1.1}, 0.4)}), 129, 200, 0.05, 3, 0.2);
+                                 layer(41, 5, kan::BSplineConfig{3, {-2, -2, -2, -2, -1, 0, 0.5, 1, 2, 2, 2, 2}}, 0.3),
+                                 layer(5, 3, kan::FourierConfig{5, 1.1}, 0.4)}),
+                   129, 200, 0.05, 3, 0.2);
     for (std::size_t batch : {1000u, 400u, 7u})
         train_like_cpu(kan::Network({layer(64, 80, kan::ChebyshevConfig{7}, 0.7),
-                                     layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)}), batch, 1000, 0.01, 2, 0.01);
+                                     layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)}),
+                       batch, 1000, 0.01, 2, 0.01);
     // FP32 thresholds: 64*448+64 = 28 736 coefficients+outputs take the tiled
     // parameter VJP up to 2^22 / 28 736 = 145 samples (batch 7) and SGEMM above
     // (batch 400, 1000); the forward (2^24 multiply-adds) takes the warp kernel
@@ -322,14 +358,24 @@ TEST(float32_contraction_paths_match_fp64_cpu) {
 // test within the TF32 tolerance, and their results differ from FP32 SGEMM
 // (so the math mode is in effect) while staying within that tolerance of it.
 TEST(tensor_float32_contractions_match_fp64_cpu) {
-    struct Reset { ~Reset() { call_relative = fp32_relative; call_floor = fp32_floor; call_reduction = 0; } } reset;
+    struct Reset {
+        ~Reset() {
+            call_relative = fp32_relative;
+            call_floor = fp32_floor;
+            call_reduction = 0;
+        }
+    } reset;
     const auto net = [] {
-        return kan::Network({layer(64, 80, kan::ChebyshevConfig{7}, 0.7), layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)});
+        return kan::Network(
+            {layer(64, 80, kan::ChebyshevConfig{7}, 0.7), layer(80, 3, kan::JacobiConfig{5, 0.5, -0.25}, 0.8)});
     };
     train_like_cpu(net(), 1000, 1000, 0.01, 2, 0.01, Precision::TensorFloat32);
-    const auto x = wave(1000*64, 0.9, 0.37);
+    const auto x = wave(1000 * 64, 0.9, 0.37);
     ResidentNetwork fp32(net(), 1000, Precision::Float32), tf32(net(), 1000, Precision::TensorFloat32);
-    fp32.upload_input(x, 1000); fp32.forward(); tf32.upload_input(x, 1000); tf32.forward();
+    fp32.upload_input(x, 1000);
+    fp32.forward();
+    tf32.upload_input(x, 1000);
+    tf32.forward();
     const auto a = tf32.download_output(), b = fp32.download_output();
     REQUIRE(a != b);
     close(a, b, tf32_relative, tf32_floor);
@@ -344,20 +390,25 @@ TEST(float32_reports_overflow_beyond_float_range) {
     test::throws<std::overflow_error>([&] { gpu.forward(); });
     test::throws<std::logic_error>([&] { gpu.download_output(); });
     ResidentNetwork fp64(net, 2);
-    fp64.upload_input(std::vector<double>{8.0}, 1); fp64.forward();
+    fp64.upload_input(std::vector<double>{8.0}, 1);
+    fp64.forward();
     test::near(fp64.download_output()[0], 8e38, 1e-15);
-    gpu.upload_input(std::vector<double>{0.5}, 1); gpu.forward();
+    gpu.upload_input(std::vector<double>{0.5}, 1);
+    gpu.forward();
     close(gpu.download_output(), std::vector<double>{5e37});
     // Input VJP 1e38 * 4 overflows FP32.
     gpu.upload_output_gradient(std::vector<double>{4.0});
     test::throws<std::overflow_error>([&] { gpu.backward(); });
     // At x = 3: y = 3e38 and dx = -1e38 are finite, the coefficient VJP is -3;
     // the SGD candidate 1e38 + 1e38*3 is not: rejected, nothing committed.
-    gpu.upload_input(std::vector<double>{3.0}, 1); gpu.forward();
-    gpu.upload_output_gradient(std::vector<double>{-1.0}); gpu.backward();
+    gpu.upload_input(std::vector<double>{3.0}, 1);
+    gpu.forward();
+    gpu.upload_output_gradient(std::vector<double>{-1.0});
+    gpu.backward();
     const auto before = gpu.download_parameters();
     test::throws<std::overflow_error>([&] { gpu.sgd(1e38); });
-    REQUIRE(std::ranges::equal(test::layer(gpu.download_parameters(), 0).coefficients(), test::layer(before, 0).coefficients()));
+    REQUIRE(std::ranges::equal(test::layer(gpu.download_parameters(), 0).coefficients(),
+                               test::layer(before, 0).coefficients()));
     // A learning rate or L2 weight outside the FP32 range (or rounding to a
     // zero rate) cannot be applied in single precision.
     test::throws<std::invalid_argument>([&] { gpu.sgd(1e39); });
@@ -374,7 +425,9 @@ TEST(float32_rejects_unrepresentable_data_and_configuration) {
     test::throws<std::invalid_argument>([&] { gpu.upload_input(std::vector<double>{1e39, 0.0}, 1); });
     gpu.upload_input(std::vector<double>{0.5, 1e-50}, 1); // underflow to zero is rounding, not an error
     test::throws<std::invalid_argument>([&] { gpu.upload_output_gradient(std::vector<double>{-1e40}); });
-    gpu.forward(); gpu.upload_output_gradient(std::vector<double>{1.0}); gpu.backward();
+    gpu.forward();
+    gpu.upload_output_gradient(std::vector<double>{1.0});
+    gpu.backward();
 
     auto reject = [](kan::Network n) {
         test::throws<std::invalid_argument>([&] { ResidentNetwork(n, 2, Precision::Float32); });
@@ -391,10 +444,13 @@ TEST(float32_rejects_unrepresentable_data_and_configuration) {
     reject(kan::Network({layer(1, 1, kan::MexicanHatConfig{{0.0}, {1e-50}}, 0.1)}));
     // Distinct knots that round to one FP32 value would change the spline.
     reject(kan::Network({layer(1, 1, kan::BSplineConfig{3, {-1, -1, -1, -1, 0.5, 0.5 + 1e-12, 1, 1, 1, 1}}, 0.1)}));
-    kan::RationalConfig tiny_scale; tiny_scale.scale = 1e-50;
+    kan::RationalConfig tiny_scale;
+    tiny_scale.scale = 1e-50;
     reject(kan::Network({kan::Layer(1, 1, tiny_scale)}));
-    reject(kan::Network({kan::InputMap(2, kan::AffineMap{{1.0, 1e-50}, {0.0, 0.0}}), layer(2, 1, kan::ChebyshevConfig{3}, 0.1)}));
-    reject(kan::Network({kan::InputMap(2, kan::LayerNormMap{1e-50, {}, {}}), layer(2, 1, kan::ChebyshevConfig{3}, 0.1)}));
+    reject(kan::Network(
+        {kan::InputMap(2, kan::AffineMap{{1.0, 1e-50}, {0.0, 0.0}}), layer(2, 1, kan::ChebyshevConfig{3}, 0.1)}));
+    reject(
+        kan::Network({kan::InputMap(2, kan::LayerNormMap{1e-50, {}, {}}), layer(2, 1, kan::ChebyshevConfig{3}, 0.1)}));
     reject(kan::Network({kan::InputMap(2, kan::TanhMap{1e-50}), layer(2, 1, kan::ChebyshevConfig{3}, 0.1)}));
 }
 
@@ -410,9 +466,11 @@ TEST(float32_log_space_tails_keep_representable_derivatives) {
         kan::Network cpu({l});
         ResidentNetwork gpu(cpu, 1, Precision::Float32);
         const std::vector<double> x{1.1e-29}, dy{1.0}; // q = 11
-        gpu.upload_input(x, 1); gpu.forward();
+        gpu.upload_input(x, 1);
+        gpu.forward();
         close(gpu.download_output(), cpu.forward(x, 1));
-        gpu.upload_output_gradient(dy); gpu.backward();
+        gpu.upload_output_gradient(dy);
+        gpu.backward();
         const auto actual = gpu.download_gradients(), expected = cpu.backward(x, 1, dy);
         REQUIRE(expected.input[0] != 0);
         REQUIRE(std::abs(expected.input[0]) > 1e-30 && std::abs(expected.input[0]) < 1e30);
@@ -424,23 +482,30 @@ TEST(float32_log_space_tails_keep_representable_derivatives) {
 // threshold is max(epsilon, n * 2^-23), so a denominator that FP64 accepts at
 // epsilon = 1e-8 but FP32 cannot distinguish from a pole is reported.
 TEST(float32_guarded_pole_threshold_follows_float_resolution) {
-    kan::RationalConfig c; c.numerator_degree = 0; c.denominator_degree = 1;
+    kan::RationalConfig c;
+    c.numerator_degree = 0;
+    c.denominator_degree = 1;
     kan::Layer l(1, 1, c);
     kan::set_rational_parameters(l, std::vector<double>{1.0}, std::vector<double>{-1.0}, std::vector<double>{0.0});
     kan::Network net({l});
     const std::vector<double> near_pole{1 - 1e-7}; // |Q|/bound = 5e-8
     ResidentNetwork fp64(net, 1), fp32(net, 1, Precision::Float32);
-    fp64.upload_input(near_pole, 1); fp64.forward();
+    fp64.upload_input(near_pole, 1);
+    fp64.forward();
     fp32.upload_input(near_pole, 1);
     test::throws<std::domain_error>([&] { fp32.forward(); });
-    fp32.upload_input(std::vector<double>{0.5}, 1); fp32.forward();
+    fp32.upload_input(std::vector<double>{0.5}, 1);
+    fp32.forward();
     close(fp32.download_output(), std::vector<double>{2.0});
 }
 
 TEST(float32_zero_batch_and_parameter_rounding) {
     kan::Network cpu({layer(3, 2, kan::LegendreConfig{4}, 0.3), rational(kan::DenominatorPolicy::Smooth, 2, 1, 2, 2)});
     ResidentNetwork empty(cpu, 0, Precision::Float32);
-    empty.upload_input({}, 0); empty.upload_output_gradient({}); empty.forward(); empty.backward(0.25);
+    empty.upload_input({}, 0);
+    empty.upload_output_gradient({});
+    empty.forward();
+    empty.backward(0.25);
     REQUIRE(empty.download_output().empty());
     const auto g = empty.download_gradients(), penalty = cpu.regularization(0.25).gradients;
     REQUIRE(g.input.empty());

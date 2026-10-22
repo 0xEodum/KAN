@@ -25,7 +25,11 @@ std::vector<double> wave(std::size_t n, double scale, double phase) {
 kan::LayerNormMap layer_norm(std::size_t features, bool affine) {
     kan::LayerNormMap m;
     m.epsilon = 1e-3;
-    if (affine) { m.gain = wave(features, 0.4, 0.3); for (auto& g : m.gain) g += 1; m.bias = wave(features, 0.2, 1.1); }
+    if (affine) {
+        m.gain = wave(features, 0.4, 0.3);
+        for (auto& g : m.gain) g += 1;
+        m.bias = wave(features, 0.2, 1.1);
+    }
     return m;
 }
 // Input VJP of a map against central differences of <forward(x), g>.
@@ -35,8 +39,10 @@ void check_input_vjp(const kan::InputMap& map, const std::vector<double>& x, std
     REQUIRE(analytic.input.size() == x.size());
     for (std::size_t i = 0; i < x.size(); ++i) {
         auto p = x, m = x;
-        p[i] += h; m[i] -= h;
-        test::near(analytic.input[i], (dot(map.forward(p, batch), g) - dot(map.forward(m, batch), g)) / (2 * h), tolerance);
+        p[i] += h;
+        m[i] -= h;
+        test::near(analytic.input[i], (dot(map.forward(p, batch), g) - dot(map.forward(m, batch), g)) / (2 * h),
+                   tolerance);
     }
 }
 kan::Layer seeded(kan::Layer layer, double phase) {
@@ -48,8 +54,8 @@ kan::Layer seeded(kan::Layer layer, double phase) {
 kan::Layer rational(std::size_t in, std::size_t out) {
     kan::RationalConfig config{2, 1, 0.1, 1.3, 1e-8};
     kan::Layer l(in, out, config);
-    kan::set_rational_parameters(l, wave(l.coefficients().size(), 0.3, 0.2),
-                                 wave(in * out, 0.1, 0.7), wave(out, 0.05, 0.1));
+    kan::set_rational_parameters(l, wave(l.coefficients().size(), 0.3, 0.2), wave(in * out, 0.1, 0.7),
+                                 wave(out, 0.05, 0.1));
     return l;
 }
 double objective(const kan::Network& n, const std::vector<double>& x, std::size_t batch, const std::vector<double>& g) {
@@ -58,11 +64,14 @@ double objective(const kan::Network& n, const std::vector<double>& x, std::size_
 // Every parameter of every stage of a network against central differences.
 void check_network(const kan::Network& net, const std::vector<double>& x, double tolerance = 2e-6) {
     const auto batch = x.size() / net.inputs();
-    std::vector<double> g = wave(batch * std::visit([](const auto& s) { return s.outputs(); }, net.layers().back()), 0.9, 0.4);
+    std::vector<double> g =
+        wave(batch * std::visit([](const auto& s) { return s.outputs(); }, net.layers().back()), 0.9, 0.4);
     const auto grad = net.backward(x, batch, g);
     REQUIRE(grad.layers.size() == net.layers().size());
     for (std::size_t i = 0; i < x.size(); ++i) {
-        auto p = x, m = x; p[i] += h; m[i] -= h;
+        auto p = x, m = x;
+        p[i] += h;
+        m[i] -= h;
         test::near(grad.input[i], (objective(net, p, batch, g) - objective(net, m, batch, g)) / (2 * h), tolerance);
     }
     const std::vector<kan::NetworkLayer> stages(net.layers().begin(), net.layers().end());
@@ -71,17 +80,26 @@ void check_network(const kan::Network& net, const std::vector<double>& x, double
             const std::vector<double> c(layer->coefficients().begin(), layer->coefficients().end());
             const std::vector<double> b(layer->bias().begin(), layer->bias().end());
             for (std::size_t i = 0; i < c.size(); ++i) {
-                auto plus = stages, minus = stages; auto pc = c, mc = c; pc[i] += h; mc[i] -= h;
+                auto plus = stages, minus = stages;
+                auto pc = c, mc = c;
+                pc[i] += h;
+                mc[i] -= h;
                 std::get<kan::Layer>(plus[l]).set_parameters(pc, b);
                 std::get<kan::Layer>(minus[l]).set_parameters(mc, b);
                 test::near(test::grad(grad, l).coefficients[i],
-                           (objective(kan::Network(plus), x, batch, g) - objective(kan::Network(minus), x, batch, g)) / (2 * h), tolerance);
+                           (objective(kan::Network(plus), x, batch, g) - objective(kan::Network(minus), x, batch, g)) /
+                               (2 * h),
+                           tolerance);
             }
         } else {
             const auto& map = std::get<kan::InputMap>(stages[l]);
             const auto& mg = test::map_grad(grad, l);
             const auto* ln = std::get_if<kan::LayerNormMap>(&map.map());
-            if (!ln || ln->gain.empty()) { REQUIRE(mg.gain.empty()); REQUIRE(mg.bias.empty()); continue; }
+            if (!ln || ln->gain.empty()) {
+                REQUIRE(mg.gain.empty());
+                REQUIRE(mg.bias.empty());
+                continue;
+            }
             for (int which = 0; which < 2; ++which) {
                 const auto& analytic = which == 0 ? mg.gain : mg.bias;
                 REQUIRE(analytic.size() == map.features());
@@ -92,8 +110,11 @@ void check_network(const kan::Network& net, const std::vector<double>& x, double
                     (which == 0 ? mm.gain : mm.bias)[i] -= h;
                     std::get<kan::InputMap>(plus[l]).set_map(pm);
                     std::get<kan::InputMap>(minus[l]).set_map(mm);
-                    test::near(analytic[i],
-                               (objective(kan::Network(plus), x, batch, g) - objective(kan::Network(minus), x, batch, g)) / (2 * h), tolerance);
+                    test::near(
+                        analytic[i],
+                        (objective(kan::Network(plus), x, batch, g) - objective(kan::Network(minus), x, batch, g)) /
+                            (2 * h),
+                        tolerance);
                 }
             }
         }
@@ -147,7 +168,8 @@ TEST(layer_norm_normalizes_each_sample) {
         double mean = 0, var = 0;
         for (std::size_t i = 0; i < 4; ++i) mean += x[b * 4 + i] / 4;
         for (std::size_t i = 0; i < 4; ++i) var += (x[b * 4 + i] - mean) * (x[b * 4 + i] - mean) / 4;
-        for (std::size_t i = 0; i < 4; ++i) test::near(y[b * 4 + i], (x[b * 4 + i] - mean) / std::sqrt(var + 1e-3), 1e-14);
+        for (std::size_t i = 0; i < 4; ++i)
+            test::near(y[b * 4 + i], (x[b * 4 + i] - mean) / std::sqrt(var + 1e-3), 1e-14);
     }
     // One feature: x - mean is zero, the output is the bias.
     kan::InputMap single(1, kan::LayerNormMap{1e-5, {2.0}, {0.7}});
@@ -161,14 +183,18 @@ TEST(layer_norm_vjps_match_finite_differences) {
         const auto x = wave(15, 2, 0.4), g = wave(15, 1, 1.3);
         check_input_vjp(map, x, 3, g);
         const auto analytic = map.backward(x, 3, g);
-        if (!affine) { REQUIRE(analytic.gain.empty() && analytic.bias.empty()); continue; }
+        if (!affine) {
+            REQUIRE(analytic.gain.empty() && analytic.bias.empty());
+            continue;
+        }
         const auto base = std::get<kan::LayerNormMap>(map.map());
         for (int which = 0; which < 2; ++which)
             for (std::size_t i = 0; i < 5; ++i) {
                 auto p = base, m = base;
                 (which == 0 ? p.gain : p.bias)[i] += h;
                 (which == 0 ? m.gain : m.bias)[i] -= h;
-                const double fd = (dot(kan::InputMap(5, p).forward(x, 3), g) - dot(kan::InputMap(5, m).forward(x, 3), g)) / (2 * h);
+                const double fd =
+                    (dot(kan::InputMap(5, p).forward(x, 3), g) - dot(kan::InputMap(5, m).forward(x, 3), g)) / (2 * h);
                 test::near((which == 0 ? analytic.gain : analytic.bias)[i], fd, 1e-7);
             }
     }
@@ -194,8 +220,10 @@ TEST(map_validation_and_moved_from) {
     test::throws<Error>([&] { map.set_map(kan::AffineMap{{1}, {0}}); });
     REQUIRE(std::holds_alternative<kan::TanhMap>(map.map()));
     REQUIRE(map.forward({}, 0).empty() && map.backward({}, 0, {}).input.empty());
-    test::throws<std::overflow_error>([] { kan::InputMap(1, kan::AffineMap{{1e300}, {0}}).forward(std::vector<double>{1e300}, 1); });
-    test::throws<std::overflow_error>([] { kan::InputMap(2, kan::LayerNormMap{}).forward(std::vector<double>{1e300, -1e300}, 1); });
+    test::throws<std::overflow_error>(
+        [] { kan::InputMap(1, kan::AffineMap{{1e300}, {0}}).forward(std::vector<double>{1e300}, 1); });
+    test::throws<std::overflow_error>(
+        [] { kan::InputMap(2, kan::LayerNormMap{}).forward(std::vector<double>{1e300, -1e300}, 1); });
     auto moved = std::move(map);
     REQUIRE(moved.forward(std::vector<double>{0, 1}, 1).size() == 2);
     test::throws<Error>([&] { map.forward(std::vector<double>{0, 1}, 1); });
@@ -217,11 +245,14 @@ TEST(map_sgd_updates_trainable_parameters_atomically) {
     const auto before = std::get<kan::LayerNormMap>(map.map());
     const auto x = wave(6, 1, 0.2);
     auto g = map.backward(x, 2, wave(6, 1, 0.8));
-    auto bad = g; bad.gain.pop_back();
+    auto bad = g;
+    bad.gain.pop_back();
     test::throws<std::invalid_argument>([&] { map.sgd(bad, 0.1); });
-    bad = g; bad.bias[1] = std::nan("");
+    bad = g;
+    bad.bias[1] = std::nan("");
     test::throws<std::invalid_argument>([&] { map.sgd(bad, 0.1); });
-    bad = g; bad.gain[0] = std::numeric_limits<double>::max();
+    bad = g;
+    bad.gain[0] = std::numeric_limits<double>::max();
     test::throws<std::overflow_error>([&] { map.sgd(bad, 4); });
     test::throws<std::invalid_argument>([&] { map.sgd(g, 0); });
     REQUIRE(std::get<kan::LayerNormMap>(map.map()) == before);
@@ -246,11 +277,16 @@ TEST(affine_helpers_map_samples_onto_a_domain) {
     const auto range = kan::affine_from_range(samples, 3, 2, -1, 1);
     REQUIRE(range.scale.size() == 2 && range.shift.size() == 2);
     const auto y = kan::InputMap(2, range).forward(samples, 3);
-    test::near(y[0], -1, 1e-15); test::near(y[2], 1, 1e-15); test::near(y[4], 0, 1e-15);
-    test::near(range.scale[1], 1, 0); test::near(y[1], 0, 1e-15);
+    test::near(y[0], -1, 1e-15);
+    test::near(y[2], 1, 1e-15);
+    test::near(y[4], 0, 1e-15);
+    test::near(range.scale[1], 1, 0);
+    test::near(y[1], 0, 1e-15);
     const auto spline = kan::affine_from_range(samples, 3, 2, 0, 4);
     const auto z = kan::InputMap(2, spline).forward(samples, 3);
-    test::near(z[0], 0, 1e-15); test::near(z[2], 4, 1e-15); test::near(z[1], 2, 1e-15);
+    test::near(z[0], 0, 1e-15);
+    test::near(z[2], 4, 1e-15);
+    test::near(z[1], 2, 1e-15);
     const auto moments = kan::affine_from_moments(samples, 3, 2);
     const auto s = kan::InputMap(2, moments).forward(samples, 3);
     test::near(s[0] + s[2] + s[4], 0, 1e-14);
@@ -265,7 +301,8 @@ TEST(affine_helpers_map_samples_onto_a_domain) {
     test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{0, 1e-320}, 2, 1); });
     // An overflowing span would otherwise give a finite constant map.
     test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{-1e308, 1e308}, 2, 1); });
-    test::throws<std::overflow_error>([] { kan::affine_from_range(std::vector<double>{-1e300, 1e300}, 2, 1, 0, 1e-320); });
+    test::throws<std::overflow_error>(
+        [] { kan::affine_from_range(std::vector<double>{-1e300, 1e300}, 2, 1, 0, 1e-320); });
 }
 
 TEST(network_mixes_maps_and_layers) {
@@ -288,7 +325,8 @@ TEST(network_mixes_maps_and_layers) {
     // Regularization: KAN coefficients only; maps contribute zero-shaped gradients.
     const auto r = net.regularization(0.5);
     double expected = 0;
-    for (std::size_t l : {1u, 3u}) for (double c : test::layer(net, l).coefficients()) expected += 0.25 * c * c;
+    for (std::size_t l : {1u, 3u})
+        for (double c : test::layer(net, l).coefficients()) expected += 0.25 * c * c;
     test::near(r.value, expected, 1e-14);
     REQUIRE(test::map_grad(r.gradients, 0).gain.empty());
     REQUIRE(test::map_grad(r.gradients, 2).gain == std::vector<double>(3, 0.0));
@@ -297,7 +335,8 @@ TEST(network_mixes_maps_and_layers) {
     test::throws<std::invalid_argument>([&] { kan::Network({affine, norm}); });
     test::throws<std::invalid_argument>([&] { kan::Network({first, affine}); });
     auto g = net.backward(x, 3, std::vector<double>{1, -1, 0.5});
-    auto swapped = g; std::swap(swapped.layers[0], swapped.layers[1]);
+    auto swapped = g;
+    std::swap(swapped.layers[0], swapped.layers[1]);
     test::throws<std::invalid_argument>([&] { net.sgd(swapped, 0.1); });
     // A map-only network is valid.
     kan::Network maps({kan::NetworkLayer(kan::InputMap(2, kan::TanhMap{2}))});
@@ -306,15 +345,14 @@ TEST(network_mixes_maps_and_layers) {
 
 TEST(network_gradients_with_maps_match_finite_differences) {
     // Map in front of a polynomial layer and in front of a localized layer.
-    check_network(kan::Network({kan::InputMap(2, kan::AffineMap{{0.02, -0.03}, {0.1, 0}}),
-                                seeded(kan::Layer(2, 3, kan::ChebyshevConfig{4}), 0.1),
-                                kan::InputMap(3, layer_norm(3, true)),
-                                seeded(kan::Layer(3, 2, kan::BSplineConfig{2, {-3, -3, -3, -1, 0, 1, 3, 3, 3}}), 0.5)}),
-                  wave(6, 40, 0.2));
+    check_network(
+        kan::Network({kan::InputMap(2, kan::AffineMap{{0.02, -0.03}, {0.1, 0}}),
+                      seeded(kan::Layer(2, 3, kan::ChebyshevConfig{4}), 0.1), kan::InputMap(3, layer_norm(3, true)),
+                      seeded(kan::Layer(3, 2, kan::BSplineConfig{2, {-3, -3, -3, -1, 0, 1, 3, 3, 3}}), 0.5)}),
+        wave(6, 40, 0.2));
     check_network(kan::Network({kan::InputMap(3, kan::TanhMap{0.05}),
                                 seeded(kan::Layer(3, 2, kan::TrainableRbfConfig{{-0.5, 0, 0.6}, {-0.3, 0, -0.1}}), 0.3),
-                                kan::InputMap(2, layer_norm(2, false)),
-                                rational(2, 1)}),
+                                kan::InputMap(2, layer_norm(2, false)), rational(2, 1)}),
                   wave(9, 30, 0.5));
     check_network(kan::Network({kan::InputMap(4, layer_norm(4, true)),
                                 seeded(kan::Layer(4, 2, kan::MexicanHatConfig{{-1, 0, 1}, {0.8, 1, 0.6}}), 0.7)}),
@@ -326,9 +364,11 @@ TEST(network_sgd_with_maps_is_atomic) {
     const std::vector<double> x{3, -4, 1, 9};
     const auto before = net.forward(x, 2);
     auto g = net.backward(x, 2, std::vector<double>{1, -1});
-    auto bad = g; test::map_grad(bad, 0).gain[1] = std::numeric_limits<double>::infinity();
+    auto bad = g;
+    test::map_grad(bad, 0).gain[1] = std::numeric_limits<double>::infinity();
     test::throws<std::invalid_argument>([&] { net.sgd(bad, 0.1); });
-    bad = g; test::grad(bad, 1).coefficients[0] = std::numeric_limits<double>::max();
+    bad = g;
+    test::grad(bad, 1).coefficients[0] = std::numeric_limits<double>::max();
     test::throws<std::overflow_error>([&] { net.sgd(bad, 4); });
     REQUIRE(net.forward(x, 2) == before);
     net.sgd(g, 0.1);
@@ -353,9 +393,12 @@ TEST(far_inputs_train_with_map_and_fail_without) {
         kan::Network raw({kan::Layer(1, 1, kan::ChebyshevConfig{5})});
         const double loss = train(raw, x, t, 50, 0.1);
         exploded = !std::isfinite(loss) || loss > 1e6 * initial;
-    } catch (const std::overflow_error&) { exploded = true; }
+    } catch (const std::overflow_error&) {
+        exploded = true;
+    }
     REQUIRE(exploded);
-    kan::Network mapped({kan::InputMap(1, kan::affine_from_range(x, x.size(), 1)), kan::Layer(1, 1, kan::ChebyshevConfig{5})});
+    kan::Network mapped(
+        {kan::InputMap(1, kan::affine_from_range(x, x.size(), 1)), kan::Layer(1, 1, kan::ChebyshevConfig{5})});
     REQUIRE(train(mapped, x, t, 400, 0.1) < 1e-8);
     kan::Network squashed({kan::InputMap(1, kan::TanhMap{1.0 / 200}), kan::Layer(1, 1, kan::ChebyshevConfig{5})});
     REQUIRE(train(squashed, x, t, 400, 0.1) < 1e-2 * initial);
@@ -368,7 +411,8 @@ TEST(far_inputs_train_with_map_and_fail_without) {
     for (double v : test::grad(g, 0).coefficients) REQUIRE(v == 0);
     const double dead_loss = train(dead, x, t, 400, 0.5);
     for (double c : test::layer(dead, 0).coefficients()) REQUIRE(c == 0);
-    kan::Network live({kan::InputMap(1, kan::affine_from_range(x, x.size(), 1, -0.999, 0.999)), kan::Layer(1, 1, spline)});
+    kan::Network live(
+        {kan::InputMap(1, kan::affine_from_range(x, x.size(), 1, -0.999, 0.999)), kan::Layer(1, 1, spline)});
     REQUIRE(train(live, x, t, 2000, 0.5) < 1e-3 * dead_loss);
 }
 
