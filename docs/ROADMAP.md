@@ -61,6 +61,17 @@ instruction-identical. See the [stage closure](evidence/backlog-closure.md).
 Typed PQC/Fock carrier interfaces and simulator adapters, physical normalization,
 measurement/gradient semantics and independently verified QUBO/quadratization.
 No string hashing or symbolic parsing in numerical kernels.
+Acceptance: typed `PqcEdges` (DARUAN-style re-uploading circuits) and `FockEdges` (truncated
+single-mode CV circuits) through the carrier protocol on CPU and resident CUDA, with unit-norm
+PQC states, Born-rule checks and a rejecting Fock leakage guard; exact gradients (adjoint,
+parameter-shift) verified against finite differences and each other, seeded finite-shot
+estimators checked statistically against exact values; a CPU QUBO/quadratization module
+verified by exhaustive enumeration and separately written references; a matched
+complete-step comparison against cuStateVec (or recorded evidence that it cannot meet the
+contract); existing results, golden dumps and kernels
+unchanged; integrated tests, sanitizers, CPU coverage >=80%, installed consumers, matched
+CPU/GPU profiling and independent acceptance review. Eight phases proceed on recorded
+defaults; library adoption awaits the owner. See the [scope/defaults and plan](evidence/M5-plan.md).
 
 ## M6: research and distribution — PLANNED
 
