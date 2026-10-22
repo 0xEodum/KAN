@@ -4617,7 +4617,7 @@ struct Engine final : ResidentExecutor, Context<T> {
                         bits = read_status();
                     }
                     if (bits&status_refit_interval) throw std::invalid_argument(where + "the samples of an input span no interval");
-                    if (bits&status_refit_knots) throw std::invalid_argument(where + "knots coincide (repeated samples; raise grid_eps)");
+                    if (bits&status_refit_knots) throw std::invalid_argument(where + "knots coincide or leave the precision's range (repeated samples: raise grid_eps)");
                     if (bits&status_refit_singular)
                         throw std::invalid_argument(where + "the least-squares system is singular (knot spans without samples; use ridge > 0)");
                     if (bits&status_refit_internal) throw std::logic_error(where + "inconsistent spline spans");
