@@ -23,6 +23,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
+      - run: CHECK_FORMAT_STRICT=1 CLANG_FORMAT=clang-format bash scripts/check_format.sh
       - run: cmake -S . -B build-coverage -DCMAKE_CXX_COMPILER=g++ -DKAN_ENABLE_COVERAGE=ON
       - run: cmake --build build-coverage --parallel
       - run: ctest --test-dir build-coverage --output-on-failure

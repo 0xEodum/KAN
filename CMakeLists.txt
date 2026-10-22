@@ -157,6 +157,21 @@ if(BUILD_TESTING)
              "-DKAN_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_test.cmake")
     set_tests_properties(package_default_configuration PROPERTIES LABELS "integration;cpu" TIMEOUT 120)
+    # Backlog R6: source format check, registered only when bash and a clang-format
+    # are found (no build requires either). scripts/check_format.sh accepts only
+    # clang-format 18 (pinned 18.1.8, requirements-dev.txt) and exits 77 (skipped)
+    # for another version or a tool removed after configuration. NAMES_PER_DIR: the
+    # project .venv (the pinned wheel) is searched before PATH.
+    if(KAN_IS_TOP_LEVEL AND NOT WIN32)
+        find_program(KAN_BASH bash)
+        find_program(KAN_CLANG_FORMAT NAMES clang-format-18 clang-format NAMES_PER_DIR
+                     HINTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin")
+        if(KAN_BASH AND KAN_CLANG_FORMAT)
+            add_test(NAME format COMMAND ${CMAKE_COMMAND} -E env "CLANG_FORMAT=${KAN_CLANG_FORMAT}"
+                     ${KAN_BASH} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_format.sh")
+            set_tests_properties(format PROPERTIES LABELS "format;build" TIMEOUT 120 SKIP_RETURN_CODE 77)
+        endif()
+    endif()
     if(KAN_ENABLE_CUDA)
         find_package(Threads REQUIRED)
         # Legacy M1 synchronous API (deprecated since backlog R7).

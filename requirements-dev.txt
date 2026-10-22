@@ -1,2 +1,4 @@
 # Optional CPU coverage reporter; not a library runtime dependency.
 gcovr==8.6
+# Source formatter for scripts/check_format.sh and the `format` CTest test (backlog R6).
+clang-format==18.1.8
