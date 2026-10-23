@@ -110,6 +110,60 @@ void against_fd(double actual, double fd, const char* what) {
         throw std::runtime_error(std::string(what) + ": analytic=" + std::to_string(actual) +
                                  " fd=" + std::to_string(fd) + " difference=" + std::to_string(actual - fd));
 }
+
+// G: tape length, every rotation, encoding rotation and two-qubit gate.
+std::size_t gate_count(const PqcConfig& c) {
+    const std::size_t n = c.qubits, r = c.repetitions;
+    const std::size_t entangling = c.entangler == Entangler::None ? 0 : c.entangler == Entangler::CnotRing ? n : n - 1;
+    return (r + 1) * n * c.block.size() + r * n + r * entangling;
+}
+
+// Adjoint vs parameter shift, first-order error bounds (u = 2^-52, |M| <= 1,
+// every derivative of one slot |d| <= 1 because |m| <= 1):
+// - parameter shift at slot value p: (4G + 2^n + |p| + 2) u (the derivation in
+//   pqc_layer_test, shift_zero_bound; away from a zero the shift identity
+//   2 sin(q) m'(p) differs from 2 m'(p) by O(u^2));
+// - adjoint: the fused forward state carries |e| <= 2G u (the normalization
+//   budget), the reverse pass recovers psi and lambda through at most G more
+//   inverse gates each, so both are within 4G u, and d = Im <lambda|sigma|psi>
+//   summed over 2^(n-1) pairs is within (8G + 2^n) u.
+// Angle and bias derivatives: their sum, (12G + 2^(n+1) + |p| + 2) u.
+// Weights (x d, one rounding each side): |x| (bound + u). The input,
+// sum_j w_j d_j over E slots: sum |w_j| (max bound + 2 E u).
+struct Agreement {
+    double difference = 0, ratio = 0; // largest |adjoint - shift| and its largest ratio to the bound
+};
+void adjoint_agrees_with_shift(const PqcConfig& c, double x, const Parameters& p, const kan::PqcEvaluation& adjoint,
+                               const kan::PqcEvaluation& shift, Agreement& agreement) {
+    const std::size_t terms = adjoint.values.size(), A = p.angles.size(), E = p.weights.size();
+    const double u = 0x1p-52;
+    const double base = 12 * double(gate_count(c)) + 2 * double(std::size_t{1} << c.qubits) + 2;
+    const auto check = [&](double a, double s, double bound) {
+        agreement.difference = std::max(agreement.difference, std::abs(a - s));
+        agreement.ratio = std::max(agreement.ratio, std::abs(a - s) / bound);
+        absolute(a, s, bound, "adjoint vs parameter shift");
+    };
+    REQUIRE(shift.angle_derivatives.size() == terms * A && shift.encoding_bias_derivatives.size() == terms * E);
+    REQUIRE(shift.encoding_weight_derivatives.size() == terms * E && shift.input_derivatives.size() == terms);
+    double largest_phase = 0, weights = 0;
+    for (std::size_t j = 0; j < E; ++j) {
+        largest_phase = std::max(largest_phase, std::abs(p.weights[j] * x + p.biases[j]));
+        weights += std::abs(p.weights[j]);
+    }
+    for (std::size_t t = 0; t < terms; ++t) {
+        for (std::size_t j = 0; j < A; ++j)
+            check(adjoint.angle_derivatives[t * A + j], shift.angle_derivatives[t * A + j],
+                  (base + std::abs(p.angles[j])) * u);
+        for (std::size_t j = 0; j < E; ++j) {
+            const double bound = (base + std::abs(p.weights[j] * x + p.biases[j])) * u;
+            check(adjoint.encoding_bias_derivatives[t * E + j], shift.encoding_bias_derivatives[t * E + j], bound);
+            check(adjoint.encoding_weight_derivatives[t * E + j], shift.encoding_weight_derivatives[t * E + j],
+                  std::abs(x) * (bound + u) + std::numeric_limits<double>::min());
+        }
+        check(adjoint.input_derivatives[t], shift.input_derivatives[t],
+              weights * ((base + largest_phase) * u + 2 * double(E) * u) + std::numeric_limits<double>::min());
+    }
+}
 } // namespace
 
 TEST(pqc_configuration_validation) {
@@ -337,13 +391,7 @@ TEST(pqc_states_are_unit_norm_with_born_probabilities) {
         if (trial < 8) c.repetitions = 32; // the limit
         const auto p = random_parameters(c, random);
         const auto psi = kan::pqc_state(c, random(-3, 3), p.angles, p.weights, p.biases);
-        // G: tape length, every rotation, encoding rotation and two-qubit gate.
-        const std::size_t n = c.qubits, r = c.repetitions;
-        const std::size_t entangling = c.entangler == Entangler::None       ? 0
-                                       : c.entangler == Entangler::CnotRing ? n
-                                                                            : n - 1;
-        const std::size_t G = (r + 1) * n * c.block.size() + r * n + r * entangling;
-        const double bound = double(4 * G + psi.size()) * 0x1p-52;
+        const double bound = double(4 * gate_count(c) + psi.size()) * 0x1p-52;
         double total = 0;
         for (const auto& a : psi) {
             const double probability = std::norm(a);
@@ -359,7 +407,8 @@ TEST(pqc_states_are_unit_norm_with_born_probabilities) {
 TEST(pqc_gradients_agree_with_each_other_and_finite_differences) {
     Random random{404};
     const double h = 1e-6;
-    double adjoint_vs_shift = 0, largest_derivative = 0;
+    double largest_derivative = 0;
+    Agreement agreement;
     for (int trial = 0; trial < 40; ++trial) {
         const auto c = random_config(random, 3, 3);
         const auto p = random_parameters(c, random);
@@ -372,18 +421,8 @@ TEST(pqc_gradients_agree_with_each_other_and_finite_differences) {
         REQUIRE(adjoint.encoding_weight_derivatives.size() == terms * E);
         REQUIRE(adjoint.encoding_bias_derivatives.size() == terms * E);
         REQUIRE(shift.values == adjoint.values);
-        const auto both = [&](const std::vector<double>& a, const std::vector<double>& s) {
-            REQUIRE(a.size() == s.size());
-            for (std::size_t j = 0; j < a.size(); ++j) {
-                adjoint_vs_shift = std::max(adjoint_vs_shift, std::abs(a[j] - s[j]));
-                absolute(a[j], s[j], 1e-12, "adjoint vs parameter shift");
-            }
-        };
         for (double d : adjoint.angle_derivatives) largest_derivative = std::max(largest_derivative, std::abs(d));
-        both(adjoint.input_derivatives, shift.input_derivatives);
-        both(adjoint.angle_derivatives, shift.angle_derivatives);
-        both(adjoint.encoding_weight_derivatives, shift.encoding_weight_derivatives);
-        both(adjoint.encoding_bias_derivatives, shift.encoding_bias_derivatives);
+        adjoint_agrees_with_shift(c, x, p, adjoint, shift, agreement);
         // Central differences of the values, every parameter and the input.
         const auto fd = [&](auto&& perturbed) {
             const auto plus = perturbed(h), minus = perturbed(-h);
@@ -439,9 +478,40 @@ TEST(pqc_gradients_agree_with_each_other_and_finite_differences) {
             absolute(adjoint.input_derivatives[t], sum, 1e-13, "d/dx = sum w d/db");
         }
     }
-    std::printf("adjoint vs parameter shift: largest difference %.3e (largest derivative %.3f)\n", adjoint_vs_shift,
-                largest_derivative);
+    std::printf("adjoint vs parameter shift: largest difference %.3e, %.3e of the bound (largest derivative %.3f)\n",
+                agreement.difference, agreement.ratio, largest_derivative);
     REQUIRE(largest_derivative > 0.5); // the comparisons are not between zeros
+}
+
+TEST(pqc_adjoint_and_parameter_shift_agree_on_deep_circuits) {
+    // Random circuits up to the D9 limits (n <= 5, r <= 32; the first four at n = 5,
+    // r = 32 with each entangler), every axis, entangler and readout. No finite differences here:
+    // an expectation rounding of ~1e-15 over 2h = 2e-6 is ~5e-10, at the 1e-9
+    // floor of the FD rule, so FD stays at the shallow depths above.
+    Random random{2027};
+    double largest_derivative = 0;
+    std::size_t largest_gates = 0;
+    Agreement agreement;
+    for (int trial = 0; trial < 16; ++trial) {
+        auto c = random_config(random, 5, 32);
+        if (trial < 4) { // the D9 limit, each entangler once
+            c.qubits = 5;
+            c.repetitions = 32;
+            c.entangler = static_cast<Entangler>(trial);
+        }
+        largest_gates = std::max(largest_gates, gate_count(c));
+        const auto p = random_parameters(c, random);
+        const double x = random(-1.5, 1.5);
+        const auto adjoint = evaluate(c, x, p);
+        const auto shift = evaluate(c, x, p, GradientMethod::ParameterShift);
+        REQUIRE(shift.values == adjoint.values);
+        for (double d : adjoint.angle_derivatives) largest_derivative = std::max(largest_derivative, std::abs(d));
+        adjoint_agrees_with_shift(c, x, p, adjoint, shift, agreement);
+    }
+    std::printf("deep adjoint vs parameter shift (G up to %zu): largest difference %.3e, %.3e of the bound (largest "
+                "derivative %.3f)\n",
+                largest_gates, agreement.difference, agreement.ratio, largest_derivative);
+    REQUIRE(largest_derivative > 0.5);
 }
 
 TEST(pqc_gradients_match_finite_differences_of_the_reference) {
