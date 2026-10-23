@@ -120,6 +120,19 @@ Layer::Layer(std::size_t inputs, std::size_t outputs, WaveletConfig config, Wave
     bias_.resize(checked_size(outputs, 1));
 }
 
+Layer::Layer(std::size_t inputs, std::size_t outputs, PqcConfig config, PqcTag)
+    : inputs_(inputs), outputs_(outputs), carrier_(PqcEdges{config, {}, {}, {}, {}, 0}) {
+    if (inputs == 0 || outputs == 0) throw std::invalid_argument("layer dimensions must be positive");
+    validate_pqc(config);
+    const auto edges = checked_size(inputs, outputs);
+    auto& pqc = std::get<PqcEdges>(carrier_);
+    pqc.coefficients.resize(checked_size(edges, pqc_terms(config)));
+    pqc.angles.resize(checked_size(edges, pqc_angles(config)));
+    pqc.encoding_weights.resize(checked_size(edges, pqc_encodings(config)), 1.0);
+    pqc.encoding_biases.resize(pqc.encoding_weights.size());
+    bias_.resize(checked_size(outputs, 1));
+}
+
 Layer::Layer(const Layer&) = default;
 
 std::size_t Layer::terms() const noexcept {

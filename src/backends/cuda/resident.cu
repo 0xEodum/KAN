@@ -2855,6 +2855,10 @@ template<class T> Plan<T> make_plan(const Layer& layer, const WaveletEdges& edge
     plan.count = edges.translations.size();
     return plan;
 }
+// PQC layers run on the CPU until the resident PQC phase (M5 D13).
+template<class T> Plan<T> make_plan(const Layer&, const PqcEdges&, std::size_t) {
+    throw std::invalid_argument("resident execution of PQC layers is not available");
+}
 MapBlock map_block(const InputMap& map, std::size_t parameters, std::size_t offset) {
     if (parameters > std::vector<double>().max_size() - offset)
         throw std::overflow_error("resident parameter size overflow");

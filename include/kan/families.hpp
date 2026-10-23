@@ -58,4 +58,10 @@ void set_rational_parameters(Layer& layer, std::span<const double> numerator, st
 void set_wavelet_parameters(Layer& layer, std::span<const double> coefficients, std::span<const double> translations,
                             std::span<const double> log_scales, std::span<const double> bias);
 
+// Per-edge PQC readout coefficients, rotation angles, encoding weights and
+// biases, and the layer bias (PqcEdges, M5); the shot seed is kept.
+void set_pqc_parameters(Layer& layer, std::span<const double> coefficients, std::span<const double> angles,
+                        std::span<const double> encoding_weights, std::span<const double> encoding_biases,
+                        std::span<const double> bias);
+
 } // namespace kan

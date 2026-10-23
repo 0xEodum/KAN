@@ -31,6 +31,9 @@ template<> struct nonlinear_of<RationalEdges> {
 template<> struct nonlinear_of<WaveletEdges> {
     using type = WaveletGradients;
 };
+template<> struct nonlinear_of<PqcEdges> {
+    using type = PqcGradients;
+};
 template<class Edges> using nonlinear_t = typename nonlinear_of<Edges>::type;
 
 // Coefficients per edge.
@@ -38,6 +41,7 @@ std::size_t terms(const BasisEdges& edges) noexcept;
 std::size_t terms(const TrainableRbfEdges& edges) noexcept;
 std::size_t terms(const RationalEdges& edges) noexcept;
 std::size_t terms(const WaveletEdges& edges) noexcept;
+std::size_t terms(const PqcEdges& edges) noexcept;
 
 // A spline basis has one grid or one per input (backlog M6; std::invalid_argument).
 void check_grids(const BasisConfig& basis, std::size_t inputs);
@@ -48,12 +52,14 @@ void validate(const BasisEdges& edges, EdgeShape shape);
 void validate(const TrainableRbfEdges& edges, EdgeShape shape);
 void validate(const RationalEdges& edges, EdgeShape shape);
 void validate(const WaveletEdges& edges, EdgeShape shape);
+void validate(const PqcEdges& edges, EdgeShape shape); // and shot_seed = 0 while shots = 0
 
 // Finite nonlinear parameters beyond the configuration (std::invalid_argument).
 inline void require_finite_nonlinear(const BasisEdges&) {}
 inline void require_finite_nonlinear(const TrainableRbfEdges&) {} // part of its configuration
 void require_finite_nonlinear(const RationalEdges& edges);
 void require_finite_nonlinear(const WaveletEdges& edges); // translations finite, valid log scales
+void require_finite_nonlinear(const PqcEdges& edges);
 
 // output[b,o] = bias[o] + sum_i phi_{o,i}(input[b,i]) for validated state and
 // finite input. Nonfinite intermediate results throw std::overflow_error.
@@ -64,6 +70,8 @@ void forward(const TrainableRbfEdges& edges, EdgeShape shape, std::span<const do
 void forward(const RationalEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
              std::size_t batch, std::span<double> output);
 void forward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
+             std::size_t batch, std::span<double> output);
+void forward(const PqcEdges& edges, EdgeShape shape, std::span<const double> bias, std::span<const double> input,
              std::size_t batch, std::span<double> output);
 
 // Accumulates the input, coefficient and nonlinear VJPs, summed over the batch,
@@ -80,18 +88,23 @@ void backward(const RationalEdges& edges, EdgeShape shape, std::span<const doubl
 void backward(const WaveletEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
               std::span<const double> upstream, std::span<double> input_gradient,
               std::span<double> coefficient_gradient, WaveletGradients& nonlinear);
+void backward(const PqcEdges& edges, EdgeShape shape, std::span<const double> input, std::size_t batch,
+              std::span<const double> upstream, std::span<double> input_gradient,
+              std::span<double> coefficient_gradient, PqcGradients& nonlinear);
 
 // Correctly shaped zero nonlinear gradients.
 inline std::monostate zero_nonlinear(const BasisEdges&) { return {}; }
 TrainableRbfGradients zero_nonlinear(const TrainableRbfEdges& edges);
 RationalGradients zero_nonlinear(const RationalEdges& edges);
 WaveletGradients zero_nonlinear(const WaveletEdges& edges);
+PqcGradients zero_nonlinear(const PqcEdges& edges);
 
 // Shape and finiteness of caller-supplied nonlinear gradients (std::invalid_argument).
 inline void check_gradient(const BasisEdges&, const std::monostate&) {}
 void check_gradient(const TrainableRbfEdges& edges, const TrainableRbfGradients& gradient);
 void check_gradient(const RationalEdges& edges, const RationalGradients& gradient);
 void check_gradient(const WaveletEdges& edges, const WaveletGradients& gradient);
+void check_gradient(const PqcEdges& edges, const PqcGradients& gradient);
 
 // candidate.nonlinear -= rate * gradient, validating the candidate
 // (std::overflow_error). Coefficients are updated by Layer.
@@ -99,11 +112,13 @@ inline void update_nonlinear(BasisEdges&, const std::monostate&, double) {}
 void update_nonlinear(TrainableRbfEdges& candidate, const TrainableRbfGradients& gradient, double rate);
 void update_nonlinear(RationalEdges& candidate, const RationalGradients& gradient, double rate);
 void update_nonlinear(WaveletEdges& candidate, const WaveletGradients& gradient, double rate);
+void update_nonlinear(PqcEdges& candidate, const PqcGradients& gradient, double rate);
 
 // Computed nonlinear gradients are finite (std::overflow_error).
 inline void check_result(const std::monostate&) {}
 void check_result(const TrainableRbfGradients& gradient);
 void check_result(const RationalGradients& gradient);
 void check_result(const WaveletGradients& gradient);
+void check_result(const PqcGradients& gradient);
 
 } // namespace kan::detail

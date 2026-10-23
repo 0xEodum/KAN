@@ -1,8 +1,10 @@
 #pragma once
 
 #include "kan/basis.hpp"
+#include "kan/pqc.hpp"
 #include "kan/rational.hpp"
 #include "kan/wavelet.hpp"
+#include <cstdint>
 #include <variant>
 #include <vector>
 
@@ -50,7 +52,20 @@ struct WaveletEdges {
     bool operator==(const WaveletEdges&) const = default;
 };
 
-using Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges, WaveletEdges>;
+// Parametrized quantum circuit edges (M5, kan/pqc.hpp): a linear readout of
+// the measured expectations of one re-uploading circuit per edge, nonlinear in
+// the per-edge rotation angles, encoding weights and encoding biases.
+struct PqcEdges {
+    PqcConfig config;
+    std::vector<double> coefficients;     // c, (outputs, inputs, terms)
+    std::vector<double> angles;           // theta, (outputs, inputs, (r+1) n B), index (l n + q) B + k
+    std::vector<double> encoding_weights; // w, (outputs, inputs, r n), index (l-1) n + q
+    std::vector<double> encoding_biases;  // b, same layout
+    std::uint64_t shot_seed = 0;          // state (uploadable), used only when shots > 0
+    bool operator==(const PqcEdges&) const = default;
+};
+
+using Carrier = std::variant<BasisEdges, TrainableRbfEdges, RationalEdges, WaveletEdges, PqcEdges>;
 
 // Vector-Jacobian products of a carrier's nonlinear parameters. The active
 // alternative corresponds to the carrier: std::monostate for BasisEdges.
@@ -71,6 +86,14 @@ struct WaveletGradients {
     bool operator==(const WaveletGradients&) const = default;
 };
 
-using NonlinearGradients = std::variant<std::monostate, TrainableRbfGradients, RationalGradients, WaveletGradients>;
+struct PqcGradients {
+    std::vector<double> angles;           // (outputs, inputs, (r+1) n B)
+    std::vector<double> encoding_weights; // (outputs, inputs, r n)
+    std::vector<double> encoding_biases;  // (outputs, inputs, r n)
+    bool operator==(const PqcGradients&) const = default;
+};
+
+using NonlinearGradients =
+    std::variant<std::monostate, TrainableRbfGradients, RationalGradients, WaveletGradients, PqcGradients>;
 
 } // namespace kan

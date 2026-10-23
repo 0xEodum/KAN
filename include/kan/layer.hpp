@@ -51,6 +51,12 @@ public:
     template<class Config>
         requires std::same_as<std::remove_cvref_t<Config>, WaveletConfig>
     Layer(std::size_t inputs, std::size_t outputs, Config&& config) : Layer(inputs, outputs, config, WaveletTag{}) {}
+    // Parametrized quantum circuit edges (M5): zero coefficients, bias and
+    // angles, encoding weights 1 and biases 0, shot seed 0 (with c = 1, one
+    // qubit and Y encoding every edge is cos(r x)).
+    template<class Config>
+        requires std::same_as<std::remove_cvref_t<Config>, PqcConfig>
+    Layer(std::size_t inputs, std::size_t outputs, Config&& config) : Layer(inputs, outputs, config, PqcTag{}) {}
     // Value semantics. The copy constructor is defined out of line: inlined
     // into copies of std::vector<NetworkLayer>, GCC 15 -O3 reports a false
     // -Wmaybe-uninitialized in libstdc++'s variant cleanup path.
@@ -90,8 +96,10 @@ private:
     friend class Network;
     struct RationalTag {};
     struct WaveletTag {};
+    struct PqcTag {};
     Layer(std::size_t inputs, std::size_t outputs, RationalConfig config, RationalTag);
     Layer(std::size_t inputs, std::size_t outputs, WaveletConfig config, WaveletTag);
+    Layer(std::size_t inputs, std::size_t outputs, PqcConfig config, PqcTag);
     void validate_state() const;
     void replace(Carrier carrier, std::span<const double> bias);
     std::size_t inputs_, outputs_;

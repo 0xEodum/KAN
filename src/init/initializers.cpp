@@ -210,6 +210,8 @@ void initialize(Layer& layer, const Initializer& initializer) {
                 return rational_edges(edges, initializer, layer.inputs(), layer.outputs(), generator, common);
             else if constexpr (std::is_same_v<Edges, WaveletEdges>)
                 return wavelet_edges(edges, initializer, layer.inputs(), generator, common.distribution);
+            else if constexpr (std::is_same_v<Edges, PqcEdges>)
+                return edges; // RED stub
             else
                 return linear_edges(edges, initializer, layer.inputs(), layer.outputs(), generator,
                                     common.distribution);

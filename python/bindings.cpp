@@ -427,6 +427,10 @@ PYBIND11_MODULE(_kan, module) {
         .def_property_readonly("log_scales", [](const CarrierView<kan::WaveletEdges>& c) {
             return owned(c.value.log_scales, {axis(c.outputs), axis(c.inputs), axis(c.value.config.size)});
         });
+    // M5 phase 1 (D13): PQC layers cannot be built from Python before phase 7;
+    // a minimal read-only snapshot class keeps carrier dispatch total.
+    py::class_<CarrierView<kan::PqcEdges>>(module, "PqcEdges")
+        .def_property_readonly("coefficients", &CarrierView<kan::PqcEdges>::coefficients);
     // Family-specific operations (kan/families.hpp).
     module.def("insert_knot", &kan::insert_knot, py::arg("layer"), py::arg("x"),
                py::call_guard<py::gil_scoped_release>());

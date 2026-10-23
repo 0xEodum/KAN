@@ -35,7 +35,9 @@ endif()
 add_library(kan STATIC src/core/layer.cpp src/core/network.cpp src/core/input_map.cpp
             src/carriers/basis.cpp src/carriers/local/local_operations.cpp src/carriers/local/wavelet.cpp
             src/carriers/rational/rational.cpp src/carriers/rational/rational_operations.cpp
+            src/carriers/quantum/pqc.cpp
             src/backends/cpu/basis_edges.cpp src/backends/cpu/rational_edges.cpp src/backends/cpu/wavelet_edges.cpp
+            src/backends/cpu/pqc_edges.cpp
             src/init/initializers.cpp src/init/moments.cpp)
 add_library(kan::kan ALIAS kan)
 target_compile_features(kan PUBLIC cxx_std_20)
@@ -130,6 +132,13 @@ if(BUILD_TESTING)
     foreach(suite rational rational_layer rational_allocation rational_policy)
         kan_add_test(carriers/rational ${suite} "cpu;rational" 60 kan)
     endforeach()
+    # M5 phase 1: PQC carrier on the CPU (circuit, layer protocol, allocation probe)
+    # and the D3 source check of the quantum numerical sources.
+    foreach(suite pqc pqc_layer pqc_allocation)
+        kan_add_test(carriers/quantum ${suite} "cpu;quantum" 120 kan)
+    endforeach()
+    kan_add_test(carriers/quantum quantum_source_check "cpu;quantum" 60 kan)
+    target_compile_definitions(quantum_source_check_test PRIVATE "KAN_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
     foreach(suite initializer initializer_training)
         kan_add_test(init ${suite} "cpu;init" 60 kan)
     endforeach()
@@ -227,6 +236,8 @@ if(BUILD_TESTING)
         kan_add_test(backends/cuda residual_resident "cuda;core" 600 kan::cuda)
         # Backlog M4: initialized networks on the resident executor.
         kan_add_test(backends/cuda initializer_resident "cuda;init" 120 kan::cuda)
+        # M5 phase 1 (D13): resident construction rejects PQC layers until phase 2a.
+        kan_add_test(backends/cuda pqc_resident_stub "cuda;quantum" 120 kan::cuda)
         # Explicit manual large-launch regression (trainable RBF); minimum-memory
         # requirement is outside the ordinary CTest hardware contract.
         add_executable(local_large_basis_test tests/backends/cuda/local_large_basis_test.cpp)
@@ -300,6 +311,7 @@ DIRECTORIES = (r\"${CUDAToolkit_BIN_DIR}/x64\", r\"${CUDAToolkit_BIN_DIR}\")
         kan_add_python_test(hermite_function_python "python;integration;carriers")
         kan_add_python_test(wavelet_python "python;integration;local")
         kan_add_python_test(spline_grid_python "python;integration;local")
+        kan_add_python_test(pqc_stub_python "python;integration;quantum")
         foreach(suite precision_python resident_upload_python training_python)
             kan_add_python_test(${suite} "python;integration;resident")
         endforeach()
