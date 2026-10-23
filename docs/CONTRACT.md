@@ -1297,11 +1297,15 @@ and biases are nonlinear parameters (unpenalized). For DARUAN, whose node sum ha
 - *Construction.* `Layer(inputs, outputs, PqcConfig)`: `c = 0`, bias 0, `theta = 0`, `w = 1`,
   `b = 0`, `shot_seed = 0`. With `c = 1`, n = 1 and Y encoding every edge is `cos(r x)`. At this
   point (Y encoding: a real-amplitude circuit) every Z-angle adjoint derivative is exactly 0 and
-  the parameter-shift ones within 4·2^-52; input, encoding and Y-angle derivatives are not zero at
+  the parameter-shift ones within `(4G + 2^n + |theta| + 2) 2^-52` (derived in
+  `pqc_layer_test`; measured exactly 0 up to n = 5, r = 32 on GCC/glibc, where the shifted
+  states are bitwise conjugates); input, encoding and Y-angle derivatives are not zero at
   generic x. With Z encoding the constructor circuit is diagonal and the edge is constant in x
   (within rounding).
 - *Structurally inert angles* are expressible and documented, not rejected: a Z rotation while
-  its qubit is still |0> up to a phase (the first Z rotations of the default block), and a Z
+  its qubit is still |0> up to a phase (before it on that qubit only Z rotations, CZ, CNOTs it
+  controls and CNOTs on it as the target only of a control in |0>; the first Z rotations of the
+  default block), and a Z
   rotation followed on its qubit only by Z rotations, CZ and CNOTs it controls (the last Z
   rotations of the default block commute with the Z/parity readouts). The tape marks them; their
   derivatives are exactly 0 on both gradient paths and are not computed.
@@ -1328,7 +1332,9 @@ and biases are nonlinear parameters (unpenalized). For DARUAN, whose node sum ha
   (`GradientMethod::ParameterShift`, `evaluate_pqc` only in phase 1): `(m(p + pi/2) - m(p - pi/2))/2`
   for every non-inert angle and every encoding angle `p = w x + b`. The input enters every encoding
   gate: `dm/dx = sum_j w_j dm/dphi_j`, `dm/dw_j = x dm/dphi_j`, `dm/db_j = dm/dphi_j`. Measured:
-  adjoint and parameter shift agree within 1.5e-15; both match central finite differences
+  adjoint and parameter shift agree within a gate-count-scaled bound (`(12G + 2^(n+1) + |p| + 2)
+  2^-52` per angle or bias; measured 1.443e-15, 0.028 of it, for n <= 3, r <= 3, and 9.7e-15,
+  0.010 of it, up to n = 5, r = 32); both match central finite differences
   (h = 1e-6) within `1e-7 |fd| + 1e-9`, of the library and of an independent dense
   Kronecker-product reference; amplitudes and expectations agree with that reference within
   6.8e-16 and 1.2e-15 (200 random circuits, n <= 4, r <= 4, every axis, entangler and readout).

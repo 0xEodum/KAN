@@ -28,11 +28,12 @@ enum class Op : std::uint8_t { Rotation, Encoding, Cnot, Cz };
 // Rotation: R_axis(angles[slot]) on `qubit`; Encoding: R_axis(w[slot] x + b[slot])
 // on `qubit`; Cnot: control `qubit`, target `other`; Cz: `qubit` and `other`.
 // `inert` marks a rotation whose parameter cannot change any readout: a Z
-// rotation while its qubit is still |0> up to a phase (only Z rotations and CZ
-// before it on that qubit, and CNOTs on it only as the target of a control in
-// |0>), or a Z rotation followed on its qubit only by Z rotations, CZ and CNOTs
-// that it controls (Z_q commutes with all of them and with the diagonal Z and
-// parity readouts). Its derivative is exactly zero and is not computed.
+// rotation while its qubit is still |0> up to a phase (before it on that qubit
+// only Z rotations, CZ, CNOTs it controls, and CNOTs on it as the target only
+// of a control in |0>), or a Z rotation followed on its qubit only by Z
+// rotations, CZ and CNOTs that it controls (Z_q commutes with all of them and
+// with the diagonal Z and parity readouts). Its derivative is exactly zero and
+// is not computed.
 struct TapeEntry {
     Op op;
     std::uint8_t axis; // static_cast<std::uint8_t>(Rotation) for Rotation and Encoding
