@@ -1,0 +1,4 @@
+before 292 kernels, after 292, common 292, differing 0 (sm_121 --fmad=false)
+before 292 kernels, after 292, common 292, differing 0 (sm_121 --fmad=true)
+before 292 kernels, after 292, common 292, differing 0 (sm_86 --fmad=false)
+before 292 kernels, after 292, common 292, differing 0 (sm_86 --fmad=true)

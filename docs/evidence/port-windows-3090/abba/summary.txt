@@ -1,0 +1,26 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,1.026,0.959,1.623
+basis,legacy_full,4,0.973,0.957,0.990
+basis,resident_full,24,1.015,0.761,1.229
+basis,transfer_full,24,0.988,0.529,1.839
+local,cpu_full,12,0.935,0.793,1.034
+local,resident_full,12,1.013,0.898,1.442
+local,transfer_full,12,1.000,0.904,1.070
+rational,cpu_full,12,0.977,0.930,1.023
+rational,resident_full,12,0.968,0.799,1.048
+rational,transfer_full,12,0.960,0.841,1.004
+checksum mismatches: 0
+ 1.62 basis    cpu_full       case  0 chebyshev 16x24x8 b32 K7 double                   0.244 ->     0.396 ms
+ 1.23 basis    resident_full  case 23 gaussian_rbf 64x64x32x16 b1024 K7 double          2.407 ->     2.959 ms
+ 1.21 basis    resident_full  case 22 gaussian_rbf 64x64x32x16 b32 K7 double            0.315 ->     0.380 ms
+ 1.11 basis    resident_full  case  3 chebyshev 64x64x32x16 b1024 K7 double             1.101 ->     1.220 ms
+ 1.08 basis    resident_full  case 12 hermite 16x24x8 b32 K7 double                     0.190 ->     0.206 ms
+ 1.07 basis    resident_full  case 17 fourier 16x24x8 b1024 K7 double                   0.400 ->     0.429 ms
+ 1.06 basis    cpu_full       case 12 hermite 16x24x8 b32 K7 double                     0.243 ->     0.258 ms
+ 1.05 basis    resident_full  case  5 legendre 16x24x8 b1024 K7 double                  0.373 ->     0.393 ms
+ 1.05 basis    cpu_full       case 20 gaussian_rbf 16x24x8 b32 K7 double                0.403 ->     0.424 ms
+ 1.05 basis    cpu_full       case 22 gaussian_rbf 64x64x32x16 b32 K7 double            3.355 ->     3.520 ms
+ 1.04 basis    resident_full  case  0 chebyshev 16x24x8 b32 K7 double                   0.190 ->     0.198 ms
+ 1.04 basis    cpu_full       case 18 fourier 64x64x32x16 b32 K7 double                 2.635 ->     2.734 ms
+ 1.03 local    cpu_full       case  6 mexican_hat 64x64x32x16 b32 K7 double             5.791 ->     5.989 ms
+ 1.03 basis    cpu_full       case 17 fourier 16x24x8 b1024 K7 double                   8.268 ->     8.546 ms

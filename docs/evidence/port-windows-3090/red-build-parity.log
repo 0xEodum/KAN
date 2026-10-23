@@ -1,0 +1,46 @@
+FAILED: CMakeFiles/wavelet_resident_test.dir/tests/backends/cuda/wavelet_resident_test.cpp.obj 
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(146): error C2027: use of undefined type 'std::array<unsigned __int64,4>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(145): error C2530: 'shape': references must be initialized
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(145): error C3531: 'shape': a symbol whose type contains 'auto' must have an initializer
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(145): error C2143: syntax error: missing ';' before ':'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(146): error C2143: syntax error: missing ';' before '{'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(146): error C2143: syntax error: missing ')' before '{'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(146): error C2027: use of undefined type 'std::array<unsigned __int64,4>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(147): error C2027: use of undefined type 'std::array<unsigned __int64,4>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(147): error C2143: syntax error: missing ';' before '}'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(147): error C2059: syntax error: ')'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(148): error C2065: 'shape': undeclared identifier
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(148): error C3617: initializers of structured bindings must be of array or non-union class type; type '<error>' is not permitted
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(149): error C2668: 'kan::Network::Network': ambiguous call to overloaded function
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(150): error C2665: 'kan::cuda::ResidentNetwork::ResidentNetwork': no overloaded function could convert all the argument types
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(154): error C2737: 'x': const object must be initialized
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(156): error C2530: 'v': references must be initialized
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(156): error C3531: 'v': a symbol whose type contains 'auto' must have an initializer
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(156): error C2143: syntax error: missing ';' before ':'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(156): error C3536: 'dy': cannot be used before it is initialized
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(156): error C2143: syntax error: missing ';' before ')'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(157): error C3536: 'x': cannot be used before it is initialized
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): error C2676: binary '+': 'std::string' does not define this operator or a conversion to a type acceptable to the predefined operator
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::reverse_iterator<_BidIt> std::operator +(reverse_iterator<_BidIt>::difference_type,const std::reverse_iterator<_BidIt> &) noexcept(<expr>)': could not deduce template argument for 'const std::reverse_iterator<_BidIt> &' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::move_iterator<_Iter> std::operator +(move_iterator<_Iter>::difference_type,const std::move_iterator<_Iter> &) noexcept(<expr>)': could not deduce template argument for 'const std::move_iterator<_Iter> &' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const std::basic_string<_Elem,_Traits,_Alloc> &,const std::basic_string<_Elem,_Traits,_Alloc> &)': could not deduce template argument for 'const std::basic_string<_Elem,_Traits,_Alloc> &' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const _Elem,const std::basic_string<_Elem,_Traits,_Alloc> &)': could not deduce template argument for 'const std::basic_string<_Elem,_Traits,_Alloc> &' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const std::basic_string<_Elem,_Traits,_Alloc> &,const _Elem *const )': could not deduce template argument for 'const _Elem *const ' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: could be '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const std::basic_string<_Elem,_Traits,_Alloc> &,const _Elem)': could not deduce template argument for 'const _Elem' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const std::basic_string<_Elem,_Traits,_Alloc> &,std::basic_string<_Elem,_Traits,_Alloc> &&)': could not deduce template argument for 'std::basic_string<_Elem,_Traits,_Alloc> &&' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(std::basic_string<_Elem,_Traits,_Alloc> &&,const std::basic_string<_Elem,_Traits,_Alloc> &)': could not deduce template argument for 'const std::basic_string<_Elem,_Traits,_Alloc> &' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(std::basic_string<_Elem,_Traits,_Alloc> &&,std::basic_string<_Elem,_Traits,_Alloc> &&)': could not deduce template argument for 'std::basic_string<_Elem,_Traits,_Alloc> &&' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(const _Elem,std::basic_string<_Elem,_Traits,_Alloc> &&)': could not deduce template argument for 'std::basic_string<_Elem,_Traits,_Alloc> &&' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(std::basic_string<_Elem,_Traits,_Alloc> &&,const _Elem *const )': could not deduce template argument for 'const _Elem *const ' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: could be '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::basic_string<_Elem,_Traits,_Alloc> std::operator +(std::basic_string<_Elem,_Traits,_Alloc> &&,const _Elem)': could not deduce template argument for 'const _Elem' from '<error>'
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): error C2512: 'std::runtime_error': no appropriate default constructor available
+K:\PycharmProjects\auxiliary_projects\KAN\tests\backends\cuda\wavelet_resident_test.cpp(165): note: 'std::runtime_error::runtime_error': no appropriate default constructor available
+FAILED: CMakeFiles/kan_cuda.dir/src/backends/cuda/resident.cu.obj 
+K:\PycharmProjects\auxiliary_projects\KAN\src\backends\cuda\resident.cu(3984): error: invalid combination of type specifiers
+K:\PycharmProjects\auxiliary_projects\KAN\src\backends\cuda\resident.cu(3984): error: expected an identifier
+K:\PycharmProjects\auxiliary_projects\KAN\src\backends\cuda\resident.cu(3986): error: expected an identifier
+K:\PycharmProjects\auxiliary_projects\KAN\src\backends\cuda\resident.cu(3986): error: a condition declaration must include an initializer
+K:\PycharmProjects\auxiliary_projects\KAN\src\backends\cuda\resident.cu(4049): error: type name is not allowed
+5 errors detected in the compilation of "K:/PycharmProjects/auxiliary_projects/KAN/src/backends/cuda/resident.cu".

@@ -1,0 +1,136 @@
+Test project K:/PycharmProjects/auxiliary_projects/KAN/build-3090
+      Start  1: layer
+ 1/59 Test  #1: layer ............................   Passed    0.01 sec
+      Start  2: network
+ 2/59 Test  #2: network ..........................   Passed    0.01 sec
+      Start  3: input_map
+ 3/59 Test  #3: input_map ........................   Passed    0.04 sec
+      Start  4: residual
+ 4/59 Test  #4: residual .........................   Passed    0.01 sec
+      Start  5: residual_formula
+ 5/59 Test  #5: residual_formula .................   Passed    0.01 sec
+      Start  6: residual_training
+ 6/59 Test  #6: residual_training ................   Passed   84.28 sec
+      Start  7: basis
+ 7/59 Test  #7: basis ............................   Passed    0.01 sec
+      Start  8: basis_config
+ 8/59 Test  #8: basis_config .....................   Passed    0.01 sec
+      Start  9: carrier
+ 9/59 Test  #9: carrier ..........................   Passed    0.01 sec
+      Start 10: hermite_function
+10/59 Test #10: hermite_function .................   Passed    0.01 sec
+      Start 11: local_basis
+11/59 Test #11: local_basis ......................   Passed    0.01 sec
+      Start 12: local_layer
+12/59 Test #12: local_layer ......................   Passed    0.01 sec
+      Start 13: wavelet
+13/59 Test #13: wavelet ..........................   Passed    0.01 sec
+      Start 14: spline_grid
+14/59 Test #14: spline_grid ......................   Passed    0.01 sec
+      Start 15: spline_derivative_formula
+15/59 Test #15: spline_derivative_formula ........   Passed    0.02 sec
+      Start 16: rational
+16/59 Test #16: rational .........................   Passed    0.01 sec
+      Start 17: rational_layer
+17/59 Test #17: rational_layer ...................   Passed    0.04 sec
+      Start 18: rational_allocation
+18/59 Test #18: rational_allocation ..............   Passed    0.02 sec
+      Start 19: rational_policy
+19/59 Test #19: rational_policy ..................   Passed    0.01 sec
+      Start 20: initializer
+20/59 Test #20: initializer ......................   Passed    2.28 sec
+      Start 21: initializer_training
+21/59 Test #21: initializer_training .............   Passed   62.67 sec
+      Start 22: package_custom_include
+22/59 Test #22: package_custom_include ...........   Passed    4.58 sec
+      Start 23: package_default_configuration
+23/59 Test #23: package_default_configuration ....   Passed    4.80 sec
+      Start 24: cuda
+24/59 Test #24: cuda .............................   Passed    1.31 sec
+      Start 25: cuda_deprecation_available
+25/59 Test #25: cuda_deprecation_available .......   Passed    0.84 sec
+      Start 26: cuda_deprecation_resident_only
+26/59 Test #26: cuda_deprecation_resident_only ...   Passed    0.87 sec
+      Start 27: cuda_deprecation_legacy
+27/59 Test #27: cuda_deprecation_legacy ..........   Passed    0.56 sec
+      Start 28: resident
+28/59 Test #28: resident .........................   Passed    0.26 sec
+      Start 29: resident_review
+29/59 Test #29: resident_review ..................   Passed    0.28 sec
+      Start 30: resident_contraction
+30/59 Test #30: resident_contraction .............   Passed    0.32 sec
+      Start 31: resident_precision
+31/59 Test #31: resident_precision ...............   Passed    1.57 sec
+      Start 32: resident_upload
+32/59 Test #32: resident_upload ..................   Passed    0.51 sec
+      Start 33: resident_training
+33/59 Test #33: resident_training ................   Passed    0.76 sec
+      Start 34: resident_fused_expansion
+34/59 Test #34: resident_fused_expansion .........   Passed    0.25 sec
+      Start 35: local_resident
+35/59 Test #35: local_resident ...................   Passed    0.24 sec
+      Start 36: local_sparse_resident
+36/59 Test #36: local_sparse_resident ............   Passed    1.23 sec
+      Start 37: local_spline_gradient_resident
+37/59 Test #37: local_spline_gradient_resident ...   Passed    0.93 sec
+      Start 38: local_rbf_reduction_resident
+38/59 Test #38: local_rbf_reduction_resident .....   Passed    0.48 sec
+      Start 39: wavelet_resident
+39/59 Test #39: wavelet_resident .................   Passed    0.81 sec
+      Start 40: spline_grid_resident
+40/59 Test #40: spline_grid_resident .............   Passed    1.08 sec
+      Start 41: rational_resident
+41/59 Test #41: rational_resident ................   Passed    0.27 sec
+      Start 42: rational_policy_resident
+42/59 Test #42: rational_policy_resident .........   Passed    0.32 sec
+      Start 43: rational_resident_execution
+43/59 Test #43: rational_resident_execution ......   Passed    6.22 sec
+      Start 44: input_map_resident
+44/59 Test #44: input_map_resident ...............   Passed    0.27 sec
+      Start 45: residual_resident
+45/59 Test #45: residual_resident ................   Passed   32.85 sec
+      Start 46: initializer_resident
+46/59 Test #46: initializer_resident .............   Passed    2.96 sec
+      Start 47: fit_polynomial
+47/59 Test #47: fit_polynomial ...................   Passed    0.01 sec
+      Start 48: python
+48/59 Test #48: python ...........................   Passed    0.58 sec
+      Start 49: local_python
+49/59 Test #49: local_python .....................   Passed    0.43 sec
+      Start 50: rational_python
+50/59 Test #50: rational_python ..................   Passed    0.41 sec
+      Start 51: input_map_python
+51/59 Test #51: input_map_python .................   Passed    0.40 sec
+      Start 52: residual_python
+52/59 Test #52: residual_python ..................   Passed    0.44 sec
+      Start 53: initializer_python
+53/59 Test #53: initializer_python ...............   Passed    0.58 sec
+      Start 54: hermite_function_python
+54/59 Test #54: hermite_function_python ..........   Passed    0.45 sec
+      Start 55: wavelet_python
+55/59 Test #55: wavelet_python ...................   Passed    0.40 sec
+      Start 56: spline_grid_python
+56/59 Test #56: spline_grid_python ...............   Passed    0.37 sec
+      Start 57: precision_python
+57/59 Test #57: precision_python .................   Passed    0.42 sec
+      Start 58: resident_upload_python
+58/59 Test #58: resident_upload_python ...........   Passed    0.44 sec
+      Start 59: training_python
+59/59 Test #59: training_python ..................   Passed    0.44 sec
+
+100% tests passed out of 59
+
+Label Time Summary:
+build          =   2.27 sec*proc (3 tests)
+carriers       =   0.49 sec*proc (5 tests)
+core           = 118.33 sec*proc (10 tests)
+cpu            = 158.87 sec*proc (24 tests)
+cuda           =  55.20 sec*proc (23 tests)
+init           =  68.49 sec*proc (4 tests)
+integration    =  14.74 sec*proc (15 tests)
+local          =   6.04 sec*proc (14 tests)
+python         =   5.36 sec*proc (12 tests)
+rational       =   7.29 sec*proc (8 tests)
+resident       =   5.25 sec*proc (10 tests)
+
+Total Test time (real) = 219.47 sec

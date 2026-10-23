@@ -1,0 +1,2 @@
+name, driver_version, compute_cap, memory.total [MiB]
+NVIDIA GeForce RTX 3090, 591.86, 8.6, 24576 MiB
