@@ -566,7 +566,8 @@ TEST(pqc_initializer_digest_is_pinned) {
     REQUIRE(digest(layer) != digest(copy));
     const auto value = digest(layer);
     std::printf("pinned %s\n", value.c_str());
-    // Pinned with GCC on aarch64 (no MSVC run on this machine).
+    // Pinned with GCC on aarch64; MSVC 19.50 on x86-64 reproduces it
+    // (docs/evidence/port-windows-3090.md).
     REQUIRE(value == "c8bec86f1c294f6f");
 }
 
