@@ -363,7 +363,7 @@ to CMake. CMake locates pybind11 installed in that interpreter. Add the resultin
 `build/python` directory to `PYTHONPATH` (for multi-configuration generators use
 the directory containing `_kan` as well). `cmake --install` places the extension and
 package in `<prefix>/python`; `KAN_PYTHON_INSTALL_DIR` overrides that relative path.
-Python wheels and distribution packaging remain M6 work.
+Python wheels and distribution packaging remain roadmap M10 work.
 
 The NumPy interface requires C-contiguous float64 arrays, preserving caller dtype
 and layout decisions. Tensor results own their memory. See

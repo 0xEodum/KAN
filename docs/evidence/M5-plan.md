@@ -14,6 +14,33 @@ Machine at planning time: GB10 (sm_121, aarch64, 48 SMs, 128 GB unified memory),
 18.1.8 (no scipy, mpmath, cuQuantum, Qiskit, PennyLane or Strawberry Fields installed). No
 RTX 3090 (sm_86) is attached; see owner question Q7.
 
+## Amendment 2026-10-23 (supersedes the text below where they differ)
+
+Recorded in the [2026-10-23 decision](roadmap-2026-10-23.md) (owner agreement, AGENTS rule 5),
+with the plan-review dispositions:
+
+- **Required core:** phases 1, 2a, 5, 7 and a new phase 8 (time-to-quality study, measurement
+  only, PQC against FourierEdges of the matching degree and other classical carriers, FP32,
+  on GB10).
+- **Fock (phases 3-4)** only after a go/no-go gate: numerical preflight (R6) with the
+  norm-deficit criterion (R1) and a CPU prototype compared with normalized Hermite functions;
+  owner decision, default no-go.
+- **Deferred outside M5 acceptance:** phase 2b (cuStateVec) and phase 6 (finite shots); their
+  text below remains the specification if reinstated.
+- **Before phase 2a:** `docs/evidence/device-adaptation-contract.md`; the resident quantum
+  kernels follow it ("no GPU-specific constants" made checkable).
+- **Q7 resolved:** an RTX 3090 (sm_86, MSVC) is available; GPU phases record runtime results
+  on it in addition to GB10.
+- **D2 / Q1:** third-party simulators allowed in evidence and optional, cleanly skipping
+  tests; the in-repo references remain the required gate.
+- **Phase 1 review fixes:** R3 (parameter-shift near-zero bound scaled by epsilon, gate count
+  and expectation magnitude) and R5 (tape preparation measured separately).
+- **Phase 3 (if taken):** R1 norm-deficit rejection and FP32 strategy; **phase 5:** R2
+  deterministic per-monomial summation order and the `energy()` constant convention;
+  **phase 6 (if taken):** R4 explicit resampling.
+- **Profiling scope (Q11 / AGENTS rule 6):** matched complete-step measurements, removal of
+  pathological bottlenecks and contract compliance; no exhaustive tuning requirement.
+
 ## Sources and what they fix
 
 - **The brief** (`introduction.md`, commit `af1c96b`), which CONTRACT cites as "the brief".
@@ -75,7 +102,7 @@ Out of scope (recorded): annealer/D-Wave/dimod connectivity; noise models and de
 matrices; multi-mode Fock circuits; Fock shot sampling (homodyne/photon counting); Ishikawa's
 positive-monomial reduction; a library compiler for multi-layer KAN objectives (one
 two-layer instance is a test-built case, phase 5); any symbolic algebra; porting code from
-Quantum-KAN, PennyLane, Qiskit or Strawberry Fields; model serialization (M6).
+Quantum-KAN, PennyLane, Qiskit or Strawberry Fields; model serialization (roadmap M10).
 
 ## Recorded defaults (AGENTS rule 5)
 
@@ -662,14 +689,15 @@ definitions (second reference for PQC and QUBO). Then the acceptance gates below
 3. AddressSanitizer (CPU suites) and Compute Sanitizer (memcheck, racecheck, initcheck,
    synccheck) on every resident quantum suite: 0 errors.
 4. GCC CPU line coverage >= 80% overall and reported for the new files.
-5. Installed C++ consumer (CPU and CUDA) and installed Python use of both carriers and QUBO.
+5. Installed C++ consumer (CPU and CUDA) and installed Python use of the carriers in scope and QUBO.
 6. Matched complete-call CPU/GPU profiling on the frozen quantum benchmark (outputs, VJPs and
-   parameters verified), the phase-2b library recommendation and owner decision, a measured
-   and addressed bottleneck, stated limitations (no ncu counters; sm_86 runtime if
-   unavailable); existing frozen benchmarks as regressions.
+   parameters verified), a measured and addressed bottleneck, runtime results on GB10 and
+   the RTX 3090, stated limitations (no ncu counters); existing frozen benchmarks as
+   regressions. (Amended 2026-10-23: the phase-2b library recommendation applies only if
+   phase 2b is reinstated.)
 7. Isolation gates on the final head.
 8. Independent acceptance review of source and evidence; blocking findings resolved; then
-   ROADMAP M5 DONE and M6 handed off.
+   ROADMAP M5 DONE and roadmap M6 (external baseline) handed off.
 
 ## Owner questions
 

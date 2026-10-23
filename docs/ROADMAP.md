@@ -61,19 +61,58 @@ instruction-identical. See the [stage closure](evidence/backlog-closure.md).
 Typed PQC/Fock carrier interfaces and simulator adapters, physical normalization,
 measurement/gradient semantics and independently verified QUBO/quadratization.
 No string hashing or symbolic parsing in numerical kernels.
-Acceptance: typed `PqcEdges` (DARUAN-style re-uploading circuits) and `FockEdges` (truncated
-single-mode CV circuits) through the carrier protocol on CPU and resident CUDA, with unit-norm
-PQC states, Born-rule checks and a rejecting Fock leakage guard; exact gradients (adjoint,
-parameter-shift) verified against finite differences and each other, seeded finite-shot
-estimators checked statistically against exact values; a CPU QUBO/quadratization module
-verified by exhaustive enumeration and separately written references; a matched
-complete-step comparison against cuStateVec (or recorded evidence that it cannot meet the
-contract); existing results, golden dumps and kernels
-unchanged; integrated tests, sanitizers, CPU coverage >=80%, installed consumers, matched
-CPU/GPU profiling and independent acceptance review. Eight phases proceed on recorded
-defaults; library adoption awaits the owner. See the [scope/defaults and plan](evidence/M5-plan.md).
+Acceptance (scope amended 2026-10-23): typed `PqcEdges` (DARUAN-style re-uploading circuits)
+through the carrier protocol on CPU and resident CUDA, with unit-norm states and Born-rule
+checks; exact gradients (adjoint, parameter-shift) verified against finite differences and
+each other; a CPU QUBO/quadratization module verified by exhaustive enumeration and
+separately written references; Python bindings; a time-to-quality study (measurement, not a
+gate) against the classical carrier with the matching spectrum; existing results, golden
+dumps and kernels unchanged; integrated tests, sanitizers, CPU coverage >=80%, installed
+consumers, matched CPU/GPU profiling (removal of pathological bottlenecks, not exhaustive
+tuning) and independent acceptance review. A device-adaptation contract is recorded before
+the resident phase and the new kernels follow it; GPU phases are runtime-validated on GB10
+(sm_121) and RTX 3090 (sm_86). `FockEdges` (truncated single-mode CV circuits with a
+norm-deficit and guard-band rejection) proceeds only after a go/no-go gate (numerical
+preflight and a CPU prototype against normalized Hermite functions; owner decision).
+The cuStateVec comparison and finite shots are deferred outside M5 acceptance unless the
+owner reinstates them. See the [scope/defaults and plan](evidence/M5-plan.md) and the
+[2026-10-23 decision](evidence/roadmap-2026-10-23.md).
 
-## M6: research and distribution — PLANNED
+## M6: external baseline — PLANNED (depends on M5)
+
+Measurement only, no optimization obligation: a pre-registered matched comparison of
+complete training steps, accuracy and time-to-quality with existing KAN implementations
+(efficient-kan, FastKAN, FasterKAN and others) on the families they share with this library,
+on the reference machine (GB10) and the RTX 3090. Results set the priorities of M7 and
+cross-check the matched families numerically. Acceptance: protocol written before the runs,
+library versions and hardware recorded, numerical agreement of matched configurations,
+results and failures reported as measured.
+
+## M7: device adaptation — PLANNED (depends on M6)
+
+Every device-dependent choice (sparse B-spline selection, wavelet launch model, contraction
+crossovers, tiles, workspaces; the [port inventory](evidence/port-aarch64.md#adaptability-inventory-ga102-tuned-constants-in-srcresidentcu))
+follows the device-adaptation contract: decisions from device attributes, occupancy and/or
+on-device calibration, validated on at least two architectures, conservative on unvalidated
+devices, deterministic per device. CPU SIMD for the hot loops (Google Highway considered)
+under the unfused, fixed-order CPU contract with ISA-independent results stated.
+Acceptance: on GB10, RTX 3090, x86-64 and aarch64 CPUs no automatic choice slower than the
+best forced alternative beyond recorded noise; the recorded C5 sm_86 regression resolved;
+CI compiles the CUDA targets on Linux and Windows.
+
+## M8: heterogeneous networks — PLANNED (depends on M7)
+
+Different carriers per layer are already supported (mixed networks on CPU and resident CUDA);
+this stage adds mixed carriers within a layer (default design: a layer as a sum of
+sub-blocks with different carriers over the same inputs, reusing the existing kernels) and
+pre-registered experiments comparing homogeneous, per-layer and within-layer mixtures.
+
+## M9: comparison with existing implementations — PLANNED (depends on M8)
+
+The M6 protocol repeated on the final code and extended to heterogeneous networks:
+performance, accuracy and time-to-quality, with the same reporting rules.
+
+## M10: research and distribution — PLANNED (depends on M9)
 
 Versioned model format, packaging, reproducible matched benchmarks and expanded
 examples. License selection belongs to the repository owner.

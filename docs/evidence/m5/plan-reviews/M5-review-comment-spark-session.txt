@@ -1,0 +1,69 @@
+Plan review (R1–R6)
+ 
+R1 Fock guard band
+Verdict: Correct, and the most important finding.
+Notes: I recomputed your α = 10 numbers exactly: guard population 5.9265e-16,
+norm in levels 0–31 6.5159e-16. Both match, and the state passes the plan's
+guard check. α = 8 also exposes the gap: the guard is 2.8e-6, which is
+rejected, but almost all of the norm is already gone. Adding a norm-deficit
+check after each displacement and squeezing gate costs one sum over D
+amplitudes, and it catches mass that a single large gate pushes past the
+cutoff mid-circuit. The plan's Q4 already notes that FP32 can't resolve
+deficits much below ~1e-6, so FP32 needs its own threshold, derived from gate
+ count and cutoff (roughly G·D·2⁻²⁴), or must be limited as you suggest.
+────────────────────────────────────────
+R2 QUBO accumulation
+Verdict: Correct.
+Notes: Phase 5 test 1 requires bitwise-identical output when the input
+monomials are permuted. Merging equal monomials in input order cannot
+guarantee that, except for the dyadic test data. The simple fix is to sort
+each monomial's contributions by bit pattern before summing; that also
+settles the ±0 case. The energy() constant point is also real: test 6 writes
+energy(z) + constant, but the API section never says whether energy includes
+the constant.
+────────────────────────────────────────
+R3 "4 ulp of 0"
+Verdict: Partly handled.
+Notes: Phase 1 reads this as 4·2⁻⁵², i.e. 4 ulp of 1 (pqc_layer_test.cpp:177).
+Read literally, 4 ulp of zero would be a subnormal bound and would fail. Your
+ criticism still applies, though: the bound is a fixed constant that doesn't
+grow with gate count or expectation size. It passes only because the test
+uses the constructor's shallow circuit.
+────────────────────────────────────────
+R4 Shot keys
+Verdict: Mostly already in the plan.
+Notes: D11 already makes the seed uploadable state with no step counter, which
+is the explicit resampling you recommend. What's new and worth adding:
+compare training with fixed samples against training with fresh samples each
+step, and test the covariance between the Z_q estimators. One practical gap:
+resampling every step means changing the seed every step. That needs a cheap
+device-side seed update, not a full upload_parameters, or graph-based
+training loses its point.
+────────────────────────────────────────
+R5 Tape compilation
+Verdict: Already done in phase 1.
+Notes: pqc_edges.cpp compiles the tape once per Layer forward/backward call and
+builds each edge's block matrices once. What's still missing is your request
+to measure the preparation cost separately.
+────────────────────────────────────────
+R6 Fock preflight
+Verdict: Agree.
+Notes: I'd make it the first step of phase 3 rather than a separate phase. It
+would check the recurrence-derived gates, cutoff convergence and extreme
+inputs against the dense matrix-exponential reference the plan already
+includes.
+ 
+Owner questions
+ 
+- Q1 conflicts with the plan. D2 says "Python simulators are not used". Your decision allows Qiskit, PennyLane and Strawberry Fields as optional cross-checks, so D2 needs amending. Those tests must skip cleanly when a simulator is missing, and the in-repo independent references stay as the required gate. On Strawberry Fields: as far as I know it is no longer actively maintained and pins old Python/NumPy versions, so it may not install here (aarch64, current Python). I haven't checked; it needs testing before we count on it. Its default convention is also ħ = 2, where the plan uses ħ = 1.
+- Q4: agree, as for R1. A runtime norm-gain check catches only rounding or bugs, but it costs nothing, so including it is fine.
+- Q2: I agree. The memory pre-check (estimating state, gradient and scratch memory and rejecting before execution) is a good addition.
+- Q11 and AGENTS rule 6: I agree this should be an explicit scope clarification. I'd record it in docs/evidence per rule 5 rather than editing AGENTS.md, which is your file; your call if you'd rather change it there.
+- Time-to-quality: a good primary metric. To keep it fair, the protocol needs:
+  - the same hyperparameter-search budget for every carrier;
+  - targets and splits written down before any run;
+  - censored runs reported as failures;
+  - FP32 rather than FP64, given GB10's FP64 rate.
+ 
+  It costs a lot of GPU time, so I'd make it its own phase after phase 7 rather than fold it into acceptance.
+- Q3, Q5–Q10: agree; they match the plan's defaults.
