@@ -111,6 +111,23 @@ void against_fd(double actual, double fd, const char* what) {
                                  " fd=" + std::to_string(fd) + " difference=" + std::to_string(actual - fd));
 }
 
+// A test-local double-double sum hi + lo (Knuth TwoSum, independent of the
+// library), for references that must not depend on long double.
+struct DoubleDouble {
+    double hi = 0, lo = 0;
+    static DoubleDouble two_sum(double a, double b) {
+        const double s = a + b, v = s - a;
+        return {s, (a - (s - v)) + (b - v)};
+    }
+    DoubleDouble& operator+=(double b) {
+        const auto s = two_sum(hi, b);
+        *this = two_sum(s.hi, s.lo + lo);
+        return *this;
+    }
+    // cos(hi + lo) = cos(hi) - sin(hi) lo + O(lo^2), |lo| <= ulp(hi) / 2.
+    double cos() const { return std::cos(hi) - std::sin(hi) * lo; }
+};
+
 // G: tape length, every rotation, encoding rotation and two-qubit gate.
 std::size_t gate_count(const PqcConfig& c) {
     const std::size_t n = c.qubits, r = c.repetitions;
@@ -277,19 +294,23 @@ TEST(pqc_evaluation_validates_parameters) {
 TEST(pqc_matches_closed_forms) {
     Random random{11};
     // One qubit, Y encoding, block {Y}: every rotation is about y, so
-    // <Z> = cos(sum of angles + sum of (w x + b)), here in long double. 1e-15
-    // up to r = 2 (5 rotations); r = 5 (11 rotations) is held to G 2^-52.
+    // <Z> = cos(sum of angles + sum of (w x + b)), the phase summed in
+    // double-double (plan review finding 22; long double is binary64 under
+    // MSVC). 1e-15 up to r = 2 (5 rotations); r = 5 (11 rotations) is held to
+    // G 2^-52.
     for (std::size_t r : {1u, 2u, 5u}) {
         const auto c = config(1, r, Rotation::Y, {Rotation::Y});
         const double tolerance = r <= 2 ? 1e-15 : double(2 * r + 1) * 0x1p-52;
         for (int trial = 0; trial < 20; ++trial) {
             const auto p = random_parameters(c, random);
             const double x = random(-1.5, 1.5);
-            long double phase = 0;
+            // The encoding angles are the binary64 values w x + b the circuit
+            // receives; every term is a double, so TwoSum keeps the sum exact
+            // to ~2^-104 relative.
+            DoubleDouble phase;
             for (double a : p.angles) phase += a;
             for (std::size_t j = 0; j < p.weights.size(); ++j) phase += p.weights[j] * x + p.biases[j];
-            absolute(evaluate(c, x, p).values.at(0), static_cast<double>(std::cos(phase)), tolerance,
-                     "cos of the summed Y rotations");
+            absolute(evaluate(c, x, p).values.at(0), phase.cos(), tolerance, "cos of the summed Y rotations");
         }
     }
     // One qubit, Y encoding, ZYZ blocks, r = 1: Bloch vector rotations.
