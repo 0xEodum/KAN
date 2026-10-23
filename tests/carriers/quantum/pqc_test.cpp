@@ -207,6 +207,12 @@ TEST(pqc_evaluation_validates_parameters) {
     bad.biases[1] = not_a_number;
     test::throws<std::invalid_argument>([&] { evaluate(c, 0.3, bad); });
     test::throws<std::invalid_argument>([&] { kan::pqc_state(c, 0.3, bad.angles, bad.weights, bad.biases); });
+    // w x + b overflows: nonfinite results raise std::overflow_error.
+    auto huge = p;
+    huge.weights[0] = 1e300;
+    test::throws<std::overflow_error>([&] { evaluate(c, 1e300, huge); });
+    test::throws<std::overflow_error>([&] { evaluate(c, 1e300, huge, GradientMethod::ParameterShift); });
+    test::throws<std::overflow_error>([&] { kan::pqc_state(c, 1e300, huge.angles, huge.weights, huge.biases); });
     auto invalid = c;
     invalid.qubits = 0;
     test::throws<std::invalid_argument>([&] { evaluate(invalid, 0.3, p); });
@@ -217,16 +223,19 @@ TEST(pqc_evaluation_validates_parameters) {
 TEST(pqc_matches_closed_forms) {
     Random random{11};
     // One qubit, Y encoding, block {Y}: every rotation is about y, so
-    // <Z> = cos(sum of angles + sum of (w x + b)).
+    // <Z> = cos(sum of angles + sum of (w x + b)), here in long double. 1e-15
+    // up to r = 2 (5 rotations); r = 5 (11 rotations) is held to G 2^-52.
     for (std::size_t r : {1u, 2u, 5u}) {
         const auto c = config(1, r, Rotation::Y, {Rotation::Y});
+        const double tolerance = r <= 2 ? 1e-15 : double(2 * r + 1) * 0x1p-52;
         for (int trial = 0; trial < 20; ++trial) {
             const auto p = random_parameters(c, random);
             const double x = random(-1.5, 1.5);
-            double phase = 0;
+            long double phase = 0;
             for (double a : p.angles) phase += a;
             for (std::size_t j = 0; j < p.weights.size(); ++j) phase += p.weights[j] * x + p.biases[j];
-            absolute(evaluate(c, x, p).values.at(0), std::cos(phase), 1e-15, "cos of the summed Y rotations");
+            absolute(evaluate(c, x, p).values.at(0), static_cast<double>(std::cos(phase)), tolerance,
+                     "cos of the summed Y rotations");
         }
     }
     // One qubit, Y encoding, ZYZ blocks, r = 1: Bloch vector rotations.

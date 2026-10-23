@@ -20,4 +20,12 @@ std::vector<double> rational_moments(DenominatorPolicy policy, std::size_t numer
 // Nonempty spans of equal length.
 BasisMoments wavelet_moments(std::span<const double> translations, std::span<const double> log_scales);
 
+// PQC edges (M5 D8), x uniform on [-1, 1]: the second moment m = E[m_t^2]
+// assumed for every measured term. Entangler::None: 1/3 for PauliZ (the
+// many-block limit of E[<Z>^2] for uniformly drawn ZYZ blocks), 3^-n for
+// Parity (independent qubits); with an entangler 1/(2^n + 1), the Haar
+// average of <P>^2 for one Pauli observable on n qubits (an assumption about
+// the drawn circuits). Exact in double.
+double pqc_second_moment(const PqcConfig& config);
+
 } // namespace kan::init

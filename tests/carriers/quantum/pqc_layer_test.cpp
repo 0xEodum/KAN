@@ -141,7 +141,7 @@ TEST(pqc_layer_construction) {
         1, 1, config(1, 2, {Rotation::Z, Rotation::Y, Rotation::Z}, Entangler::None, PqcReadout::PauliZ, Rotation::Z));
     diagonal.set_parameters(std::vector<double>{1}, std::vector<double>{0});
     const auto y = diagonal.forward(std::vector<double>{-0.7, 0.2, 1.9}, 3);
-    REQUIRE(y[0] == 1 && y[1] == 1 && y[2] == 1);
+    for (double v : y) REQUIRE(std::abs(v - 1) <= 4 * 0x1p-52); // |phase|^2 = c^2 + s^2 rounds
 }
 
 TEST(pqc_symmetric_point_derivatives) {
@@ -210,7 +210,9 @@ TEST(pqc_layer_forward_sums_every_edge_term) {
 TEST(pqc_layer_vjps_match_finite_differences) {
     for (const auto& c : {config(2, 2, {Rotation::Z, Rotation::Y, Rotation::Z}, Entangler::CnotChain),
                           config(3, 1, {Rotation::Y, Rotation::X}, Entangler::CnotRing, PqcReadout::Parity),
-                          config(1, 3, {Rotation::X, Rotation::Z}, Entangler::None, PqcReadout::PauliZ, Rotation::X)})
+                          config(1, 3, {Rotation::X, Rotation::Z}, Entangler::None, PqcReadout::PauliZ, Rotation::X),
+                          config(4, 1, {Rotation::Y, Rotation::Z}, Entangler::CzChain, PqcReadout::Parity),
+                          config(5, 1, {Rotation::X}, Entangler::CnotRing, PqcReadout::PauliZ, Rotation::Z)})
         for (bool residual : {false, true}) {
             auto layer = pqc(3, 2, c);
             if (residual) layer.set_residual(kan::SiluResidual{wave(6, 0.3, 0.7, 0.5)});
@@ -261,10 +263,20 @@ TEST(pqc_inputs_and_parameters_must_be_finite) {
         [&] { layer.backward(std::vector<double>{0.1, inf}, 1, std::vector<double>{1}); });
     test::throws<std::invalid_argument>(
         [&] { layer.backward(std::vector<double>{0.1, 0.2}, 1, std::vector<double>{not_a_number}); });
-    // Overflowing readout: the forward result is not finite.
-    auto big = layer;
+    // Overflowing readout (constructor circuit at x = 0: m = 1): the forward result is not finite.
+    kan::Layer big(2, 1, config(1, 2));
     big.set_parameters(std::vector<double>{1.5e308, 1.5e308}, std::vector<double>{1.5e308});
     test::throws<std::overflow_error>([&] { big.forward(std::vector<double>{0.0, 0.0}, 1); });
+    // An overflowing encoding angle w x + b (w = 10): forward and backward raise, the layer is unchanged.
+    kan::Layer steep(2, 1, config(1, 2));
+    const auto& e = edges_of(steep);
+    kan::set_pqc_parameters(steep, std::vector<double>{1, 1}, e.angles, std::vector<double>(4, 10.0), e.encoding_biases,
+                            std::vector<double>{0});
+    const auto before = steep.carrier();
+    test::throws<std::overflow_error>([&] { steep.forward(std::vector<double>{1e308, 0.5}, 1); });
+    test::throws<std::overflow_error>(
+        [&] { steep.backward(std::vector<double>{1e308, 0.5}, 1, std::vector<double>{1}); });
+    REQUIRE(steep.carrier() == before);
 }
 
 TEST(pqc_set_carrier_and_setters_validate_atomically) {
@@ -512,8 +524,8 @@ TEST(pqc_initializer_digest_is_pinned) {
     REQUIRE(digest(layer) != digest(copy));
     const auto value = digest(layer);
     std::printf("pinned %s\n", value.c_str());
-    // Pinned with GCC on aarch64 once the initializer exists (GREEN).
-    REQUIRE(value == "unpinned");
+    // Pinned with GCC on aarch64 (no MSVC run on this machine).
+    REQUIRE(value == "c8bec86f1c294f6f");
 }
 
 TEST(pqc_variance_scaling_preserves_the_second_moment) {

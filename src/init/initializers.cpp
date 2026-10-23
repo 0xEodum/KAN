@@ -8,6 +8,7 @@
 #include "init/portable_math.hpp"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -180,6 +181,37 @@ WaveletEdges wavelet_edges(const WaveletEdges& edges, const Initializer& initial
     return next;
 }
 
+// PQC edges (M5 D8): reference measure x uniform on [-1, 1] (variance 1/3)
+// and one moment m for every measured term (init::pqc_second_moment).
+// Coefficient draws in layout order (VarianceScaling sigma^2 = gain^2 (1/3) /
+// (inputs terms m), NoiseInit the linear carriers' amplitude with G = terms),
+// then every block angle pi (2u - 1), uniform on [-pi, pi), in layout order.
+// Encoding weights and biases and the shot seed are kept. A pending second
+// normal draw of the coefficients survives the uniform angle draws.
+PqcEdges pqc_edges(const PqcEdges& edges, const Initializer& initializer, std::size_t inputs, Generator& generator,
+                   Distribution distribution) {
+    const double terms = double(pqc_terms(edges.config));
+    const bool uniform = distribution == Distribution::Uniform;
+    double factor = 0;
+    if (const auto* v = std::get_if<VarianceScaling>(&initializer)) {
+        const double sigma =
+            std::sqrt(v->gain * v->gain * (1.0 / 3) / (double(inputs) * terms * init::pqc_second_moment(edges.config)));
+        factor = uniform ? std::sqrt(3.0) * sigma : sigma;
+    } else {
+        const double a = std::get<NoiseInit>(initializer).scale / (terms * std::sqrt(double(inputs)));
+        factor = uniform ? 0.5 * a : a / std::sqrt(12.0);
+    }
+    PqcEdges next{edges.config,
+                  std::vector<double>(edges.coefficients.size()),
+                  std::vector<double>(edges.angles.size()),
+                  edges.encoding_weights,
+                  edges.encoding_biases,
+                  edges.shot_seed};
+    for (auto& c : next.coefficients) c = factor * raw_draw(generator, distribution);
+    for (auto& theta : next.angles) theta = std::numbers::pi * generator.symmetric();
+    return next;
+}
+
 // Residual-branch weights (backlog M3), drawn after the carrier's parameters.
 // VarianceScaling: zero, which keeps its E[y^2] guarantee exact. NoiseInit:
 // pykan's scale_base (mean + spread * U[-1, 1)) / sqrt(inputs); a Normal draw
@@ -211,7 +243,7 @@ void initialize(Layer& layer, const Initializer& initializer) {
             else if constexpr (std::is_same_v<Edges, WaveletEdges>)
                 return wavelet_edges(edges, initializer, layer.inputs(), generator, common.distribution);
             else if constexpr (std::is_same_v<Edges, PqcEdges>)
-                return edges; // RED stub
+                return pqc_edges(edges, initializer, layer.inputs(), generator, common.distribution);
             else
                 return linear_edges(edges, initializer, layer.inputs(), layer.outputs(), generator,
                                     common.distribution);
@@ -221,6 +253,7 @@ void initialize(Layer& layer, const Initializer& initializer) {
         [](const auto& edges) {
             finite_parameters(edges.coefficients);
             if constexpr (requires { edges.denominators; }) finite_parameters(edges.denominators);
+            if constexpr (requires { edges.angles; }) finite_parameters(edges.angles);
         },
         next);
     const std::vector<double> bias(layer.outputs(), 0.0);

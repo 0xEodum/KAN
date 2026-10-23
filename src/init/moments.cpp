@@ -241,6 +241,15 @@ std::vector<double> rational_moments(DenominatorPolicy policy, std::size_t numer
     }
     return mu;
 }
+
+double pqc_second_moment(const PqcConfig& config) {
+    const double states = double(std::size_t{1} << config.qubits); // 2^n, exact
+    if (config.entangler != Entangler::None) return 1 / (states + 1);
+    if (config.readout == PqcReadout::PauliZ) return 1.0 / 3;
+    double power = 1; // 3^n, exact
+    for (std::size_t q = 0; q < config.qubits; ++q) power *= 3;
+    return 1 / power;
+}
 } // namespace init
 
 } // namespace kan
