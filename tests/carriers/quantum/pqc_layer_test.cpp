@@ -15,6 +15,8 @@
 #include <limits>
 #include <numbers>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 using kan::Entangler;
@@ -147,9 +149,18 @@ TEST(pqc_layer_construction) {
 TEST(pqc_symmetric_point_derivatives) {
     // Constructor parameters, Y encoding, c = 1: a real-amplitude circuit, so
     // every Z-angle adjoint derivative is exactly 0 (parameter shift: within
-    // 4 ulp), while input, encoding and Y-angle derivatives are not.
-    for (auto c : {config(1, 2), config(2, 3, {Rotation::Z, Rotation::Y, Rotation::Z}, Entangler::CnotChain),
-                   config(3, 2, {Rotation::Y, Rotation::Z}, Entangler::CnotRing, PqcReadout::Parity)}) {
+    // 4 ulp), while input, encoding and Y-angle derivatives are not. Shallow
+    // cases, then mid-depth (n = 3, r = 8) and the D9 limit (n = 5, r = 32)
+    // with every entangler and both readouts.
+    std::vector<PqcConfig> cases{config(1, 2),
+                                 config(2, 3, {Rotation::Z, Rotation::Y, Rotation::Z}, Entangler::CnotChain),
+                                 config(3, 2, {Rotation::Y, Rotation::Z}, Entangler::CnotRing, PqcReadout::Parity)};
+    for (auto [n, r] : {std::pair<std::size_t, std::size_t>{3, 8}, {5, 32}})
+        for (auto entangler : {Entangler::None, Entangler::CnotChain, Entangler::CzChain, Entangler::CnotRing})
+            for (auto readout : {PqcReadout::PauliZ, PqcReadout::Parity})
+                cases.push_back(config(n, r, {Rotation::Z, Rotation::Y, Rotation::Z}, entangler, readout));
+    double worst = 0; // largest |shift Z-angle derivative| / (4 * 2^-52)
+    for (const auto& c : cases) {
         kan::Layer layer(1, 1, c);
         layer.set_parameters(std::vector<double>(layer.terms(), 1.0), std::vector<double>{0});
         const double x = 0.37;
@@ -174,9 +185,12 @@ TEST(pqc_symmetric_point_derivatives) {
             for (std::size_t j = 0; j < e.angles.size(); ++j)
                 if (c.block[j % B] == Rotation::Z) {
                     REQUIRE(adjoint.angle_derivatives[t * e.angles.size() + j] == 0.0);
-                    REQUIRE(std::abs(shift.angle_derivatives[t * e.angles.size() + j]) <= 4 * 0x1p-52);
+                    const double d = std::abs(shift.angle_derivatives[t * e.angles.size() + j]);
+                    worst = std::max(worst, d / (4 * 0x1p-52));
+                    REQUIRE(d <= 4 * 0x1p-52);
                 }
     }
+    std::printf("symmetric point: largest |shift Z derivative| is %.3e of 4 * 2^-52\n", worst);
 }
 
 TEST(pqc_layer_forward_sums_every_edge_term) {
