@@ -107,6 +107,31 @@ double mean_square(std::span<const double> v) {
     for (double x : v) s += x * x;
     return s / double(v.size());
 }
+
+// G: tape length, every rotation, encoding rotation and two-qubit gate.
+std::size_t gate_count(const PqcConfig& c) {
+    const std::size_t n = c.qubits, r = c.repetitions;
+    const std::size_t entangling = c.entangler == Entangler::None ? 0 : c.entangler == Entangler::CnotRing ? n : n - 1;
+    return (r + 1) * n * c.block.size() + r * n + r * entangling;
+}
+
+// Bound on a parameter-shift derivative d = (m(fl(p + q)) - m(fl(p - q))) / 2,
+// q = fl(pi/2), at a point p where the exact derivative is 0; u = 2^-52.
+// (i) In p alone m(p) = a + b cos p + c sin p (R(p) enters through cos p/2 and
+//     sin p/2 on both sides), so m(p + s) - m(p - s) = 2 sin(s) m'(p) = 0 for
+//     every s: the inexact q costs nothing.
+// (ii) fl(p +- q) = p +- q + eta, |eta| <= (u/2)(|p| + q), and |m'| <=
+//     sqrt(b^2 + c^2) <= 1 because |m| <= 1 (Z or parity readout): at most
+//     (|eta+| + |eta-|) / 2 <= (u/2)(|p| + 2).
+// (iii) Each computed expectation: state error |e| <= 2 G u (the per-gate
+//     budget of the normalization bound (4G + 2^n) u in pqc_test), so
+//     |m^ - m| <= 2|e| + |e|^2 + 2^n u (readout sum, |M| <= 1), at most
+//     (4G + 2^n) u; half the difference of two such errors is no larger.
+// The final subtraction and halving add at most u/2 |d|. Total:
+// |d| <= (4G + 2^n + |p| + 2) u.
+double shift_zero_bound(const PqcConfig& c, double p) {
+    return (4 * double(gate_count(c)) + double(std::size_t{1} << c.qubits) + std::abs(p) + 2) * 0x1p-52;
+}
 } // namespace
 
 TEST(pqc_layer_construction) {
@@ -148,10 +173,12 @@ TEST(pqc_layer_construction) {
 
 TEST(pqc_symmetric_point_derivatives) {
     // Constructor parameters, Y encoding, c = 1: a real-amplitude circuit, so
-    // every Z-angle adjoint derivative is exactly 0 (parameter shift: within
-    // 4 ulp), while input, encoding and Y-angle derivatives are not. Shallow
-    // cases, then mid-depth (n = 3, r = 8) and the D9 limit (n = 5, r = 32)
-    // with every entangler and both readouts.
+    // every Z-angle adjoint derivative is exactly 0 (the algorithm guarantees
+    // it), the parameter-shift one is within shift_zero_bound (measured: exactly
+    // 0 on glibc, the +-q states being bitwise conjugates; IEEE 754 does not
+    // guarantee that), while input, encoding and Y-angle derivatives are not 0.
+    // Shallow cases, then mid-depth (n = 3, r = 8) and the D9 limit (n = 5,
+    // r = 32) with every entangler and both readouts.
     std::vector<PqcConfig> cases{config(1, 2),
                                  config(2, 3, {Rotation::Z, Rotation::Y, Rotation::Z}, Entangler::CnotChain),
                                  config(3, 2, {Rotation::Y, Rotation::Z}, Entangler::CnotRing, PqcReadout::Parity)};
@@ -159,7 +186,7 @@ TEST(pqc_symmetric_point_derivatives) {
         for (auto entangler : {Entangler::None, Entangler::CnotChain, Entangler::CzChain, Entangler::CnotRing})
             for (auto readout : {PqcReadout::PauliZ, PqcReadout::Parity})
                 cases.push_back(config(n, r, {Rotation::Z, Rotation::Y, Rotation::Z}, entangler, readout));
-    double worst = 0; // largest |shift Z-angle derivative| / (4 * 2^-52)
+    double worst = 0; // largest |shift Z-angle derivative| / shift_zero_bound
     for (const auto& c : cases) {
         kan::Layer layer(1, 1, c);
         layer.set_parameters(std::vector<double>(layer.terms(), 1.0), std::vector<double>{0});
@@ -186,11 +213,12 @@ TEST(pqc_symmetric_point_derivatives) {
                 if (c.block[j % B] == Rotation::Z) {
                     REQUIRE(adjoint.angle_derivatives[t * e.angles.size() + j] == 0.0);
                     const double d = std::abs(shift.angle_derivatives[t * e.angles.size() + j]);
-                    worst = std::max(worst, d / (4 * 0x1p-52));
-                    REQUIRE(d <= 4 * 0x1p-52);
+                    const double bound = shift_zero_bound(c, e.angles[j]);
+                    worst = std::max(worst, d / bound);
+                    REQUIRE(d <= bound);
                 }
     }
-    std::printf("symmetric point: largest |shift Z derivative| is %.3e of 4 * 2^-52\n", worst);
+    std::printf("symmetric point: largest |shift Z derivative| is %.3e of (4G + 2^n + |p| + 2) 2^-52\n", worst);
 }
 
 TEST(pqc_layer_forward_sums_every_edge_term) {
