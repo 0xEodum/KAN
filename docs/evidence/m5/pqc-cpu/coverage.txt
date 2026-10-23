@@ -1,0 +1,46 @@
+------------------------------------------------------------------------------
+                           GCC Code Coverage Report
+Directory: .
+------------------------------------------------------------------------------
+File                                       Lines     Exec  Cover   Missing
+------------------------------------------------------------------------------
+src/backends/cpu/basis_edges.cpp             106      106   100%
+src/backends/cpu/basis_host.hpp                3        3   100%
+src/backends/cpu/edge_ops.hpp                  6        6   100%
+src/backends/cpu/lanes.hpp                    21       21   100%
+src/backends/cpu/linear_engine.hpp           100      100   100%
+src/backends/cpu/pqc_edges.cpp               127      127   100%
+src/backends/cpu/rational_edges.cpp           62       62   100%
+src/backends/cpu/wavelet_edges.cpp            76       76   100%
+src/carriers/basis.cpp                       113      110    97%   71,120,126
+src/carriers/basis_formulas.hpp               24       23    95%   76
+src/carriers/basis_view.hpp                   26       26   100%
+src/carriers/local/grid_refit.hpp             98       97    99%   46
+src/carriers/local/local_formulas.hpp        125      125   100%
+src/carriers/local/local_operations.cpp      215      211    98%   30,85,165,242
+src/carriers/local/wavelet.cpp                12       12   100%
+src/carriers/polynomial/polynomial_formulas.hpp
+                                              80       80   100%
+src/carriers/quantum/pqc.cpp                 125      124    99%   93
+src/carriers/quantum/pqc_formulas.hpp        141      141   100%
+src/carriers/quantum/tape.hpp                 69       69   100%
+src/carriers/rational/rational.cpp            48       47    97%   81
+src/carriers/rational/rational_formulas.hpp
+                                              89       84    94%   41,204,210,224-225
+src/carriers/rational/rational_operations.cpp
+                                              11       11   100%
+src/carriers/trigonometric/fourier_formulas.hpp
+                                              13       13   100%
+src/core/checks.hpp                           12       12   100%
+src/core/host_device.hpp                      15       15   100%
+src/core/input_map.cpp                       201      199    99%   193,274
+src/core/input_map_formulas.hpp                7        7   100%
+src/core/layer.cpp                           237      234    98%   221,223,317
+src/core/network.cpp                         124      122    98%   122,130
+src/core/residual_formulas.hpp                 5        5   100%
+src/init/initializers.cpp                    180      177    98%   88,182,230
+src/init/moments.cpp                         167      163    97%   110,139,216,243
+src/init/portable_math.hpp                    77       76    98%   140
+------------------------------------------------------------------------------
+TOTAL                                       2715     2684    98%
+------------------------------------------------------------------------------

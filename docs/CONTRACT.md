@@ -1,4 +1,4 @@
-# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4, M5, M6 and M7)
+# KAN numerical contract (M1 through M4, backlog R1-R3, M1, M2, M3, M4, M5, M6 and M7, M5 quantum carriers)
 
 An edge is a learned univariate function. A basis layer computes
 `y[b,o] = bias[o] + sum_i sum_k coefficients[o,i,k] * basis_k(x[b,i])`.
@@ -674,10 +674,15 @@ A `Layer` holds dimensions, a per-output bias and exactly one `kan::Carrier`
 - `WaveletEdges{config, coefficients, translations, log_scales}`: per-edge trainable
   Mexican-hat wavelets, nonlinear in the per-edge-term translations and log scales (backlog M7,
   below); no expansion is shared between edges, so it has no contraction form.
+- `PqcEdges{config, coefficients, angles, encoding_weights, encoding_biases, shot_seed}`: one
+  parametrized quantum circuit per edge with a linear readout of its measured expectations,
+  nonlinear in the per-edge angles and encoding weights and biases (M5, "Quantum carriers (M5):
+  PQC" below).
 
 `Layer(inputs, outputs, BasisConfig)` selects `TrainableRbfEdges` for a
 `TrainableRbfConfig` and `BasisEdges` otherwise; `Layer(inputs, outputs, RationalConfig)`
-selects `RationalEdges`, `Layer(inputs, outputs, WaveletConfig)` selects `WaveletEdges`.
+selects `RationalEdges`, `Layer(inputs, outputs, WaveletConfig)` selects `WaveletEdges`,
+`Layer(inputs, outputs, PqcConfig)` selects `PqcEdges`.
 `carrier()` returns the carrier; `terms()` is the number of
 coefficients per edge; `coefficients()`/`bias()` and `set_parameters` act on every
 carrier's per-edge coefficient tensor (the tensor the coefficient L2 penalizes, together
@@ -689,13 +694,14 @@ Carriers and configurations are values with `operator==`.
 `LayerGradients{input, coefficients, bias, nonlinear, residual}`: `nonlinear` is a
 `NonlinearGradients` variant whose alternative corresponds to the carrier
 (`std::monostate`, `TrainableRbfGradients{centers, log_widths}`,
-`RationalGradients{denominators}`, `WaveletGradients{translations, log_scales}`). SGD rejects a gradient whose alternative does not
+`RationalGradients{denominators}`, `WaveletGradients{translations, log_scales}`,
+`PqcGradients{angles, encoding_weights, encoding_biases}`). SGD rejects a gradient whose alternative does not
 match the carrier with `std::invalid_argument`. `residual` is the residual-branch weight
 gradient (backlog M3), empty for a layer without the branch.
 
 Family-specific operations are free functions in `include/kan/families.hpp`
 (`insert_knot`, `adapt_grid`, `set_rbf_parameters`, `set_rational_parameters`,
-`set_wavelet_parameters`); each
+`set_wavelet_parameters`, `set_pqc_parameters`); each
 requires its carrier and basis type, raises `std::invalid_argument` otherwise, and
 commits through `set_carrier`.
 
@@ -815,6 +821,7 @@ family's reference measure and `m_k = E[phi_k(x)^2]` under it:
 | Gaussian RBF (fixed, trainable) | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 9w | L²/12 |
 | Mexican hat | uniform on [min c, max c] | 8-point Gauss-Legendre, 36 panels on c ± 12s | L²/12 |
 | Per-edge wavelets (backlog M7) | uniform on [min(τ − s), max(τ + s)] over the layer's wavelets | per wavelet, closed form `(G(q_hi) − G(q_lo))/L`, `G(q) = erf(q)/2 + (q − 2q³)e^{−q²}/(3√π)` | L²/12 |
+| PQC edges (M5) | uniform on [-1, 1] | one `m` per term: `Entangler::None` 1/3 (PauliZ), 3^-n (Parity); entangled 1/(2^n + 1) | 1/3 |
 
 The Hermite functions are orthonormal under the Lebesgue measure, which is not a probability
 measure; they keep the physicists' N(0, 1/2), so switching the normalization does not change the
@@ -1253,6 +1260,115 @@ still needs a host refit and a new executor. Measured cost and memory:
 `Network.adapt_grid_from_input(index, input)` (a network input batch, propagated),
 `ResidentNetwork.refit_grids(options)`.
 
+## Quantum carriers (M5): PQC
+
+`include/kan/pqc.hpp`, carrier `kan::PqcEdges` (M5 phase 1; QKAN/DARUAN, Jiang et al., arXiv
+2509.14026, generalized to a few qubits; scope and defaults in the
+[M5 plan](evidence/M5-plan.md), phase evidence [M5-pqc-cpu](evidence/M5-pqc-cpu.md)). Every edge
+(o,i) is one data re-uploading circuit on n qubits with its own parameters; the circuit structure
+is the layer's `PqcConfig`:
+
+```
+|psi(x)> = W_r S_r(x) E W_(r-1) ... S_1(x) E W_0 |0...0>,     R_a(p) = exp(-i p sigma_a / 2)
+S_l(x)  = (x)_q R_enc(w[l,q] x + b[l,q]),  l = 1..r
+W_l     = (x)_q R_(a_(B-1))(theta[l,q,B-1]) ... R_(a_0)(theta[l,q,0])   (axis 0 applied first)
+m_q(x)  = <psi|Z_q|psi> (PauliZ, terms n)   or   m(x) = <psi|Z...Z|psi> (Parity, terms 1)
+phi_{o,i}(x) = sum_t c[o,i,t] m_t(x)
+```
+
+Little-endian (bit q of a basis index is qubit q). `E` is `CNOT(q -> q+1)` for q ascending
+(`CnotChain`; `CnotRing` adds `CNOT(n-1 -> 0)`), `CZ(q, q+1)` for q ascending (`CzChain`), or the
+identity (`None`). With n = 1 this is DARUAN with `W(1..r+1) = W_0..W_r`. Layouts: `coefficients`
+`(outputs, inputs, terms)`; `angles` `(outputs, inputs, (r+1) n B)`, index `(l n + q) B + k`;
+`encoding_weights`, `encoding_biases` `(outputs, inputs, r n)`, index `(l-1) n + q`
+(`kan::pqc_terms`, `pqc_angles`, `pqc_encodings`). The readout coefficients `c` are the carrier's
+per-edge coefficient tensor (`coefficients()`, `set_parameters`, L2); angles, encoding weights
+and biases are nonlinear parameters (unpenalized). For DARUAN, whose node sum has no free scale,
+`c` is a reparametrization (as the wavelet normalization was).
+
+- *Configuration and validation* (`validate_pqc`, `std::invalid_argument`). `PqcConfig{qubits =
+  1, repetitions = 2, encoding = Y, block = {Z, Y, Z}, entangler = None, readout = PauliZ, shots =
+  0}` (value type, `operator==`; `Rotation`, `Entangler`, `PqcReadout`, `GradientMethod` are
+  `enum class`). Limits (D9): qubits 1..5, repetitions 1..32, block 1..3 axes; rejected: adjacent
+  equal block axes (their angles add), an enumerator out of range, an entangler other than `None`
+  on one qubit, `CnotRing` below three qubits, and `shots > 0` ("finite shots are not available",
+  until phase 6). `set_carrier` also rejects a nonzero `shot_seed` with `shots = 0`, wrong shapes
+  and nonfinite parameters.
+- *Construction.* `Layer(inputs, outputs, PqcConfig)`: `c = 0`, bias 0, `theta = 0`, `w = 1`,
+  `b = 0`, `shot_seed = 0`. With `c = 1`, n = 1 and Y encoding every edge is `cos(r x)`. At this
+  point (Y encoding: a real-amplitude circuit) every Z-angle adjoint derivative is exactly 0 and
+  the parameter-shift ones within 4·2^-52; input, encoding and Y-angle derivatives are not zero at
+  generic x. With Z encoding the constructor circuit is diagonal and the edge is constant in x
+  (within rounding).
+- *Structurally inert angles* are expressible and documented, not rejected: a Z rotation while
+  its qubit is still |0> up to a phase (the first Z rotations of the default block), and a Z
+  rotation followed on its qubit only by Z rotations, CZ and CNOTs it controls (the last Z
+  rotations of the default block commute with the Z/parity readouts). The tape marks them; their
+  derivatives are exactly 0 on both gradient paths and are not computed.
+- *Measurement.* Exact expectations from the amplitudes (`shots = 0`, the only mode in phase 1),
+  deterministic and bitwise reproducible on one build. States are unitary images of `|0...0>`; no
+  renormalization is applied. Born probabilities `p_k = |psi_k|^2`; tested
+  `|sum_k p_k - 1| <= (4G + 2^n) 2^-52` (G the tape length: rotations, encodings and two-qubit
+  gates; measured at most 0.04 of the bound up to 32 repetitions) and `p_k` in `[0, 1]` within it.
+  `kan::pqc_state` returns the final amplitudes of one circuit.
+- *Simulation* (`src/carriers/quantum/`). The configuration is compiled per call into a flat
+  integer tape (at most 815 entries; no strings, hashing or parsing; identical for every edge).
+  Forward: the fused form, per edge the block matrices `W_(l,q)` (2x2 complex, from the angle
+  half-angles `cos(theta/2), sin(theta/2)`, built `W <- R_k W`), then per sample `W_(0,q)` for q
+  ascending and per layer the entangler gates followed by `M_(l,q) = W_(l,q) R_enc(phi)` for q
+  ascending, one pass over the state each (gates on different qubits commute; this is the tape's
+  unitary with fewer roundings). Readout `m_t = sum_k sign_t(k) p_k` in ascending k.
+- *Derivatives.* `kan::evaluate_pqc(config, x, angles, encoding_weights, encoding_biases, method)`
+  returns `m_t` and per term the derivatives with respect to x, every angle, encoding weight and
+  bias (row-major per term). Adjoint (`GradientMethod::Adjoint`, the default and the layer's
+  backward): `lambda = O psi` with the diagonal `O`, then for the gates from the last to the first
+  one with a derivative: for a non-inert rotation `d = Im <lambda|sigma|psi>` (pairs ascending),
+  then `psi <- U^dagger psi`, `lambda <- U^dagger lambda` (a pass each); CNOT/CZ applied to both.
+  States are recovered by inversion, nothing is stored per gate. Parameter shift
+  (`GradientMethod::ParameterShift`, `evaluate_pqc` only in phase 1): `(m(p + pi/2) - m(p - pi/2))/2`
+  for every non-inert angle and every encoding angle `p = w x + b`. The input enters every encoding
+  gate: `dm/dx = sum_j w_j dm/dphi_j`, `dm/dw_j = x dm/dphi_j`, `dm/db_j = dm/dphi_j`. Measured:
+  adjoint and parameter shift agree within 1.5e-15; both match central finite differences
+  (h = 1e-6) within `1e-7 |fd| + 1e-9`, of the library and of an independent dense
+  Kronecker-product reference; amplitudes and expectations agree with that reference within
+  6.8e-16 and 1.2e-15 (200 random circuits, n <= 4, r <= 4, every axis, entangler and readout).
+  Nonfinite results (an overflowing `w x + b`) raise `std::overflow_error`.
+- *CPU order* (`src/backends/cpu/pqc_edges.cpp`). The tape is compiled once per call; edges are
+  visited o, then i; per edge the angle half-angles and block matrices (and backward the diagonal
+  `o_k = sum_t sign_t(k) c_t`, ascending t) are formed once into stack arrays; samples run in
+  blocks of 8 as independent vector lanes, every lane performing the scalar operation sequence
+  (results bitwise those of one sample at a time; no heap allocation per edge or sample).
+  Forward: `y[b,o] = bias[o]`, then `+= c_t m_t` in ascending i, then t. Backward per sample and
+  edge (`u = u[b,o]`): `dc_t += u m_t`; `lambda_k = (u o_k) psi_k`; the adjoint pass adds `d` to
+  the angle VJP, or for an encoding gate `d` to the bias VJP, `x d` to the weight VJP and `w d` to
+  the edge's input VJP (gates in reverse order), which is added to `dx[b,i]` after the pass
+  (ascending o per sample); every parameter VJP accumulates in ascending b. Nonfinite results
+  raise `std::overflow_error`.
+- *SGD, L2, residual branch, setters.* SGD updates `c`, the angles, encoding weights and biases
+  after validating everything; a nonfinite candidate raises `std::overflow_error` with the layer
+  unchanged. `regularization` penalizes `c` (and the residual weights) only; the `PqcGradients` of
+  the penalty are zero vectors. `set_parameters` keeps the nonlinear parameters;
+  `kan::set_pqc_parameters(layer, coefficients, angles, encoding_weights, encoding_biases, bias)`
+  replaces them atomically and keeps the shot seed (`std::invalid_argument` for another carrier).
+- *Initializers* (D8, a stated deviation from "nonlinear parameters are kept"). Reference measure
+  x uniform on [-1, 1] (variance 1/3); one moment `m` for every term (table above: with
+  `Entangler::None` 1/3 for PauliZ, the many-block limit of `E[<Z>^2]` for uniformly drawn ZYZ
+  blocks, and 3^-n for Parity; with an entangler `1/(2^n + 1)`, the Haar average of `<P>^2`, an
+  assumption about the drawn circuits). `VarianceScaling`: `sigma^2 = gain^2 (1/3) /
+  (inputs terms m)`; `NoiseInit`: `G = terms`. Draw order: coefficients in layout order, then
+  every block angle `pi (2u - 1)`, uniform on [-pi, pi), in layout order, then residual weights; a
+  pending second normal value of the coefficient draws survives the uniform angle draws and is
+  the first residual draw. Encoding weights and biases and the shot seed are kept. Basic
+  operations only (portable); pinned digest `c8bec86f1c294f6f` (GCC, aarch64). Measured
+  `E[y^2]/target` (16-seed mean, 16 x 16, r = 4): 1.03 (n = 1), 1.00 (n = 2), asserted within
+  0.15; recorded 0.90-1.06 for r = 1, 2, Parity and entangled circuits (M5 evidence).
+- *Resident executor.* Not available in phase 1 (D13): constructing a `ResidentNetwork` for a
+  network with a PQC layer raises `std::invalid_argument("resident execution of PQC layers is not
+  available")` in every precision; uploading a PQC network into another executor is a structure
+  mismatch ("carrier").
+- *Python.* Phase 7. Until then `kan.PqcEdges` is a read-only snapshot class (coefficients) that
+  cannot be constructed; there is no `PqcConfig` binding, so no PQC layer reaches Python.
+
 ## Extension boundaries
 
 Basis, rational and residual-branch formulas have a single source shared by the CPU
@@ -1293,10 +1409,14 @@ a new group), a dispatch case (`basis_formulas.hpp`), the configuration-to-view 
 `carriers/` hold no CPU loops, but the CPU Layer dispatches to `backends/cpu/edge_ops.hpp`
 and `evaluate_basis` uses the CPU's throwing guard (`backends/cpu/basis_host.hpp`);
 `backends/cuda/` uses `carriers/` and `core/` formulas only. No symbolic parser, Eigen, Torch, Python runtime or
-imported KAN implementation is required. Quantum carriers need separate
-physical/measurement contracts at M5; their planned location is `src/carriers/quantum/`
-(no placeholder directory is kept), with any simulator adapter as a backend under
-`src/backends/`.
+imported KAN implementation is required. Quantum carriers (M5) have their own
+physical/measurement contract ("Quantum carriers (M5): PQC"): the typed configuration is
+compiled into an integer gate tape (`src/carriers/quantum/tape.hpp`), the shared host/device
+state-vector formulas are in `src/carriers/quantum/pqc_formulas.hpp`, validation,
+`evaluate_pqc`, `pqc_state` and `set_pqc_parameters` in `src/carriers/quantum/pqc.cpp`, the CPU
+loops in `src/backends/cpu/pqc_edges.cpp` (with the sample lanes of
+`src/backends/cpu/lanes.hpp`); no string, hashing or parsing appears in these files (a CTest
+source check, `quantum_source_check`).
 
 ## Mathematical sources
 
@@ -1309,3 +1429,6 @@ physical/measurement contracts at M5; their planned location is `src/carriers/qu
 - [Ricker definition](https://docs.scipy.org/doc/scipy-1.12.0/reference/generated/scipy.signal.ricker.html): continuous Mexican-hat normalization.
 - [Awesome KAN](https://github.com/mintisan/awesome-kan): variant discovery only.
 - [Quantum-KAN](https://github.com/wtroy2/Quantum-KAN): referenced by the brief; no code reused.
+- [Jiang, Huang, Chen, Goan: Quantum Variational Activation Functions Empower Kolmogorov-Arnold Networks (arXiv 2509.14026)](https://arxiv.org/abs/2509.14026): DARUAN data re-uploading edges (the PQC carrier); no code reused.
+- [Schuld et al.: Evaluating analytic gradients on quantum hardware (arXiv 1811.11184)](https://arxiv.org/abs/1811.11184): parameter-shift rule.
+- [Jones, Gacon: Efficient calculation of gradients in classical simulations of variational quantum algorithms (arXiv 2009.02823)](https://arxiv.org/abs/2009.02823): adjoint differentiation.

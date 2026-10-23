@@ -1,0 +1,12 @@
+suite,backend,cases,geomean_ratio,min_ratio,max_ratio
+basis,cpu_full,24,0.991,0.980,1.003
+basis,legacy_full,4,1.005,0.996,1.019
+basis,resident_full,24,1.001,0.969,1.100
+basis,transfer_full,24,1.001,0.988,1.016
+local,cpu_full,12,0.999,0.993,1.003
+local,resident_full,12,0.998,0.982,1.007
+local,transfer_full,12,0.996,0.981,1.009
+rational,cpu_full,12,0.993,0.972,1.015
+rational,resident_full,12,0.999,0.980,1.005
+rational,transfer_full,12,1.001,0.987,1.011
+checksum mismatches: 0

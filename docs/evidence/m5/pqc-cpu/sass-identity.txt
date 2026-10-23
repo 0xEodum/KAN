@@ -1,0 +1,16 @@
+== cuda resident.cu
+before 292 kernels, after 292, common 292, differing 0
+only after: 0 e.g. []
+only before: []
+== cuda cuda.cu
+before 0 kernels, after 0, common 0, differing 0
+only after: 0 e.g. []
+only before: []
+== fma resident.cu
+before 292 kernels, after 292, common 292, differing 0
+only after: 0 e.g. []
+only before: []
+== fma cuda.cu
+before 0 kernels, after 0, common 0, differing 0
+only after: 0 e.g. []
+only before: []

@@ -1,0 +1,4 @@
+name, clocks.current.sm [MHz], utilization.gpu [%], temperature.gpu
+NVIDIA GB10, 2398 MHz, 0 %, 45
+name, clocks.current.sm [MHz], utilization.gpu [%], temperature.gpu
+NVIDIA GB10, 2405 MHz, 0 %, 45

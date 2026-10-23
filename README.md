@@ -14,7 +14,7 @@ backward and training; optional Python bindings expose the same implementation.
 | Local / adaptive | B-splines with shared or per-input grids, exact adaptive knot refinement, quantile grid refit (CPU and device), coefficient L2 | Additional grid policies |
 | Input maps | Explicit affine (fixed, from data range or moments), tanh, LayerNorm (trainable gain/bias) layers | — |
 | Initializers | Explicit seeded variance-preserving and pykan-style noise initialization, pole-free rational denominators | — |
-| Quantum carriers | — | Experimental PQC/Fock contracts and adapters |
+| Quantum carriers (experimental, M5) | Parametrized quantum circuit edges (`PqcEdges`, DARUAN-style re-uploading circuits, 1-5 qubits) on the CPU: exact expectations, adjoint and parameter-shift gradients | Resident CUDA PQC, finite shots, Fock edges, QUBO/quadratization, Python |
 
 CPU supports all eight available families and compatible networks of any depth.
 The optional CUDA target provides both the original synchronous Chebyshev layer
@@ -296,6 +296,26 @@ Wav-KAN's edge). `kan::set_wavelet_parameters` replaces them; the resident execu
 them in every precision. See the [wavelet contract](docs/CONTRACT.md#per-edge-trainable-wavelets-backlog-m7)
 and [Python examples](tests/python/wavelet_python_test.py).
 
+## Quantum circuit edges (PQC, experimental)
+
+```cpp
+kan::PqcConfig pqc;                      // n = 1, r = 2, Y encoding, ZYZ blocks, <Z> readout
+pqc.qubits = 2;
+pqc.entangler = kan::Entangler::CnotChain;
+kan::Layer quantum(2, 3, pqc);           // c = 0, angles 0, encoding weights 1, biases 0
+kan::initialize(quantum, kan::VarianceScaling{}); // coefficients and angles in [-pi, pi)
+auto g = quantum.backward(x, batch, upstream);    // adjoint VJPs; g.nonlinear: kan::PqcGradients
+auto e = kan::evaluate_pqc(pqc, 0.3, angles, weights, biases,
+                           kan::GradientMethod::ParameterShift); // one circuit, m_t and derivatives
+```
+
+Every edge is a data re-uploading circuit `W_r S_r(x) E ... S_1(x) E W_0 |0...0>` with its
+own rotation angles and encoding weights/biases, read out as `sum_t c_t <Z_t>` (or the
+parity). Expectations are exact and never renormalized; `kan::pqc_state` returns the
+amplitudes. CPU only in this phase: a resident executor rejects PQC layers. See the
+[PQC contract](docs/CONTRACT.md#quantum-carriers-m5-pqc) and the
+[phase evidence](docs/evidence/M5-pqc-cpu.md).
+
 ## Rational use
 
 ```cpp
@@ -400,19 +420,21 @@ that matter for execution (backlog R4):
 | `src/carriers/trigonometric/` | Fourier: global, periodic |
 | `src/carriers/local/` | B-spline, Gaussian RBF, Mexican hat (fixed and per-edge trainable wavelets): local support or decaying tails; knot, RBF- and wavelet-parameter operations |
 | `src/carriers/rational/` | Rational edges: per-edge P/Q with denominator policies |
+| `src/carriers/quantum/` | Quantum carriers (M5): PQC gate tape, shared state-vector formulas, validation and single-circuit evaluation |
 | `src/backends/cpu/` | CPU carrier loops and the shared expansion + contraction engine |
 | `src/backends/cuda/` | Optional `kan::cuda` target: resident executor, device query, deprecated M1 adapter |
 | `src/init/` | Initializers, portable draws and reference moments |
 
 Each carrier group holds its single host/device formula source, shared by both
-backends. Quantum carriers (roadmap M5) are planned under `src/carriers/quantum/`.
+backends. Quantum carriers (roadmap M5) are in `src/carriers/quantum/` (gate tape and
+state-vector formulas; CPU loops in `src/backends/cpu/pqc_edges.cpp`).
 
 Tests mirror this layout and are named by feature (backlog R5): `tests/core/`,
-`tests/carriers/` (with `local/` and `rational/`), `tests/init/`, `tests/backends/cuda/`
+`tests/carriers/` (with `local/`, `rational/` and `quantum/`), `tests/init/`, `tests/backends/cuda/`
 (every suite that needs a GPU, including the per-carrier `*_resident` suites) and
 `tests/python/`; shared helpers are in `tests/support/`. A file `<name>_test.cpp` or
 `<name>_test.py` is the CTest `<name>`. Labels give the requirement (`cpu`, `cuda`,
-`python`) and the feature group (`core`, `carriers`, `local`, `rational`, `init`,
+`python`) and the feature group (`core`, `carriers`, `local`, `rational`, `quantum`, `init`,
 `resident`), e.g. `ctest -L rational`. The frozen benchmarks are `basis_benchmark`
 (polynomial, Fourier, Gaussian RBF), `local_benchmark` (B-spline, Mexican hat, trainable
 RBF) and `rational_benchmark`, formerly `m2/m3/m4_benchmark`; recorded CSVs with the old

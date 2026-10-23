@@ -1,0 +1,64 @@
+Test project /tmp/claude-1000/-home-core-ai-PyProjects-KAN/fcd6404b-b9b9-4262-899b-3cf4276f44cb/scratchpad/m5p1/red-cuda
+    Start 20: pqc
+1/6 Test #20: pqc ..............................***Failed    0.00 sec
+FAIL pqc_configuration_validation: expected exception was not thrown
+FAIL pqc_evaluation_validates_parameters: expected exception was not thrown
+FAIL pqc_matches_closed_forms: cos of the summed Y rotations: actual=0.000000 expected=-0.996202 difference=0.996202
+dense reference: largest amplitude difference 1.000e+00, expectation 1.000e+00 (entanglers 95/47/31/27)
+FAIL pqc_matches_the_dense_reference: largest_amplitude <= 1e-13
+FAIL pqc_states_are_unit_norm_with_born_probabilities: std::abs(total - 1) <= bound
+adjoint vs parameter shift: largest difference 0.000e+00 (largest derivative 0.000)
+FAIL pqc_gradients_agree_with_each_other_and_finite_differences: largest_derivative > 0.5
+FAIL pqc_gradients_match_finite_differences_of_the_reference: reference d/dangle: analytic=0.000000 fd=0.243621 difference=-0.243621
+FAIL pqc_structurally_inert_angles_have_exactly_zero_gradients: other > 1e-3
+0/8 passed
+
+    Start 21: pqc_layer
+2/6 Test #21: pqc_layer ........................***Failed    0.05 sec
+FAIL pqc_layer_construction: expected exception was not thrown
+FAIL pqc_symmetric_point_derivatives: y_nonzero
+FAIL pqc_layer_forward_sums_every_edge_term: std::abs(sum - layer.bias()[o]) > 1e-3
+FAIL pqc_layer_vjps_match_finite_differences: std::ranges::any_of(g.input, [](double v) { return std::abs(v) > 1e-3; })
+FAIL pqc_inputs_and_parameters_must_be_finite: expected exception was not thrown
+FAIL pqc_set_carrier_and_setters_validate_atomically: expected exception was not thrown
+FAIL pqc_sgd_updates_parameters_and_is_atomic: expected exception was not thrown
+PASS pqc_regularization_penalizes_coefficients_only
+FAIL pqc_in_a_mixed_network_matches_finite_differences: std::ranges::any_of(pg.angles, [](double v) { return std::abs(v) > 1e-3; })
+FAIL pqc_initializer_draw_order_and_moments: actual=0.000000 expected=0.307462
+FAIL pqc_initializer_digest_is_pinned: digest(layer) != digest(copy)
+asserted: n=1 r=4 None PauliZ ratio 0.000
+FAIL pqc_variance_scaling_preserves_the_second_moment: actual=0.000000 expected=1.000000
+training: holdout MSE 2.171e-01 -> 2.184e-01 (target variance 2.152e-01)
+FAIL pqc_training_is_deterministic_and_generalizes: first.second < 0.01 * variance
+1/13 passed
+
+    Start 22: pqc_allocation
+3/6 Test #22: pqc_allocation ...................   Passed    0.00 sec
+    Start 23: quantum_source_check
+4/6 Test #23: quantum_source_check .............***Failed    0.00 sec
+PASS the_pattern_catches_what_it_must
+FAIL quantum_numerical_sources_have_no_strings_hashing_or_parsing: files.size() >= 3
+PASS test_references_are_independent_of_the_library
+2/3 passed
+
+    Start 51: pqc_resident_stub
+5/6 Test #51: pqc_resident_stub ................   Passed    0.38 sec
+    Start 62: pqc_stub_python
+6/6 Test #62: pqc_stub_python ..................   Passed    0.13 sec
+
+50% tests passed, 3 tests failed out of 6
+
+Label Time Summary:
+cpu            =   0.05 sec*proc (4 tests)
+cuda           =   0.38 sec*proc (1 test)
+integration    =   0.13 sec*proc (1 test)
+python         =   0.13 sec*proc (1 test)
+quantum        =   0.57 sec*proc (6 tests)
+
+Total Test time (real) =   0.57 sec
+
+The following tests FAILED:
+	 20 - pqc (Failed)
+	 21 - pqc_layer (Failed)
+	 23 - quantum_source_check (Failed)
+Errors while running CTest
