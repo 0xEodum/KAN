@@ -3981,9 +3981,9 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
     T* db = s.ptr(s.gradients + b.bias());
     const T one = 1, zero = 0;
     const auto checked = b.coefficients + b.outputs;
-    const bool small = s.batch && checked <= small_parameter_vjp<T> && s.batch <= small_parameter_work<T> / checked;
+    const bool small_vjp = s.batch && checked <= small_parameter_vjp<T> && s.batch <= small_parameter_work<T> / checked;
     const auto tiles = parameter_tile_count(s.batch);
-    if (small) {
+    if (small_vjp) {
         // Partial sums; backward_finish_kernel adds them with lambda*C.
         const auto chunk = (s.batch - 1) / tiles + 1;
         parameter_partial_kernel<<<dim3(blocks(checked), tiles), 256, 0, s.stream>>>(
@@ -4046,7 +4046,7 @@ void expansion_backward(Context<T>& s, const ExpansionPlan<T>& p, std::size_t j,
             std::max(rows ? blocks(rows, tile_rows ? tile_rows : stage_threads) : 1u, blocks(checked, stage_threads));
         backward_finish_kernel<<<grid, stage_threads, shared, s.stream>>>(
             source, s.ptr(s.scratch), s.ptr(s.upstream[j]), rows, b.terms, dc, checked,
-            small ? s.ptr(s.partials) : nullptr, tiles, c, b.coefficients, lambda, tile_rows, s.status);
+            small_vjp ? s.ptr(s.partials) : nullptr, tiles, c, b.coefficients, lambda, tile_rows, s.status);
     };
     if (differences) {
         if constexpr (spline_difference_vjp<T>) {

@@ -11,6 +11,7 @@
 #include "support/network.hpp"
 #include "support/test.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iomanip>
 #include <memory>
