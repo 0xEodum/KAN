@@ -4,7 +4,9 @@
 // lanes.hpp, fock_edges.cpp and src/backends/cuda/quantum.cu, where they
 // exist; the PQC ones must) must not match the plan's regular expression,
 // extended by `using namespace std` and namespace aliases of std (which would
-// let an unqualified `string` through); the dense test references include only
+// let an unqualified `string` through), every std string type (wide, pmr,
+// basic_string), the remaining sto*/strto*/ato* conversions, from_chars/
+// to_chars, std::format and their headers (independent review S1); the dense test references include only
 // standard headers (nothing from src/ or kan/).
 #include "support/test.hpp"
 #include <cstdio>
@@ -21,7 +23,7 @@ const fs::path root = KAN_SOURCE_DIR;
 
 const std::regex& forbidden() {
     static const std::regex pattern(
-        R"(std::(string|string_view|to_string|sto[dfil]|hash|unordered_\w+|regex|\w*stringstream)|\b(strtod|strtof|sscanf|atof|atoi)\b|#include <(string|sstream|regex|unordered_map|unordered_set)>|\busing\s+namespace\s+(::)?std\s*;|\bnamespace\s+\w+\s*=\s*(::)?std\s*;)");
+        R"(\bstd\s*::\s*(pmr\s*::\s*)?(\w*string\w*|sto(i|l|ll|ul|ull|f|d|ld)\b|hash\b|unordered_\w+|regex|from_chars|to_chars|format\w*)|\b(strto\w+|sscanf|ato(f|i|l|ll))\b|#include\s*<(string|string_view|sstream|regex|unordered_map|unordered_set|charconv|format)>|\busing\s+namespace\s+(::)?std\s*;|\bnamespace\s+\w+\s*=\s*(::)?std\s*;)");
     return pattern;
 }
 
@@ -51,11 +53,15 @@ TEST(the_pattern_catches_what_it_must) {
           "std::unordered_map<int, int>", "std::regex r", "std::ostringstream o", "x = atoi(p);", "strtod(p, nullptr)",
           "#include <string>", "#include <sstream>", "#include <unordered_set>", "using std::string;",
           "using std::to_string;", "using namespace std;", "using namespace ::std;", "namespace s = std;",
-          "namespace s = ::std ;"})
+          "namespace s = ::std ;", "std::wstring w;", "std::u8string u;", "std::basic_string<char> b;",
+          "std::pmr::string p;", "std :: string s;", "std::stoul(t)", "std::stoull(t)", "std::from_chars(a, b, v)",
+          "std::format(\"{}\", 1)", "strtol(p, nullptr, 10)", "atol(p)", "#include <string_view>",
+          "#include <charconv>", "#include <format>"})
         REQUIRE(std::regex_search(std::string(bad), forbidden()));
     for (const char* good : {"std::size_t n;", "std::invalid_argument(\"message\")", "#include <stdexcept>",
                              "#include <span>", "stringent", "std::span<const double>", "using namespace pqc;",
-                             "using namespace detail::pqc;", "using namespace stdx;", "namespace pqc = detail::pqc;"})
+                             "using namespace detail::pqc;", "using namespace stdx;", "namespace pqc = detail::pqc;",
+                             "std::stop_token t;", "// no strings, hashing or parsing", "std::numeric_limits<double>"})
         REQUIRE(!std::regex_search(std::string(good), forbidden()));
 }
 

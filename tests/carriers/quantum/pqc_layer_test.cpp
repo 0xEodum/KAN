@@ -127,6 +127,9 @@ std::size_t gate_count(const PqcConfig& c) {
 //     budget of the normalization bound (4G + 2^n) u in pqc_test), so
 //     |m^ - m| <= 2|e| + |e|^2 + 2^n u (readout sum, |M| <= 1), at most
 //     (4G + 2^n) u; half the difference of two such errors is no larger.
+//     The 2 G u state error is an assumed first-order per-gate budget, not a
+//     proven forward-error bound for the fused 2x2 products, so the total is a
+//     first-order estimate calibrated by measurement (M5-pqc-cpu evidence).
 // The final subtraction and halving add at most u/2 |d|. Total:
 // |d| <= (4G + 2^n + |p| + 2) u.
 double shift_zero_bound(const PqcConfig& c, double p) {
