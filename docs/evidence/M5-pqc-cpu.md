@@ -8,11 +8,10 @@ aarch64, 10 Cortex-X925 + 10 Cortex-A725 cores, 128 GB unified memory), CUDA 13.
 order, normalization bound, RED list 1-10, exit criteria, isolation gates). Phase 2a (resident
 PQC) and later phases are not started.
 
-**Status: not complete.** The phase-1 review fixes R3 and R5
+**Status: complete (2026-10-23).** The phase-1 review fixes R3 and R5
 ([2026-10-23 decision](roadmap-2026-10-23.md#4-plan-review-dispositions)) are made
-([below](#review-fixes-r3-and-r5)), and the independent review's findings F1-F8 are addressed in
-the same series of commits; recording the review (below) and marking phase 1 in the ROADMAP are
-outstanding.
+([below](#review-fixes-r3-and-r5)); the independent review (two passes, [below](#independent-review))
+found nothing blocking, and its findings are resolved or recorded.
 
 **Commit history (reconstructed).** The work was done in a working tree and not committed
 when it was written; the "RED commit" and "GREEN commits" named below did not exist until
@@ -118,7 +117,7 @@ equals the original working tree except for `a339745` and the 2026-10-23 roadmap
 | CTest CUDA parity / FMA | 66/66 / 66/66 |
 | Reconstructed head (`1ae17a8`, GB10, 2026-10-23) | CTest CPU 41/41, CUDA parity 65/65, FMA 65/65 (the optional format CTest is not registered when clang-format is not on PATH; `scripts/check_format.sh` with the pinned 18.1.8: 112 files, exit 0); SASS of `resident.cu` against `a339745`: 292/292 identical in both builds; golden: the 8 hashes below reproduced |
 | Review-fix head (`m5p1-r3r5` at `9684236`, code and tests; later commits documentation only; GB10, 2026-10-23) | CTest CPU 42/42 including the registered format test (clang-format 18.1.8 on PATH); CUDA parity build (`KAN_ENABLE_CUDA=ON`, Release): `ctest -L quantum` 6/6, full suite 66/66 serially. Under `ctest -j4`, `resident_fused_expansion` failed once and passed when rerun: it measures device free memory with `cudaMemGetInfo`, so concurrent GPU tests perturb it. No CUDA or library code changed. `scripts/check_format.sh`: 112 files, exit 0. `quantum_source_check` 3/3, now including `lanes.hpp` (5 sources clean). Printed ratios: symmetric-point shift 0 of its bound; adjoint vs shift 0.028 (shallow) and 0.010 (deep) of theirs |
-| RTX 3090, MSVC 19.50 + CUDA 13.1 ([port-windows-3090](port-windows-3090.md#tests-final-tree)) | Same tree content: CPU-only all quantum suites pass, including the `long double` closed-form reference (binary64 under MSVC) and the pinned digest; CUDA parity 63/63 without the `package_*` suites; PQC CPU throughput (i5-12400) 1.4-2.4x below the Cortex-X925 forward |
+| RTX 3090, MSVC 19.50 + CUDA 13.1 ([port-windows-3090](port-windows-3090.md#tests-final-tree)) | Same tree content: CPU-only all quantum suites pass, including the `long double` closed-form reference (binary64 under MSVC) and the pinned digest; CUDA parity 63/63 without the `package_*` suites; PQC CPU throughput (i5-12400) 1.4-2.4x below the Cortex-X925 forward (this run predates `e59f217`: the closed-form reference was still `long double`). At the phase-1 head with the review S1 change, MSVC CPU-only `ctest -L quantum` 5/5: symmetric point exactly 0 (as on glibc), adjoint vs shift 1.110e-15 (0.028 of the bound) and deep 7.772e-15 (0.014), dense reference 8.951e-16 / 1.554e-15, normalization 0.043 of the bound, pinned digest and moments as on GCC |
 | ASan (`build-asan`: RelWithDebInfo, `-DKAN_ENABLE_ASAN=ON`, CPU suites) | 25/25; the new suites clean; under Debug + ASan `pqc_layer` takes about 224 s (review F4) and needs `--timeout`; `residual_training` and `initializer_training` (unchanged 3000-epoch demonstrations) exceed the 900 s CTest limit under ASan and pass with `--timeout 5400` |
 | Coverage (GCC, `--merge-lines`: template instantiations merged) | `pqc_edges.cpp` 127/127, `pqc_formulas.hpp` 141/141, `tape.hpp` 69/69, `lanes.hpp` 21/21, `pqc.cpp` 124/125 (line 93, the result's initializer, which gcov attributes to an exception path) ([coverage.txt](m5/pqc-cpu/coverage.txt)); library 98% (2684/2715, without the two long demonstrations) |
 | Format | `scripts/check_format.sh` exit 0 |
@@ -253,7 +252,11 @@ is 0.
    with `|M| <= 1`. Half the difference of two such errors is no larger.
 4. The final subtraction and halving add at most `u/2 |d|`.
 
-Total: **`|d| <= (4G + 2^n + |p| + 2) 2^-52`**. This matches the brief's starting point, which
+Total: **`|d| <= (4G + 2^n + |p| + 2) 2^-52`**. Step 3's `2 G u` is an assumed first-order
+per-gate budget (the one behind the normalization bound), not a proven forward-error bound for
+the fused 2x2 complex products; the bound, like the adjoint-vs-shift bounds below, is a
+first-order estimate calibrated by measurement (worst measured ratios 0, 0.028 and 0.010:
+35-100x margin; review S2). This matches the brief's starting point, which
 was checked here rather than assumed.
 
 **Cases and outcome.** `pqc_symmetric_point_derivatives` now covers 19 circuits at the
@@ -361,6 +364,38 @@ before measuring as batch 256, width 16 or 64.
 
 ## Independent review
 
-Pending. Next steps: the R3 and R5 review fixes as `fix:`/`test:` commits, then a fresh
-independent reviewer over the source and this evidence; findings and resolutions are recorded
-here before phase 1 is marked complete in the ROADMAP.
+A fresh reviewer agent (read-only, no part in the implementation) reviewed `0fa47b6..f4e3c6e`
+against the plan (with the 2026-10-23 amendment), CONTRACT and AGENTS, then `f4e3c6e..b144569`
+(the R3/R5 work and its own findings' fixes) in a second pass. **Nothing blocking or high in
+either pass.**
+
+Verified by probes and runs (first pass): gate algebra, rotation conventions and readouts by
+derivation; inert marking and `first_derivative` exhaustively (all 4536 configurations with
+n 1..4, r 1..3, every encoding, block, entangler and readout; adjoint and shift against central
+differences of the dense reference, 649 134 checks: no slot wrongly inert, worst error 1.1e-9);
+`Lanes<8>` bitwise equal to one-sample evaluation (14 386 forward and 5 760 backward values);
+independence of the dense reference; protocol atomicity, D8 draw order, D13 messages; every
+number printed by the suites equals the evidence; the RED log reproduced from `0fa47b6`.
+Second pass: the R3 and adjoint-vs-shift bounds are not vacuous (a defect dropping one slot's
+contribution fails in 81-97% of slots; the rest are below 1e-13), the double-double reference
+is exact TwoSum, the R5 replica of `prepare_edge` matches the original token for token, and the
+"not RED" statement and the rejected `fl(k pi)` alternative are accurate.
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| F1 closed-form reference in `long double` (binary64 under MSVC: passes only by the seed) | MEDIUM | `e59f217`: double-double TwoSum reference; 40 000 probe trials, 0 failures, equal to binary128 |
+| F2 source check skipped `lanes.hpp`; textual pattern easy to bypass | LOW | `0d950bb`: `lanes.hpp` scanned, `using namespace std` and std aliases caught |
+| F3 deviation 6 incomplete | LOW | `b144569` |
+| F4 ASan build type not stated (`pqc_layer` times out under Debug + ASan) | LOW | `b144569`: RelWithDebInfo stated, timeout noted |
+| F5 base commit | NIT | `b144569` |
+| F6 inert comment omitted CNOTs the qubit controls (code correct) | NIT | `3a0dfa1` (comment, CONTRACT, evidence) |
+| F7 stale MSVC comment | NIT | `43496ff` |
+| F8 1.5e-15 vs 1.4e-15 | NIT | `3a0dfa1` |
+| F9 allocation and L2 tests pass against the stubs (never RED) | NIT | Already stated in the RED row; no change |
+| S1 pattern still missed wide/pmr strings, `from_chars`, `strto*`, `ato*`, `<charconv>`, `<format>`, `std :: string` | LOW | Pattern extended with 14 new self-test snippets and 3 more allowed ones (`fbc7ded`); sources still clean on GCC and MSVC |
+| S2 "derived" bounds rest on an assumed `2Gu` per-gate budget | LOW | Worded as first-order estimates calibrated by measurement in the test (`fbc7ded`), CONTRACT and here |
+| S3 no MSVC run of the double-double test | NIT | Run recorded in the RTX 3090 row (this commit) |
+| S4 input bound uses the largest `|w x + b|` over all slots (slightly loose) | NIT | Not changed: at most 1.3x looser than the old 1e-12 on the shallow cases and still detecting (above) |
+
+Not checked by the reviewer: CUDA builds at the final head (no library code changed after
+`f4e3c6e` except a comment; recorded runs above), frozen-suite timings, coverage numbers.

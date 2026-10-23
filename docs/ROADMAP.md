@@ -77,6 +77,11 @@ preflight and a CPU prototype against normalized Hermite functions; owner decisi
 The cuStateVec comparison and finite shots are deferred outside M5 acceptance unless the
 owner reinstates them. See the [scope/defaults and plan](evidence/M5-plan.md) and the
 [2026-10-23 decision](evidence/roadmap-2026-10-23.md).
+Phase 1 (PQC carrier on the CPU: exact expectations, adjoint and parameter-shift gradients,
+D8 initializers, D13 stubs) completed 2026-10-23: exit criteria, isolation gates, review fixes
+R3/R5 and a two-pass independent review with nothing blocking, on GB10 and under MSVC; see the
+[phase evidence](evidence/M5-pqc-cpu.md). Next: the device-adaptation contract, then phase 2a
+(PQC on the resident executor).
 
 ## M6: external baseline — PLANNED (depends on M5)
 

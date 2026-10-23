@@ -1297,7 +1297,8 @@ and biases are nonlinear parameters (unpenalized). For DARUAN, whose node sum ha
 - *Construction.* `Layer(inputs, outputs, PqcConfig)`: `c = 0`, bias 0, `theta = 0`, `w = 1`,
   `b = 0`, `shot_seed = 0`. With `c = 1`, n = 1 and Y encoding every edge is `cos(r x)`. At this
   point (Y encoding: a real-amplitude circuit) every Z-angle adjoint derivative is exactly 0 and
-  the parameter-shift ones within `(4G + 2^n + |theta| + 2) 2^-52` (derived in
+  the parameter-shift ones within `(4G + 2^n + |theta| + 2) 2^-52` (a first-order estimate with
+  an assumed per-gate state error of `2Gu`, calibrated by measurement; derivation in
   `pqc_layer_test`; measured exactly 0 up to n = 5, r = 32 on GCC/glibc, where the shifted
   states are bitwise conjugates); input, encoding and Y-angle derivatives are not zero at
   generic x. With Z encoding the constructor circuit is diagonal and the edge is constant in x
